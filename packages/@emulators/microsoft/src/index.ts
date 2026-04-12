@@ -3,6 +3,8 @@ import type { ServicePlugin, Store, WebhookDispatcher, TokenMap, AppEnv, RouteCo
 import { getMicrosoftStore } from "./store.js";
 import { generateOid, DEFAULT_TENANT_ID } from "./helpers.js";
 import { oauthRoutes } from "./routes/oauth.js";
+import { graphRoutes, seedGraphDefaults } from "./routes/graph.js";
+import { inspectorRoutes } from "./routes/inspector.js";
 
 export { getMicrosoftStore, type MicrosoftStore } from "./store.js";
 export * from "./entities.js";
@@ -80,10 +82,13 @@ export const microsoftPlugin: ServicePlugin = {
   name: "microsoft",
   register(app: Hono<AppEnv>, store: Store, webhooks: WebhookDispatcher, baseUrl: string, tokenMap?: TokenMap): void {
     const ctx: RouteContext = { app, store, webhooks, baseUrl, tokenMap };
+    inspectorRoutes(ctx);
     oauthRoutes(ctx);
+    graphRoutes(ctx);
   },
   seed(store: Store, baseUrl: string): void {
     seedDefaults(store, baseUrl);
+    seedGraphDefaults(store, baseUrl);
   },
 };
 
