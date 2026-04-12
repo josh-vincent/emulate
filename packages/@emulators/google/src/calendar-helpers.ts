@@ -185,6 +185,28 @@ export function getCalendarEventById(
     .find((event) => event.calendar_google_id === calendar.google_id && event.google_id === eventId);
 }
 
+export function updateCalendarEventRecord(
+  gs: GoogleStore,
+  event: GoogleCalendarEvent,
+  input: Partial<GoogleCalendarEventInput>,
+): GoogleCalendarEvent {
+  const updates: Partial<GoogleCalendarEvent> = {};
+  if (input.summary !== undefined) updates.summary = input.summary ?? event.summary;
+  if (input.description !== undefined) updates.description = input.description;
+  if (input.location !== undefined) updates.location = input.location;
+  if (input.status !== undefined) updates.status = input.status ?? event.status;
+  if (input.start_date_time !== undefined) updates.start_date_time = input.start_date_time;
+  if (input.start_date !== undefined) updates.start_date = input.start_date;
+  if (input.end_date_time !== undefined) updates.end_date_time = input.end_date_time;
+  if (input.end_date !== undefined) updates.end_date = input.end_date;
+  if (input.attendees !== undefined) updates.attendees = input.attendees ?? [];
+  if (input.conference_entry_points !== undefined) updates.conference_entry_points = input.conference_entry_points ?? [];
+  if (input.transparency !== undefined) updates.transparency = input.transparency;
+  if (input.hangout_link !== undefined) updates.hangout_link = input.hangout_link;
+
+  return gs.calendarEvents.update(event.id, updates) as GoogleCalendarEvent;
+}
+
 export function deleteCalendarEventRecord(gs: GoogleStore, event: GoogleCalendarEvent): boolean {
   return gs.calendarEvents.delete(event.id);
 }

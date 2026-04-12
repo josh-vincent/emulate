@@ -9,6 +9,7 @@ import {
   getCalendarEventById,
   listCalendarEvents,
   listCalendarsForUser,
+  updateCalendarEventRecord,
 } from "../calendar-helpers.js";
 import { googleApiError } from "../helpers.js";
 import {
@@ -87,6 +88,41 @@ export function calendarRoutes({ app, store }: RouteContext): void {
     });
 
     return c.json(formatCalendarEventResource(gs, event));
+  });
+
+  app.patch("/calendar/v3/calendars/:calendarId/events/:eventId", async (c) => {
+    const authEmail = requireGoogleAuth(c);
+    if (authEmail instanceof Response) return authEmail;
+
+    const event = getCalendarEventById(gs, authEmail, c.req.param("calendarId"), c.req.param("eventId"));
+    if (!event) {
+      return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+    }
+
+    const body = await parseGoogleBody(c);
+    const requestBody = getRecord(body, "requestBody") ?? body;
+    const eventInput = parseCalendarEventInputFromBody(requestBody);
+
+    const updated = updateCalendarEventRecord(gs, event, eventInput);
+    return c.json(formatCalendarEventResource(gs, updated));
+  });
+
+  // Also support PUT for full replacement
+  app.put("/calendar/v3/calendars/:calendarId/events/:eventId", async (c) => {
+    const authEmail = requireGoogleAuth(c);
+    if (authEmail instanceof Response) return authEmail;
+
+    const event = getCalendarEventById(gs, authEmail, c.req.param("calendarId"), c.req.param("eventId"));
+    if (!event) {
+      return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+    }
+
+    const body = await parseGoogleBody(c);
+    const requestBody = getRecord(body, "requestBody") ?? body;
+    const eventInput = parseCalendarEventInputFromBody(requestBody);
+
+    const updated = updateCalendarEventRecord(gs, event, eventInput);
+    return c.json(formatCalendarEventResource(gs, updated));
   });
 
   app.delete("/calendar/v3/calendars/:calendarId/events/:eventId", (c) => {
