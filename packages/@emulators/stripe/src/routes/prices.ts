@@ -19,6 +19,8 @@ function formatPrice(p: StripePrice) {
     currency: p.currency,
     unit_amount: p.unit_amount,
     type: p.type,
+    lookup_key: p.lookup_key ?? null,
+    recurring: p.recurring ?? null,
     active: p.active,
     metadata: p.metadata,
     created: toUnixTimestamp(p.created_at),
@@ -69,12 +71,17 @@ export function priceRoutes({ app, store, webhooks }: RouteContext): void {
         "product",
       );
     }
+    const recurring = body.recurring as { interval?: string; interval_count?: number } | undefined;
     const price = ss.prices.insert({
       stripe_id: stripeId("price"),
       product_id: body.product as string,
       currency: (body.currency as string).toLowerCase(),
       unit_amount: (body.unit_amount as number) ?? null,
-      type: body.recurring ? "recurring" : "one_time",
+      type: recurring ? "recurring" : "one_time",
+      lookup_key: (body.lookup_key as string) ?? null,
+      recurring: recurring
+        ? { interval: (recurring.interval ?? "month") as "month" | "year", interval_count: recurring.interval_count ?? 1 }
+        : null,
       active: (body.active as boolean) ?? true,
       metadata: (body.metadata as Record<string, string>) ?? {},
     });
@@ -102,8 +109,10 @@ export function priceRoutes({ app, store, webhooks }: RouteContext): void {
     let items = ss.prices.all();
     const productId = c.req.query("product");
     const active = c.req.query("active");
+    const lookupKey = c.req.query("lookup_keys[]") ?? c.req.query("lookup_key");
     if (productId) items = items.filter((p) => p.product_id === productId);
     if (active !== undefined) items = items.filter((p) => p.active === (active === "true"));
+    if (lookupKey) items = items.filter((p) => p.lookup_key === lookupKey);
     return stripeList(c, items, "/v1/prices", formatPrice);
   });
 }
