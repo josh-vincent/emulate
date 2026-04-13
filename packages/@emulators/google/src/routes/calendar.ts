@@ -2,6 +2,7 @@ import type { RouteContext } from "@emulators/core";
 import {
   buildFreeBusyResponse,
   createCalendarEventRecord,
+  createCalendarRecord,
   deleteCalendarEventRecord,
   formatCalendarEventResource,
   formatCalendarResource,
@@ -25,6 +26,7 @@ import { getGoogleStore } from "../store.js";
 export function calendarRoutes({ app, store }: RouteContext): void {
   const gs = getGoogleStore(store);
 
+  // List calendars
   app.get("/calendar/v3/users/:userId/calendarList", (c) => {
     const authEmail = requireGmailUser(c);
     if (authEmail instanceof Response) return authEmail;
@@ -33,6 +35,63 @@ export function calendarRoutes({ app, store }: RouteContext): void {
       kind: "calendar#calendarList",
       items: listCalendarsForUser(gs, authEmail).map((calendar) => formatCalendarResource(calendar)),
     });
+  });
+
+  // Get single calendarList entry
+  app.get("/calendar/v3/users/:userId/calendarList/:calendarId", (c) => {
+    const authEmail = requireGmailUser(c);
+    if (authEmail instanceof Response) return authEmail;
+
+    const calendar = getCalendarById(gs, authEmail, c.req.param("calendarId"));
+    if (!calendar) {
+      return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+    }
+    return c.json(formatCalendarResource(calendar));
+  });
+
+  // Get calendar metadata
+  app.get("/calendar/v3/calendars/:calendarId", (c) => {
+    const authEmail = requireGoogleAuth(c);
+    if (authEmail instanceof Response) return authEmail;
+
+    const calendar = getCalendarById(gs, authEmail, c.req.param("calendarId"));
+    if (!calendar) {
+      return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+    }
+    return c.json({
+      kind: "calendar#calendar",
+      etag: `"${calendar.google_id}"`,
+      id: calendar.google_id,
+      summary: calendar.summary,
+      description: calendar.description ?? undefined,
+      timeZone: calendar.time_zone,
+    });
+  });
+
+  // Create calendar
+  app.post("/calendar/v3/calendars", async (c) => {
+    const authEmail = requireGoogleAuth(c);
+    if (authEmail instanceof Response) return authEmail;
+
+    const body = await parseGoogleBody(c);
+    const requestBody = getRecord(body, "requestBody") ?? body;
+    const summary = typeof requestBody.summary === "string" ? requestBody.summary : "New Calendar";
+
+    const calendar = createCalendarRecord(gs, {
+      user_email: authEmail,
+      summary,
+      description: typeof requestBody.description === "string" ? requestBody.description : null,
+      time_zone: typeof requestBody.timeZone === "string" ? requestBody.timeZone : "UTC",
+    });
+
+    return c.json({
+      kind: "calendar#calendar",
+      etag: `"${calendar.google_id}"`,
+      id: calendar.google_id,
+      summary: calendar.summary,
+      description: calendar.description ?? undefined,
+      timeZone: calendar.time_zone,
+    }, 200);
   });
 
   app.get("/calendar/v3/calendars/:calendarId/events", (c) => {
@@ -59,6 +118,18 @@ export function calendarRoutes({ app, store }: RouteContext): void {
       items: response.items.map((event) => formatCalendarEventResource(gs, event)),
       nextPageToken: response.nextPageToken,
     });
+  });
+
+  // Get single event
+  app.get("/calendar/v3/calendars/:calendarId/events/:eventId", (c) => {
+    const authEmail = requireGoogleAuth(c);
+    if (authEmail instanceof Response) return authEmail;
+
+    const event = getCalendarEventById(gs, authEmail, c.req.param("calendarId"), c.req.param("eventId"));
+    if (!event) {
+      return googleApiError(c, 404, "Requested entity was not found.", "notFound", "NOT_FOUND");
+    }
+    return c.json(formatCalendarEventResource(gs, event));
   });
 
   app.post("/calendar/v3/calendars/:calendarId/events", async (c) => {

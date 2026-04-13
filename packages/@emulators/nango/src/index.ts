@@ -33,23 +33,31 @@ export function seedFromConfig(
 		const existing = ns.getConnection(seed.id);
 		if (existing) continue; // Skip duplicates
 
+		const accessToken = seed.credentials?.access_token ?? `emulator-token-${seed.id}`;
+		const refreshToken = seed.credentials?.refresh_token ?? `emulator-refresh-${seed.id}`;
+		const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
 		const conn: NangoConnection = {
 			id: seed.id,
 			connection_id: seed.id,
 			provider: seed.provider,
 			provider_config_key: seed.provider_config_key,
 			credentials: {
-				access_token:
-					seed.credentials?.access_token ?? `emulator-token-${seed.id}`,
-				refresh_token:
-					seed.credentials?.refresh_token ?? `emulator-refresh-${seed.id}`,
-				expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
 				type: "OAuth2",
+				access_token: accessToken,
+				refresh_token: refreshToken,
+				expires_at: expiresAt,
+				raw: {
+					access_token: accessToken,
+					refresh_token: refreshToken,
+					token_type: "Bearer",
+					expires_in: 3600,
+				},
 			},
 			connection_config: seed.connection_config ?? {},
 			metadata: seed.metadata ?? {},
 			created_at: now,
 			updated_at: now,
+			last_fetched_at: now,
 		};
 		ns.upsertConnection(conn);
 

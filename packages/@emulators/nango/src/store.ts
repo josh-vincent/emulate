@@ -32,6 +32,26 @@ export function getNangoStore(store: Store) {
     upsertConnection(conn: NangoConnection): void {
       connections.set(conn.id, conn);
     },
+    refreshCredentials(id: string): NangoConnection | undefined {
+      const conn = connections.get(id);
+      if (!conn) return undefined;
+      const now = new Date();
+      const newToken = `nango-refreshed-${Math.random().toString(36).slice(2)}${now.getTime().toString(36)}`;
+      conn.credentials = {
+        ...conn.credentials,
+        access_token: newToken,
+        expires_at: new Date(now.getTime() + 3600 * 1000).toISOString(),
+        raw: {
+          ...(conn.credentials.raw ?? {}),
+          access_token: newToken,
+          token_type: "Bearer",
+          expires_in: 3600,
+          refreshed_at: now.toISOString(),
+        },
+      };
+      conn.updated_at = now.toISOString();
+      return conn;
+    },
     updateMetadata(id: string, metadata: Record<string, unknown>): boolean {
       const conn = connections.get(id);
       if (!conn) return false;

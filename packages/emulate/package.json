@@ -58,6 +58,23 @@
     "yaml": "^2"
   },
   "devDependencies": {
+    "@emulators/apple": "workspace:*",
+    "@emulators/aws": "workspace:*",
+    "@emulators/clerk": "workspace:*",
+    "@emulators/core": "workspace:*",
+    "@emulators/github": "workspace:*",
+    "@emulators/google": "workspace:*",
+    "@emulators/microsoft": "workspace:*",
+    "@emulators/mongoatlas": "workspace:*",
+    "@emulators/nango": "workspace:*",
+    "@emulators/okta": "workspace:*",
+    "@emulators/resend": "workspace:*",
+    "@emulators/simpro": "workspace:*",
+    "@emulators/uptick": "workspace:*",
+    "@emulators/slack": "workspace:*",
+    "@emulators/stripe": "workspace:*",
+    "@emulators/vercel": "workspace:*",
+    "@emulators/workos": "workspace:*",
     "tsup": "^8",
     "typescript": "^5.7"
   }

@@ -246,6 +246,19 @@ export function sessionRoutes(app: Hono<AppEnv>, baseUrl: string, ns: NangoStore
     const existing = ns.getConnection(connectionId);
     if (!existing) {
       const now = new Date().toISOString();
+      // Some providers require specific fields in connection_config for proxy calls:
+      //   Xero  — tenantId (UUID): routes proxy requests to the right organisation
+      //   QuickBooks — realmId (company ID): required for all API calls
+      // Seed stable fake values so the resolve helpers succeed in dev.
+      const isXero = session.provider === "xero";
+      const isQBO =
+        session.provider === "quickbooks" ||
+        session.provider === "quickbooks-sandbox";
+      const connectionConfig: Record<string, unknown> = isXero
+        ? { tenantId: "emu-xero-tenant-00000000-0000-0000-0000-000000000001" }
+        : isQBO
+          ? { realmId: "9341453644728342", companyName: "Emulator Company" }
+          : {};
       ns.upsertConnection({
         id: connectionId,
         connection_id: connectionId,
@@ -257,7 +270,7 @@ export function sessionRoutes(app: Hono<AppEnv>, baseUrl: string, ns: NangoStore
           expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
           type: "OAuth2",
         },
-        connection_config: {},
+        connection_config: connectionConfig,
         metadata: {
           organizationId: session.orgId,
           userId: session.userId,

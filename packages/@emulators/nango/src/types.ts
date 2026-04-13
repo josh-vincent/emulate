@@ -4,15 +4,19 @@ export interface NangoConnection {
   provider: string;
   provider_config_key: string;
   credentials: {
+    type: string;
     access_token: string;
     refresh_token?: string;
     expires_at?: string;
-    type?: string;
+    scopes?: string[];
+    raw?: Record<string, unknown>;
   };
   connection_config: Record<string, unknown>;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  last_fetched_at?: string;
+  errors?: Array<{ type: string; description: string }>;
 }
 
 /** Seeded records per connection per model name. */

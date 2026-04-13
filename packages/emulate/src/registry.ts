@@ -29,6 +29,8 @@ const SERVICE_NAME_LIST = [
   "clerk",
   "workos",
   "nango",
+  "simpro",
+  "uptick",
 ] as const;
 export type ServiceName = (typeof SERVICE_NAME_LIST)[number];
 export const SERVICE_NAMES: readonly ServiceName[] = SERVICE_NAME_LIST;
@@ -551,6 +553,111 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
                 },
               ],
             },
+          },
+        ],
+      },
+    },
+  },
+  simpro: {
+    label: "SimPRO field service management API emulator",
+    endpoints:
+      "customers, sites, jobs (sections/cost centres), quotes (convert to job), invoices, " +
+      "staff, contractors, schedules, assets, cost centres, labour rates, " +
+      "tax codes, catalogue, statuses, zones, custom fields, webhooks",
+    async load() {
+      const mod = await import("@emulators/simpro");
+      return { plugin: mod.simproPlugin, seedFromConfig: mod.seedFromConfig };
+    },
+    defaultFallback() {
+      return { login: "sk_test_simpro", id: 1, scopes: [] };
+    },
+    initConfig: {
+      simpro: {
+        customers: [
+          {
+            type: "Company",
+            company_name: "Demo Building Services",
+            email: "accounts@demobuild.com.au",
+            mail_suburb: "Melbourne",
+            mail_state: "VIC",
+          },
+        ],
+        staff: [
+          {
+            given_name: "Demo",
+            family_name: "Tech",
+            email: "tech@demobuild.com.au",
+            role_name: "Technician",
+          },
+        ],
+        jobs: [
+          {
+            order_no: "J-2025-001",
+            description: "Annual Fire Inspection",
+            customer_name: "Demo Building Services",
+            stage: "Progress",
+            total_ex_tax: 500,
+            total_inc_tax: 550,
+          },
+        ],
+        cost_centers: [{ name: "General" }, { name: "Fire Safety" }],
+        tax_codes: [
+          { name: "GST", rate: 10, description: "Goods and Services Tax" },
+          { name: "GST Free", rate: 0, description: "GST exempt" },
+        ],
+        labor_rates: [
+          { name: "Standard", rate: 95 },
+          { name: "After Hours", rate: 142.5 },
+        ],
+      },
+    },
+  },
+  uptick: {
+    label: "Uptick fire protection field service API emulator",
+    endpoints: "clients, properties, assets, defects, asset types, users, oauth2 token",
+    async load() {
+      const mod = await import("@emulators/uptick");
+      return { plugin: mod.uptickPlugin, seedFromConfig: mod.seedFromConfig };
+    },
+    defaultFallback() {
+      return { login: "sk_test_uptick", id: 1, scopes: [] };
+    },
+    initConfig: {
+      uptick: {
+        clients: [
+          {
+            name: "Demo Property Group",
+            contact_email: "admin@demopropertygroup.com.au",
+            contact_name: "Demo Admin",
+          },
+        ],
+        properties: [
+          {
+            name: "Demo Building A",
+            client_name: "Demo Property Group",
+            address_city: "Melbourne",
+            address_state: "VIC",
+          },
+        ],
+        assets: [
+          {
+            name: "Fire Hose Reel 01",
+            property_name: "Demo Building A",
+            client_name: "Demo Property Group",
+            asset_type_name: "Fire Hose Reel",
+          },
+        ],
+        asset_types: [
+          { name: "Fire Hose Reel" },
+          { name: "Fire Extinguisher" },
+          { name: "Fire Panel" },
+        ],
+        users: [
+          {
+            username: "tech1",
+            email: "tech@demo.com.au",
+            first_name: "Demo",
+            last_name: "Tech",
           },
         ],
       },

@@ -5,12 +5,28 @@ import type { NangoConnection } from "../types.js";
 
 export function connectionRoutes(app: Hono<AppEnv>, ns: NangoStoreFacade): void {
   // GET /connections/:connectionId — fetch connection with credentials
+  // Supports ?force_refresh=true (refresh regardless of expiry)
+  // Auto-refreshes if expires_at is in the past (matches real Nango behaviour)
   app.get("/connections/:connectionId", (c) => {
     const id = c.req.param("connectionId");
-    const conn = ns.getConnection(id);
+    let conn = ns.getConnection(id);
     if (!conn) {
       return c.json({ error: "Connection not found", connection_id: id }, 404);
     }
+
+    const forceRefresh = c.req.query("force_refresh") === "true";
+    const isExpired =
+      conn.credentials.expires_at
+        ? new Date(conn.credentials.expires_at).getTime() <= Date.now()
+        : false;
+
+    if (forceRefresh || isExpired) {
+      conn = ns.refreshCredentials(id) ?? conn;
+    }
+
+    // Always update last_fetched_at
+    conn.last_fetched_at = new Date().toISOString();
+
     return c.json(conn);
   });
 
@@ -32,20 +48,28 @@ export function connectionRoutes(app: Hono<AppEnv>, ns: NangoStoreFacade): void 
     }>();
 
     const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
     const conn: NangoConnection = {
       id: body.connection_id,
       connection_id: body.connection_id,
       provider: body.provider_config_key,
       provider_config_key: body.provider_config_key,
       credentials: {
+        type: "OAuth2",
         access_token: body.credentials?.access_token ?? `emulator-token-${Date.now()}`,
         refresh_token: body.credentials?.refresh_token,
-        type: "OAuth2",
+        expires_at: expiresAt,
+        raw: {
+          access_token: body.credentials?.access_token ?? `emulator-token-${Date.now()}`,
+          token_type: "Bearer",
+          expires_in: 3600,
+        },
       },
       connection_config: body.connection_config ?? {},
       metadata: body.metadata ?? {},
       created_at: now,
       updated_at: now,
+      last_fetched_at: now,
     };
     ns.upsertConnection(conn);
     return c.json(conn, 201);
