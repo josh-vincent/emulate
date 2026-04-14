@@ -3,11 +3,12 @@ import type { ServicePlugin, Store, WebhookDispatcher, TokenMap, AppEnv, RouteCo
 import { getMicrosoftStore } from "./store.js";
 import { generateOid, DEFAULT_TENANT_ID } from "./helpers.js";
 import { oauthRoutes } from "./routes/oauth.js";
-import { graphRoutes, seedGraphDefaults } from "./routes/graph.js";
+import { graphRoutes, seedGraphDefaults, seedGraphFromConfig, type MicrosoftGraphSeedConfig } from "./routes/graph.js";
 import { inspectorRoutes } from "./routes/inspector.js";
 
 export { getMicrosoftStore, type MicrosoftStore } from "./store.js";
 export * from "./entities.js";
+export type { MicrosoftGraphSeedConfig } from "./routes/graph.js";
 
 export interface MicrosoftSeedConfig {
   users?: Array<{
@@ -24,6 +25,13 @@ export interface MicrosoftSeedConfig {
     redirect_uris: string[];
     tenant_id?: string;
   }>;
+  /** Seed Outlook mail, Calendar, OneDrive, and Teams data from config instead of hardcoded defaults. */
+  mail_messages?: MicrosoftGraphSeedConfig["mail_messages"];
+  calendars?: MicrosoftGraphSeedConfig["calendars"];
+  calendar_events?: MicrosoftGraphSeedConfig["calendar_events"];
+  drive_items?: MicrosoftGraphSeedConfig["drive_items"];
+  teams?: MicrosoftGraphSeedConfig["teams"];
+  contacts?: MicrosoftGraphSeedConfig["contacts"];
 }
 
 function seedDefaults(store: Store, _baseUrl: string): void {
@@ -75,6 +83,26 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: Microsoft
         tenant_id: client.tenant_id ?? DEFAULT_TENANT_ID,
       });
     }
+  }
+
+  // If any Graph data is provided in config, seed it (overwrites hardcoded defaults).
+  const hasGraphConfig =
+    config.mail_messages ||
+    config.calendars ||
+    config.calendar_events ||
+    config.drive_items ||
+    config.teams ||
+    config.contacts;
+
+  if (hasGraphConfig) {
+    seedGraphFromConfig(store, _baseUrl, {
+      mail_messages: config.mail_messages,
+      calendars: config.calendars,
+      calendar_events: config.calendar_events,
+      drive_items: config.drive_items,
+      teams: config.teams,
+      contacts: config.contacts,
+    });
   }
 }
 

@@ -193,6 +193,76 @@ export function oauthRoutes(app: Hono<AppEnv>, ws: WorkOSStoreFacade, baseUrl: s
       });
     }
 
+    if (grantType === "urn:workos:oauth:grant-type:organization-selection") {
+      const pendingToken = body.pending_authentication_token ?? body.pendingAuthenticationToken;
+      const orgId = body.organization_id ?? body.organizationId;
+      if (!pendingToken) return c.json({ error: "invalid_grant", error_description: "Missing pending_authentication_token" }, 400);
+      if (!orgId) return c.json({ error: "invalid_grant", error_description: "Missing organization_id" }, 400);
+
+      const pending = ws.consumePendingAuthToken(pendingToken);
+      if (!pending) return c.json({ error: "invalid_grant", error_description: "Invalid or expired pending token" }, 400);
+
+      const user = ws.getUser(pending.user_id);
+      if (!user) return c.json({ error: "user_not_found" }, 404);
+
+      const session = ws.createSession(user.id, orgId);
+      const accessToken = await signJWT(
+        { sub: user.id, sid: session.id, org_id: orgId, email: user.email },
+        { issuer: `${baseUrl}/user_management/${body.client_id}` },
+      );
+      const newRefreshToken = ws.createRefreshToken(user.id, session.id, orgId);
+      return c.json({
+        access_token: accessToken,
+        refresh_token: newRefreshToken,
+        user: buildUserObject(user),
+        organization_id: orgId,
+      });
+    }
+
+    if (grantType === "password") {
+      const user = ws.findUserByEmail(body.username ?? body.email);
+      if (!user) return c.json({ error: "invalid_credentials", error_description: "User not found" }, 401);
+      const password = body.password;
+      if (user.password && user.password !== password) {
+        return c.json({ error: "invalid_credentials", error_description: "Incorrect password" }, 401);
+      }
+
+      const memberships = ws.getUserMemberships(user.id);
+      if (memberships.length > 1) {
+        const pendingToken = `pat_${randomHex(16)}`;
+        ws.setPendingAuthToken(pendingToken, {
+          code: pendingToken,
+          client_id: body.client_id,
+          user_id: user.id,
+          redirect_uri: "",
+          expires_at: Date.now() + 10 * 60 * 1000,
+        });
+        return c.json(
+          {
+            code: "organization_selection_required",
+            message: "User belongs to multiple organizations",
+            pending_authentication_token: pendingToken,
+            user: { id: user.id, email: user.email },
+          },
+          400,
+        );
+      }
+
+      const orgId = memberships[0]?.organization_id;
+      const session = ws.createSession(user.id, orgId);
+      const accessToken = await signJWT(
+        { sub: user.id, sid: session.id, org_id: orgId, email: user.email },
+        { issuer: `${baseUrl}/user_management/${body.client_id}` },
+      );
+      const newRefreshToken = ws.createRefreshToken(user.id, session.id, orgId);
+      return c.json({
+        access_token: accessToken,
+        refresh_token: newRefreshToken,
+        user: buildUserObject(user),
+        organization_id: orgId ?? null,
+      });
+    }
+
     return c.json({ error: "unsupported_grant_type" }, 400);
   });
 

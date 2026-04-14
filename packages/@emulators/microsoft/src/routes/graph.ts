@@ -540,6 +540,401 @@ function buildDriveItem(
 	};
 }
 
+// ---- Config-driven Graph seed types ----
+
+export interface MicrosoftGraphSeedConfig {
+	mail_messages?: Array<{
+		id?: string;
+		subject: string;
+		from_name: string;
+		from_address: string;
+		to_name?: string;
+		to_address?: string;
+		body_text: string;
+		received_date_time?: string;
+		is_read?: boolean;
+		/** Folder displayName: "Inbox" | "Sent Items" | "Drafts" — defaults to "Inbox" */
+		folder?: string;
+	}>;
+	calendars?: Array<{
+		id: string;
+		name: string;
+		is_default?: boolean;
+	}>;
+	calendar_events?: Array<{
+		id?: string;
+		/** Matches a calendar id from calendars list; defaults to first calendar */
+		calendar_id?: string;
+		subject: string;
+		/** ISO datetime string */
+		start: string;
+		/** ISO datetime string */
+		end: string;
+		time_zone?: string;
+		location?: string;
+		body_text?: string;
+		is_all_day?: boolean;
+		attendees?: Array<{
+			name: string;
+			address: string;
+			type?: "required" | "optional";
+		}>;
+	}>;
+	drive_items?: Array<{
+		id?: string;
+		name: string;
+		size?: number;
+		/** When present, item is a file with this MIME type; absent = folder */
+		mime_type?: string;
+		/** Parent item id; defaults to "root" */
+		parent_id?: string;
+		modified_date_time?: string;
+		created_date_time?: string;
+	}>;
+	teams?: Array<{
+		id?: string;
+		display_name: string;
+		description?: string;
+		channels?: Array<{
+			id?: string;
+			display_name: string;
+			description?: string;
+		}>;
+	}>;
+	contacts?: Array<{
+		id?: string;
+		display_name: string;
+		given_name?: string;
+		surname?: string;
+		email?: string;
+		phone?: string;
+		job_title?: string;
+		company_name?: string;
+	}>;
+}
+
+/** Seed Graph data from emulate.config.yaml — overwrites any previously seeded Graph data. */
+export function seedGraphFromConfig(
+	store: RouteContext["store"],
+	baseUrl: string,
+	config: MicrosoftGraphSeedConfig,
+): void {
+	const ms = getMicrosoftStore(store);
+	const users = ms.users.all();
+	const firstUser = users[0];
+	if (!firstUser) return;
+
+	const now = Date.now();
+	const DEFAULT_TZ = "Australia/Sydney";
+
+	// ---- Mail folders (always create standard set) ----
+	const inboxId = "inbox";
+	const sentId = "sentitems";
+	const draftsId = "drafts";
+	const folderNameToId: Record<string, string> = {
+		inbox: inboxId,
+		"sent items": sentId,
+		sent: sentId,
+		drafts: draftsId,
+	};
+
+	const messages = (config.mail_messages ?? []).map((m) => {
+		const folderKey = (m.folder ?? "Inbox").toLowerCase();
+		const parentFolderId = folderNameToId[folderKey] ?? inboxId;
+		const toName = m.to_name ?? firstUser.name;
+		const toAddress = m.to_address ?? firstUser.email;
+		return buildMessage(
+			{
+				id: m.id ?? `msg-cfg-${randomBytes(6).toString("hex")}`,
+				subject: m.subject,
+				bodyPreview: m.body_text.slice(0, 255),
+				body: { contentType: "text", content: m.body_text },
+				from: { emailAddress: { name: m.from_name, address: m.from_address } },
+				toRecipients: [{ emailAddress: { name: toName, address: toAddress } }],
+				receivedDateTime: m.received_date_time ?? new Date(now).toISOString(),
+				isRead: m.is_read ?? false,
+				isDraft: false,
+				parentFolderId,
+			},
+			baseUrl,
+		);
+	});
+
+	const inboxMessages = messages.filter((m) => m.parentFolderId === inboxId);
+	const sentMessages = messages.filter((m) => m.parentFolderId === sentId);
+
+	const folders: GraphMailFolder[] = [
+		{
+			id: inboxId,
+			displayName: "Inbox",
+			parentFolderId: null,
+			childFolderCount: 0,
+			totalItemCount: inboxMessages.length,
+			unreadItemCount: inboxMessages.filter((m) => !m.isRead).length,
+			isHidden: false,
+		},
+		{
+			id: sentId,
+			displayName: "Sent Items",
+			parentFolderId: null,
+			childFolderCount: 0,
+			totalItemCount: sentMessages.length,
+			unreadItemCount: 0,
+			isHidden: false,
+		},
+		{
+			id: draftsId,
+			displayName: "Drafts",
+			parentFolderId: null,
+			childFolderCount: 0,
+			totalItemCount: 0,
+			unreadItemCount: 0,
+			isHidden: false,
+		},
+	];
+
+	store.setData(STORE_KEY_FOLDERS, folders);
+	store.setData(STORE_KEY_MESSAGES, messages);
+
+	// ---- Calendars ----
+	const organizerRecipient: GraphRecipient = {
+		emailAddress: { name: firstUser.name, address: firstUser.email },
+	};
+
+	const configCalendars = config.calendars ?? [];
+	const defaultCalId = configCalendars[0]?.id ?? `cal-main-${randomBytes(4).toString("hex")}`;
+
+	const calendars: GraphCalendar[] = configCalendars.map((cal) => ({
+		id: cal.id,
+		name: cal.name,
+		color: "auto",
+		isDefaultCalendar: cal.is_default ?? false,
+		canEdit: true,
+		owner: { name: firstUser.name, address: firstUser.email },
+	}));
+
+	if (calendars.length > 0 && !calendars.some((c) => c.isDefaultCalendar)) {
+		calendars[0].isDefaultCalendar = true;
+	}
+
+	store.setData(STORE_KEY_CALENDARS, calendars);
+
+	// ---- Calendar events ----
+	const makeEvent = (partial: Parameters<typeof buildEvent>[0]) =>
+		buildEvent(partial, baseUrl, organizerRecipient);
+
+	const events = (config.calendar_events ?? []).map((e) => {
+		const tz = e.time_zone ?? DEFAULT_TZ;
+		const startDt = e.start.endsWith("Z") ? e.start.replace("Z", "") : e.start;
+		const endDt = e.end.endsWith("Z") ? e.end.replace("Z", "") : e.end;
+		return makeEvent({
+			id: e.id ?? `evt-cfg-${randomBytes(6).toString("hex")}`,
+			subject: e.subject,
+			start: { dateTime: startDt, timeZone: tz },
+			end: { dateTime: endDt, timeZone: tz },
+			calendarId: e.calendar_id ?? defaultCalId,
+			isAllDay: e.is_all_day ?? false,
+			location: e.location
+				? { displayName: e.location, locationType: "default" }
+				: { displayName: "", locationType: "default" },
+			body: e.body_text
+				? { contentType: "text", content: e.body_text }
+				: undefined,
+			attendees: (e.attendees ?? []).map((a) => ({
+				emailAddress: { name: a.name, address: a.address },
+				type: a.type ?? "required",
+				status: { response: "none", time: new Date(0).toISOString() },
+			})),
+		});
+	});
+
+	store.setData(STORE_KEY_EVENTS, events);
+
+	// ---- Drive items ----
+	const ownerIdentity: GraphIdentity = {
+		id: firstUser.oid,
+		displayName: firstUser.name,
+	};
+	const makeDriveItem = (partial: Parameters<typeof buildDriveItem>[0]) =>
+		buildDriveItem(partial, ownerIdentity);
+
+	const driveItems = (config.drive_items ?? []).map((item) => {
+		const itemId = item.id ?? `drv-cfg-${randomBytes(6).toString("hex")}`;
+		const createdDt =
+			item.created_date_time ?? new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+		const modifiedDt = item.modified_date_time ?? new Date(now).toISOString();
+		const parentId = item.parent_id ?? "root";
+		const parentPath =
+			parentId === "root" ? "/drive/root:" : `/drive/root:/parent`;
+
+		return makeDriveItem({
+			id: itemId,
+			name: item.name,
+			size: item.size ?? 0,
+			webUrl: `${baseUrl}/drive/${item.name}`,
+			createdDateTime: createdDt,
+			lastModifiedDateTime: modifiedDt,
+			parentReference: {
+				id: parentId,
+				driveType: "business",
+				path: parentPath,
+			},
+			...(item.mime_type
+				? {
+						file: {
+							mimeType: item.mime_type,
+							hashes: { quickXorHash: randomBytes(20).toString("base64") },
+						},
+						"@microsoft.graph.downloadUrl": `${baseUrl}/drive/items/${itemId}/content`,
+					}
+				: { folder: { childCount: 0 } }),
+		});
+	});
+
+	store.setData(STORE_KEY_DRIVE_ITEMS, driveItems);
+
+	// ---- Teams & Channels ----
+	const TENANT_ID = "common";
+	const defaultTeamSettings = {
+		memberSettings: {
+			allowCreateUpdateChannels: true,
+			allowDeleteChannels: false,
+			allowAddRemoveApps: true,
+			allowCreateUpdateRemoveTabs: true,
+			allowCreateUpdateRemoveConnectors: true,
+		},
+		guestSettings: {
+			allowCreateUpdateChannels: false,
+			allowDeleteChannels: false,
+		},
+		messagingSettings: {
+			allowUserEditMessages: true,
+			allowUserDeleteMessages: true,
+			allowOwnerDeleteMessages: true,
+			allowTeamMentions: true,
+			allowChannelMentions: true,
+		},
+		funSettings: {
+			allowGiphy: true,
+			giphyContentRating: "moderate",
+			allowStickersAndMemes: true,
+			allowCustomMemes: true,
+		},
+	};
+
+	const teams: GraphTeam[] = (config.teams ?? []).map((t) => {
+		const teamId = t.id ?? `team-cfg-${randomBytes(6).toString("hex")}`;
+		return {
+			id: teamId,
+			createdDateTime: new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString(),
+			displayName: t.display_name,
+			description: t.description ?? "",
+			internalId: randomBytes(8).toString("hex"),
+			classification: null,
+			specialization: "none",
+			visibility: "private" as const,
+			isArchived: false,
+			tenantId: TENANT_ID,
+			webUrl: `${baseUrl}/teams/${teamId}`,
+			...defaultTeamSettings,
+		};
+	});
+	store.setData(STORE_KEY_TEAMS, teams);
+
+	const channels: GraphChannel[] = [];
+	for (let ti = 0; ti < (config.teams ?? []).length; ti++) {
+		const teamCfg = config.teams![ti];
+		const teamId = teams[ti].id;
+		for (const ch of teamCfg.channels ?? []) {
+			const channelId =
+				ch.id ?? `19:${randomBytes(8).toString("hex")}@thread.tacv2`;
+			channels.push({
+				id: channelId,
+				createdDateTime: new Date(now - 60 * 24 * 60 * 60 * 1000).toISOString(),
+				displayName: ch.display_name,
+				description: ch.description ?? "",
+				email: "",
+				tenantId: TENANT_ID,
+				webUrl: `${baseUrl}/teams/${teamId}/channels/${channelId}`,
+				membershipType: "standard",
+				isArchived: false,
+				isFavoriteByDefault: null,
+				teamId,
+			});
+		}
+	}
+	store.setData(STORE_KEY_CHANNELS, channels);
+
+	// ---- Contacts ----
+	const contacts: GraphContact[] = (config.contacts ?? []).map((c) => {
+		const given = c.given_name ?? c.display_name.split(" ")[0] ?? "";
+		const sur = c.surname ?? c.display_name.split(" ").slice(1).join(" ") ?? "";
+		return {
+			id: c.id ?? `contact-cfg-${randomBytes(6).toString("hex")}`,
+			createdDateTime: new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString(),
+			lastModifiedDateTime: new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString(),
+			changeKey: `changekey-${randomBytes(4).toString("hex")}`,
+			categories: [],
+			parentFolderId: "contacts",
+			fileAs: `${sur}, ${given}`,
+			displayName: c.display_name,
+			givenName: given,
+			initials: null,
+			middleName: null,
+			nickName: null,
+			surname: sur,
+			title: null,
+			generation: null,
+			jobTitle: c.job_title ?? null,
+			companyName: c.company_name ?? null,
+			department: null,
+			officeLocation: null,
+			profession: null,
+			assistantName: null,
+			manager: null,
+			homePhones: [],
+			mobilePhone: null,
+			businessPhones: c.phone ? [c.phone] : [],
+			imAddresses: [],
+			emailAddresses: c.email
+				? [{ name: c.display_name, address: c.email }]
+				: [],
+			homeAddress: {},
+			businessAddress: {},
+			otherAddress: {},
+			spouseName: null,
+			personalNotes: null,
+			children: [],
+			birthday: null,
+			businessHomePage: null,
+			yomiCompanyName: null,
+			yomiGivenName: null,
+			yomiSurname: null,
+		};
+	});
+	store.setData(STORE_KEY_CONTACTS, contacts);
+
+	// Seed first user as team owner, chats/channel messages empty
+	const teamMembers: GraphTeamMember[] = teams.map((team) => ({
+		id: `member-cfg-${randomBytes(6).toString("hex")}`,
+		displayName: firstUser.name,
+		email: firstUser.email,
+		roles: ["owner"],
+		userId: firstUser.oid,
+		teamId: team.id,
+	}));
+	store.setData(STORE_KEY_TEAM_MEMBERS, teamMembers);
+	store.setData(STORE_KEY_CHANNEL_MESSAGES, []);
+	store.setData(STORE_KEY_CHATS, []);
+	store.setData(STORE_KEY_CHAT_MESSAGES, []);
+	store.setData(STORE_KEY_SUBSCRIPTIONS, []);
+
+	debug(
+		"microsoft.graph",
+		`[Graph config seed] ${folders.length} folders, ${messages.length} messages, ${calendars.length} calendars, ${events.length} events, ${driveItems.length} drive items, ${teams.length} teams, ${channels.length} channels, ${contacts.length} contacts`,
+	);
+}
+
 export function seedGraphDefaults(
 	store: RouteContext["store"],
 	baseUrl: string,
