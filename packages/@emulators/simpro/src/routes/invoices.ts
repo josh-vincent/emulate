@@ -1,117 +1,63 @@
+import type { Context } from "hono";
 import type { RouteContext } from "@emulators/core";
 import { getSimproStore } from "../store.js";
 import {
-  simproError,
-  simproPaginate,
-  parseSimproBody,
-  parseId,
-  nextInvoiceNo,
+  paginate,
+  parsePagination,
+  rateLimit,
+  requireAuth,
+  simproNotFound,
 } from "../helpers.js";
 import { formatInvoice } from "../formatters.js";
 
-const C = "/api/v1.0/companies/:c";
+export function invoiceRoutes({ app, store }: RouteContext): void {
+  const ss = getSimproStore(store);
 
-export function invoiceRoutes(ctx: RouteContext): void {
-  const { app, store } = ctx;
-  const ss = () => getSimproStore(store);
+  const guard = (c: Context): Response | null => {
+    const rateEnabled = store.getData<boolean>("simpro.rate_limit_enabled") ?? false;
+    const rl = rateLimit(c, rateEnabled);
+    if (rl) return rl;
+    const auth = requireAuth(c, ss);
+    if (auth) return auth as unknown as Response;
+    return null;
+  };
 
-  // List invoices — filter: Customer.ID, Job.ID, Status
-  app.get(`${C}/customerInvoices/`, (c) => {
-    const customerIdStr = c.req.query("Customer.ID");
-    const jobIdStr = c.req.query("Job.ID");
-    const statusFilter = c.req.query("Status");
+  // Top-level invoice listing
+  app.get("/api/v1.0/companies/:cid/invoices/", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
 
-    let invoices = ss().invoices.all();
-    if (customerIdStr) {
-      const custId = parseInt(customerIdStr, 10);
-      if (!isNaN(custId)) invoices = invoices.filter((inv) => inv.customer_id === custId);
-    }
-    if (jobIdStr) {
-      const jobId = parseInt(jobIdStr, 10);
-      if (!isNaN(jobId)) invoices = invoices.filter((inv) => inv.job_id === jobId);
-    }
-    if (statusFilter) invoices = invoices.filter((inv) => inv.status === statusFilter);
+    const companyId = Number(c.req.param("cid")) || 0;
+    let items = ss.invoices.all().filter((i) => i.company_id === companyId || companyId === 0);
 
-    const s = ss();
-    return simproPaginate(c, invoices, (inv) => formatInvoice(inv, s));
+    const jobId = c.req.query("Job.ID");
+    if (jobId) items = items.filter((i) => i.job_id === Number(jobId));
+
+    const stage = c.req.query("Stage");
+    if (stage) items = items.filter((i) => i.stage === Number(stage));
+
+    const pagination = parsePagination(c);
+    const page = paginate(c, items, pagination);
+    return c.json(page.map(formatInvoice));
   });
 
-  // Create invoice
-  app.post(`${C}/customerInvoices/`, async (c) => {
-    const body = await parseSimproBody(c);
-    const s = ss();
-
-    const customerRef = body.Customer as Record<string, unknown> | undefined;
-    const jobRef = body.Job as Record<string, unknown> | undefined;
-
-    const custId = customerRef?.ID ? parseInt(String(customerRef.ID), 10) : 0;
-    const jobId = jobRef?.ID ? parseInt(String(jobRef.ID), 10) : null;
-
-    const totalExTax = (body.TotalExTax as number) ?? 0;
-    const totalIncTax = (body.TotalIncTax as number) ?? totalExTax;
-    const amountPaid = (body.AmountPaid as number) ?? 0;
-
-    const invoice = s.invoices.insert({
-      invoice_no: (body.InvoiceNo as string) || nextInvoiceNo(s.invoices.all()),
-      customer_id: custId,
-      job_id: jobId,
-      status: (body.Status as "Draft" | "Issued" | "Paid" | "Void") ?? "Draft",
-      total_ex_tax: totalExTax,
-      total_inc_tax: totalIncTax,
-      amount_paid: amountPaid,
-      balance: totalIncTax - amountPaid,
-      issued_date: (body.DateIssued as string) ?? new Date().toISOString(),
-      due_date: (body.DateDue as string) ?? "",
-    });
-    return c.json(formatInvoice(invoice, s), 201);
+  app.get("/api/v1.0/companies/:cid/invoices/:id", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const inv = ss.invoices.findOneBy("external_id", Number(c.req.param("id")));
+    if (!inv) return simproNotFound(c);
+    return c.json(formatInvoice(inv));
   });
 
-  // Get invoice
-  app.get(`${C}/customerInvoices/:id`, (c) => {
-    const id = parseId(c.req.param("id"));
-    if (!id) return simproError(c, 400, "Invalid ID");
-    const s = ss();
-    const invoice = s.invoices.get(id);
-    if (!invoice) return simproError(c, 404, "Invoice not found");
-    return c.json(formatInvoice(invoice, s));
-  });
+  // Per-job invoice listing
+  app.get("/api/v1.0/companies/:cid/jobs/:jid/invoices/", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
 
-  // Update invoice
-  app.put(`${C}/customerInvoices/:id`, async (c) => {
-    const id = parseId(c.req.param("id"));
-    if (!id) return simproError(c, 400, "Invalid ID");
-    const s = ss();
-    const existing = s.invoices.get(id);
-    if (!existing) return simproError(c, 404, "Invoice not found");
-
-    const body = await parseSimproBody(c);
-    const customerRef = body.Customer as Record<string, unknown> | undefined;
-    const jobRef = body.Job as Record<string, unknown> | undefined;
-
-    const totalIncTax = (body.TotalIncTax as number) ?? existing.total_inc_tax;
-    const amountPaid = (body.AmountPaid as number) ?? existing.amount_paid;
-
-    const updated = s.invoices.update(id, {
-      invoice_no: (body.InvoiceNo as string) ?? existing.invoice_no,
-      customer_id: customerRef?.ID ? parseInt(String(customerRef.ID), 10) : existing.customer_id,
-      job_id: jobRef?.ID ? parseInt(String(jobRef.ID), 10) : existing.job_id,
-      status: (body.Status as "Draft" | "Issued" | "Paid" | "Void") ?? existing.status,
-      total_ex_tax: (body.TotalExTax as number) ?? existing.total_ex_tax,
-      total_inc_tax: totalIncTax,
-      amount_paid: amountPaid,
-      balance: totalIncTax - amountPaid,
-      issued_date: (body.DateIssued as string) ?? existing.issued_date,
-      due_date: (body.DateDue as string) ?? existing.due_date,
-    });
-    return c.json(formatInvoice(updated!, s));
-  });
-
-  // Delete invoice
-  app.delete(`${C}/customerInvoices/:id`, (c) => {
-    const id = parseId(c.req.param("id"));
-    if (!id) return simproError(c, 400, "Invalid ID");
-    const deleted = ss().invoices.delete(id);
-    if (!deleted) return simproError(c, 404, "Invoice not found");
-    return c.json({ ID: id });
+    const jobId = Number(c.req.param("jid"));
+    const items = ss.invoices.findBy("job_id", jobId);
+    const pagination = parsePagination(c);
+    const page = paginate(c, items, pagination);
+    return c.json(page.map(formatInvoice));
   });
 }

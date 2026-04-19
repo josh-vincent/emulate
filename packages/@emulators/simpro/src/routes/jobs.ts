@@ -1,301 +1,205 @@
+import type { Context } from "hono";
 import type { RouteContext } from "@emulators/core";
-import { getSimproStore } from "../store.js";
-import type { JobCostCenter, JobSection } from "../entities.js";
+import { getSimproStore, type SimproStore } from "../store.js";
+import type { JobStage, JobType, SimproJob } from "../entities.js";
 import {
+  applyColumns,
+  isDisplayAll,
+  nowIso,
+  paginate,
+  parseJson,
+  parsePagination,
+  rateLimit,
+  requireAuth,
   simproError,
-  simproPaginate,
-  parseSimproBody,
-  parseId,
-  nextJobOrderNo,
-  nextSectionId,
-  nextCostCenterId,
+  simproNotFound,
+  simproValidation,
 } from "../helpers.js";
-import { formatJob, formatSection, formatJobCostCenter } from "../formatters.js";
+import { formatJob } from "../formatters.js";
 
-const C = "/api/v1.0/companies/:c";
+export function jobRoutes({ app, store }: RouteContext): void {
+  const ss = getSimproStore(store);
 
-export function jobRoutes(ctx: RouteContext): void {
-  const { app, store } = ctx;
-  const ss = () => getSimproStore(store);
+  const guardedAuth = (c: Context): Response | null => {
+    const rateEnabled = store.getData<boolean>("simpro.rate_limit_enabled") ?? false;
+    const rl = rateLimit(c, rateEnabled);
+    if (rl) return rl;
+    const auth = requireAuth(c, ss);
+    if (auth) return auth as unknown as Response;
+    return null;
+  };
 
-  // ---- Jobs CRUD ----
+  const parseCompanyId = (c: Context): number => Number(c.req.param("cid")) || 0;
 
-  app.get(`${C}/jobs/`, (c) => {
-    const customerIdStr = c.req.query("Customer.ID");
-    const stageFilter = c.req.query("Stage");
-    const siteIdStr = c.req.query("Site.ID");
+  app.get("/api/v1.0/companies/:cid/jobs/", (c) => {
+    const blocked = guardedAuth(c);
+    if (blocked) return blocked;
 
-    let jobs = ss().jobs.all();
+    const companyId = parseCompanyId(c);
+    let items = ss.jobs.all().filter((j) => j.company_id === companyId || companyId === 0);
 
-    if (customerIdStr) {
-      const custId = parseInt(customerIdStr, 10);
-      if (!isNaN(custId)) jobs = jobs.filter((j) => j.customer_id === custId);
+    const customerId = c.req.query("Customer.ID");
+    if (customerId) items = items.filter((j) => j.customer_id === Number(customerId));
+
+    const siteId = c.req.query("Site.ID");
+    if (siteId) items = items.filter((j) => j.site_id === Number(siteId));
+
+    const type = c.req.query("Type");
+    if (type) items = items.filter((j) => j.type === (type as JobType));
+
+    const stageQuery = c.req.query("Stage");
+    if (stageQuery) items = items.filter((j) => j.stage === (Number(stageQuery) as JobStage));
+
+    const statusId = c.req.query("Status.ID");
+    if (statusId) items = items.filter((j) => j.status_id === Number(statusId));
+
+    const modifiedSince = c.req.query("modifiedSince");
+    if (modifiedSince) items = items.filter((j) => j.date_modified >= modifiedSince);
+
+    const search = c.req.query("Search");
+    if (search) {
+      const q = search.toLowerCase();
+      items = items.filter((j) => j.name.toLowerCase().includes(q) || (j.order_no ?? "").toLowerCase().includes(q));
     }
-    if (stageFilter) jobs = jobs.filter((j) => j.stage === stageFilter);
-    if (siteIdStr) {
-      const siteId = parseInt(siteIdStr, 10);
-      if (!isNaN(siteId)) jobs = jobs.filter((j) => j.site_id === siteId);
-    }
 
-    const s = ss();
-    return simproPaginate(c, jobs, (j) => formatJob(j, s));
+    const orderBy = c.req.query("OrderBy");
+    if (orderBy === "DateModified") items.sort((a, b) => a.date_modified.localeCompare(b.date_modified));
+    else if (orderBy === "-DateModified") items.sort((a, b) => b.date_modified.localeCompare(a.date_modified));
+    else items.sort((a, b) => a.external_id - b.external_id);
+
+    const pagination = parsePagination(c);
+    const page = paginate(c, items, pagination);
+
+    const displayAll = isDisplayAll(c);
+    const columns = c.req.query("columns") ?? "ID,Name";
+    const formatted = page.map((job) => applyColumns(formatJob(job, { displayAll, ss }), columns));
+    return c.json(formatted);
   });
 
-  app.post(`${C}/jobs/`, async (c) => {
-    const body = await parseSimproBody(c);
-    const s = ss();
+  app.get("/api/v1.0/companies/:cid/jobs/:jid", (c) => {
+    const blocked = guardedAuth(c);
+    if (blocked) return blocked;
 
-    const customerRef = body.Customer as Record<string, unknown> | undefined;
-    const siteRef = body.Site as Record<string, unknown> | undefined;
+    const jobId = Number(c.req.param("jid"));
+    const job = ss.jobs.findOneBy("external_id", jobId);
+    if (!job) return simproNotFound(c);
 
-    const custId = customerRef?.ID ? parseInt(String(customerRef.ID), 10) : 0;
-    const siteId = siteRef?.ID ? parseInt(String(siteRef.ID), 10) : null;
+    const displayAll = isDisplayAll(c);
+    return c.json(formatJob(job, { displayAll, ss }));
+  });
 
-    const job = s.jobs.insert({
-      type: "Job",
-      order_no: (body.OrderNo as string) || nextJobOrderNo(s.jobs.all()),
-      description: (body.Description as string) ?? "",
-      customer_id: custId,
-      site_id: siteId,
-      stage: (body.Stage as "Pending" | "Progress" | "Complete" | "Void") ?? "Pending",
-      status_id: null,
-      issued_date: (body.DateIssued as string) ?? new Date().toISOString(),
-      due_date: (body.DateDue as string) ?? "",
-      total_ex_tax: (body.TotalExTax as number) ?? 0,
-      total_inc_tax: (body.TotalIncTax as number) ?? 0,
-      sections: (body.Sections as JobSection[]) ?? [],
+  app.post("/api/v1.0/companies/:cid/jobs/", async (c) => {
+    const blocked = guardedAuth(c);
+    if (blocked) return blocked;
+
+    let body: Record<string, unknown>;
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
+
+    const customerRef = body.Customer as { ID?: number } | undefined;
+    if (!customerRef?.ID) return simproValidation(c, "Customer.ID", "Customer is required.");
+    const customer = ss.customers.findOneBy("external_id", customerRef.ID);
+    if (!customer) return simproValidation(c, "Customer.ID", "Customer not found.", customerRef.ID);
+
+    const siteRef = body.Site as { ID?: number } | undefined;
+    if (siteRef?.ID) {
+      const site = ss.sites.findOneBy("external_id", siteRef.ID);
+      if (!site) return simproValidation(c, "Site.ID", "Site not found.", siteRef.ID);
+    }
+
+    const companyId = parseCompanyId(c);
+    const externalId = nextExternalId(ss, "jobs", companyId);
+    const now = nowIso();
+
+    const salesperson = (body.Salesperson as { ID?: number } | undefined)?.ID ?? null;
+    const projectManager = (body.ProjectManager as { ID?: number } | undefined)?.ID ?? null;
+    const status = (body.Status as { ID?: number } | undefined)?.ID ?? null;
+
+    const job = ss.jobs.insert({
+      company_id: companyId,
+      external_id: externalId,
+      type: (body.Type as JobType) ?? "Service",
+      name: (body.Name as string) ?? `Job ${externalId}`,
+      description: (body.Description as string) ?? null,
+      order_no: (body.OrderNo as string) ?? null,
+      request_no: (body.RequestNo as string) ?? null,
+      customer_id: customerRef.ID,
+      customer_contact_id: (body.CustomerContact as { ID?: number } | undefined)?.ID ?? null,
+      site_id: siteRef?.ID ?? null,
+      site_contact_id: (body.SiteContact as { ID?: number } | undefined)?.ID ?? null,
+      salesperson_id: salesperson,
+      project_manager_id: projectManager,
+      technician_ids: ((body.Technicians as Array<{ ID: number }> | undefined) ?? []).map((t) => t.ID),
+      stage: 2,
+      status_id: status,
+      date_issued: (body.DateIssued as string) ?? now.slice(0, 10),
+      due_date: (body.DueDate as string) ?? null,
+      due_time: (body.DueTime as string) ?? null,
       tags: (body.Tags as string[]) ?? [],
+      custom_fields: [],
+      total_ex_tax: 0,
+      total_tax: 0,
+      total_inc_tax: 0,
+      invoiced_ex_tax: 0,
+      date_modified: now,
     });
-    return c.json(formatJob(job, s), 201);
+
+    return c.json(formatJob(job, { ss }), 201);
   });
 
-  app.get(`${C}/jobs/:id`, (c) => {
-    const id = parseId(c.req.param("id"));
-    if (!id) return simproError(c, 400, "Invalid ID");
-    const s = ss();
-    const job = s.jobs.get(id);
-    if (!job) return simproError(c, 404, "Job not found");
-    return c.json(formatJob(job, s));
+  app.patch("/api/v1.0/companies/:cid/jobs/:jid", async (c) => {
+    const blocked = guardedAuth(c);
+    if (blocked) return blocked;
+
+    const jobId = Number(c.req.param("jid"));
+    const job = ss.jobs.findOneBy("external_id", jobId);
+    if (!job) return simproNotFound(c);
+
+    let body: Record<string, unknown>;
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
+
+    const updated = ss.jobs.update(job.id, {
+      ...(body.Name !== undefined && { name: String(body.Name) }),
+      ...(body.Description !== undefined && { description: body.Description as string | null }),
+      ...(body.Stage !== undefined && { stage: Number(body.Stage) as JobStage }),
+      ...(body.DueDate !== undefined && { due_date: body.DueDate as string | null }),
+      ...(body.Status !== undefined && { status_id: (body.Status as { ID?: number }).ID ?? null }),
+      ...(body.OrderNo !== undefined && { order_no: body.OrderNo as string | null }),
+      ...(body.Tags !== undefined && { tags: body.Tags as string[] }),
+      date_modified: nowIso(),
+    })!;
+
+    return c.json(formatJob(updated, { ss }));
   });
 
-  app.put(`${C}/jobs/:id`, async (c) => {
-    const id = parseId(c.req.param("id"));
-    if (!id) return simproError(c, 400, "Invalid ID");
-    const s = ss();
-    const existing = s.jobs.get(id);
-    if (!existing) return simproError(c, 404, "Job not found");
+  app.delete("/api/v1.0/companies/:cid/jobs/:jid", (c) => {
+    const blocked = guardedAuth(c);
+    if (blocked) return blocked;
 
-    const body = await parseSimproBody(c);
-    const customerRef = body.Customer as Record<string, unknown> | undefined;
-    const siteRef = body.Site as Record<string, unknown> | undefined;
-
-    const updated = s.jobs.update(id, {
-      description: (body.Description as string) ?? existing.description,
-      order_no: (body.OrderNo as string) ?? existing.order_no,
-      customer_id: customerRef?.ID ? parseInt(String(customerRef.ID), 10) : existing.customer_id,
-      site_id: siteRef?.ID ? parseInt(String(siteRef.ID), 10) : existing.site_id,
-      stage: (body.Stage as "Pending" | "Progress" | "Complete" | "Void") ?? existing.stage,
-      issued_date: (body.DateIssued as string) ?? existing.issued_date,
-      due_date: (body.DateDue as string) ?? existing.due_date,
-      total_ex_tax: (body.TotalExTax as number) ?? existing.total_ex_tax,
-      total_inc_tax: (body.TotalIncTax as number) ?? existing.total_inc_tax,
-      tags: (body.Tags as string[]) ?? existing.tags,
-    });
-    return c.json(formatJob(updated!, s));
+    const jobId = Number(c.req.param("jid"));
+    const job = ss.jobs.findOneBy("external_id", jobId);
+    if (!job) return simproNotFound(c);
+    ss.jobs.delete(job.id);
+    return c.body(null, 204);
   });
 
-  app.delete(`${C}/jobs/:id`, (c) => {
-    const id = parseId(c.req.param("id"));
-    if (!id) return simproError(c, 400, "Invalid ID");
-    const deleted = ss().jobs.delete(id);
-    if (!deleted) return simproError(c, 404, "Job not found");
-    return c.json({ ID: id });
-  });
-
-  // Attachments stub
-  app.get(`${C}/jobs/:id/attachments/`, (c) => {
-    const id = parseId(c.req.param("id"));
-    if (!id) return simproError(c, 400, "Invalid ID");
-    if (!ss().jobs.get(id)) return simproError(c, 404, "Job not found");
+  app.get("/api/v1.0/companies/:cid/jobs/:jid/attachments/", (c) => {
+    const blocked = guardedAuth(c);
+    if (blocked) return blocked;
     return c.json([]);
   });
+}
 
-  // ---- Sections ----
-
-  app.get(`${C}/jobs/:id/sections/`, (c) => {
-    const id = parseId(c.req.param("id"));
-    if (!id) return simproError(c, 400, "Invalid ID");
-    const job = ss().jobs.get(id);
-    if (!job) return simproError(c, 404, "Job not found");
-    return simproPaginate(c, job.sections ?? [], formatSection);
-  });
-
-  app.post(`${C}/jobs/:id/sections/`, async (c) => {
-    const id = parseId(c.req.param("id"));
-    if (!id) return simproError(c, 400, "Invalid ID");
-    const s = ss();
-    const job = s.jobs.get(id);
-    if (!job) return simproError(c, 404, "Job not found");
-
-    const body = await parseSimproBody(c);
-    const newSection: JobSection = {
-      id: nextSectionId(job),
-      name: (body.Name as string) ?? "Section",
-      cost_centers: [],
-    };
-    s.jobs.update(id, { sections: [...(job.sections ?? []), newSection] });
-    return c.json(formatSection(newSection), 201);
-  });
-
-  app.get(`${C}/jobs/:id/sections/:secId`, (c) => {
-    const id = parseId(c.req.param("id"));
-    const secId = parseId(c.req.param("secId"));
-    if (!id || !secId) return simproError(c, 400, "Invalid ID");
-    const job = ss().jobs.get(id);
-    if (!job) return simproError(c, 404, "Job not found");
-    const section = job.sections?.find((s) => s.id === secId);
-    if (!section) return simproError(c, 404, "Section not found");
-    return c.json(formatSection(section));
-  });
-
-  app.put(`${C}/jobs/:id/sections/:secId`, async (c) => {
-    const id = parseId(c.req.param("id"));
-    const secId = parseId(c.req.param("secId"));
-    if (!id || !secId) return simproError(c, 400, "Invalid ID");
-    const s = ss();
-    const job = s.jobs.get(id);
-    if (!job) return simproError(c, 404, "Job not found");
-    const sectionIdx = job.sections?.findIndex((sec) => sec.id === secId) ?? -1;
-    if (sectionIdx === -1) return simproError(c, 404, "Section not found");
-
-    const body = await parseSimproBody(c);
-    const sections = [...(job.sections ?? [])];
-    sections[sectionIdx] = { ...sections[sectionIdx], name: (body.Name as string) ?? sections[sectionIdx].name };
-    s.jobs.update(id, { sections });
-    return c.json(formatSection(sections[sectionIdx]));
-  });
-
-  app.delete(`${C}/jobs/:id/sections/:secId`, (c) => {
-    const id = parseId(c.req.param("id"));
-    const secId = parseId(c.req.param("secId"));
-    if (!id || !secId) return simproError(c, 400, "Invalid ID");
-    const s = ss();
-    const job = s.jobs.get(id);
-    if (!job) return simproError(c, 404, "Job not found");
-    const filtered = (job.sections ?? []).filter((sec) => sec.id !== secId);
-    if (filtered.length === (job.sections?.length ?? 0)) return simproError(c, 404, "Section not found");
-    s.jobs.update(id, { sections: filtered });
-    return c.json({ ID: secId });
-  });
-
-  // ---- Section Cost Centers ----
-
-  app.get(`${C}/jobs/:id/sections/:secId/costCenters/`, (c) => {
-    const id = parseId(c.req.param("id"));
-    const secId = parseId(c.req.param("secId"));
-    if (!id || !secId) return simproError(c, 400, "Invalid ID");
-    const job = ss().jobs.get(id);
-    if (!job) return simproError(c, 404, "Job not found");
-    const section = job.sections?.find((s) => s.id === secId);
-    if (!section) return simproError(c, 404, "Section not found");
-    return simproPaginate(c, section.cost_centers ?? [], formatJobCostCenter);
-  });
-
-  app.post(`${C}/jobs/:id/sections/:secId/costCenters/`, async (c) => {
-    const id = parseId(c.req.param("id"));
-    const secId = parseId(c.req.param("secId"));
-    if (!id || !secId) return simproError(c, 400, "Invalid ID");
-    const s = ss();
-    const job = s.jobs.get(id);
-    if (!job) return simproError(c, 404, "Job not found");
-    const sectionIdx = job.sections?.findIndex((sec) => sec.id === secId) ?? -1;
-    if (sectionIdx === -1) return simproError(c, 404, "Section not found");
-
-    const body = await parseSimproBody(c);
-    const sections = [...(job.sections ?? [])];
-    const section = { ...sections[sectionIdx] };
-    const ccRef = body.CostCenter as Record<string, unknown> | undefined;
-    const lrRef = body.LaborRate as Record<string, unknown> | undefined;
-
-    const newCC: JobCostCenter = {
-      id: nextCostCenterId(section.cost_centers ?? []),
-      name: (body.Name as string) ?? "",
-      cost_center_id: ccRef?.ID ? parseInt(String(ccRef.ID), 10) : 0,
-      labor_rate_id: lrRef?.ID ? parseInt(String(lrRef.ID), 10) : null,
-      total_ex_tax: (body.TotalExTax as number) ?? 0,
-    };
-    section.cost_centers = [...(section.cost_centers ?? []), newCC];
-    sections[sectionIdx] = section;
-    s.jobs.update(id, { sections });
-    return c.json(formatJobCostCenter(newCC), 201);
-  });
-
-  app.get(`${C}/jobs/:id/sections/:secId/costCenters/:ccId`, (c) => {
-    const id = parseId(c.req.param("id"));
-    const secId = parseId(c.req.param("secId"));
-    const ccId = parseId(c.req.param("ccId"));
-    if (!id || !secId || !ccId) return simproError(c, 400, "Invalid ID");
-    const job = ss().jobs.get(id);
-    if (!job) return simproError(c, 404, "Job not found");
-    const section = job.sections?.find((s) => s.id === secId);
-    if (!section) return simproError(c, 404, "Section not found");
-    const cc = section.cost_centers?.find((cc) => cc.id === ccId);
-    if (!cc) return simproError(c, 404, "Cost center not found");
-    return c.json(formatJobCostCenter(cc));
-  });
-
-  app.put(`${C}/jobs/:id/sections/:secId/costCenters/:ccId`, async (c) => {
-    const id = parseId(c.req.param("id"));
-    const secId = parseId(c.req.param("secId"));
-    const ccId = parseId(c.req.param("ccId"));
-    if (!id || !secId || !ccId) return simproError(c, 400, "Invalid ID");
-    const s = ss();
-    const job = s.jobs.get(id);
-    if (!job) return simproError(c, 404, "Job not found");
-    const sectionIdx = job.sections?.findIndex((sec) => sec.id === secId) ?? -1;
-    if (sectionIdx === -1) return simproError(c, 404, "Section not found");
-    const ccIdx = job.sections![sectionIdx].cost_centers?.findIndex((cc) => cc.id === ccId) ?? -1;
-    if (ccIdx === -1) return simproError(c, 404, "Cost center not found");
-
-    const body = await parseSimproBody(c);
-    const sections = [...(job.sections ?? [])];
-    const section = { ...sections[sectionIdx] };
-    const ccs = [...(section.cost_centers ?? [])];
-    const existing = ccs[ccIdx];
-    const ccRef = body.CostCenter as Record<string, unknown> | undefined;
-    const lrRef = body.LaborRate as Record<string, unknown> | undefined;
-
-    ccs[ccIdx] = {
-      id: existing.id,
-      name: (body.Name as string) ?? existing.name,
-      cost_center_id: ccRef?.ID ? parseInt(String(ccRef.ID), 10) : existing.cost_center_id,
-      labor_rate_id: lrRef?.ID ? parseInt(String(lrRef.ID), 10) : existing.labor_rate_id,
-      total_ex_tax: (body.TotalExTax as number) ?? existing.total_ex_tax,
-    };
-    section.cost_centers = ccs;
-    sections[sectionIdx] = section;
-    s.jobs.update(id, { sections });
-    return c.json(formatJobCostCenter(ccs[ccIdx]));
-  });
-
-  app.delete(`${C}/jobs/:id/sections/:secId/costCenters/:ccId`, (c) => {
-    const id = parseId(c.req.param("id"));
-    const secId = parseId(c.req.param("secId"));
-    const ccId = parseId(c.req.param("ccId"));
-    if (!id || !secId || !ccId) return simproError(c, 400, "Invalid ID");
-    const s = ss();
-    const job = s.jobs.get(id);
-    if (!job) return simproError(c, 404, "Job not found");
-    const sectionIdx = job.sections?.findIndex((sec) => sec.id === secId) ?? -1;
-    if (sectionIdx === -1) return simproError(c, 404, "Section not found");
-
-    const sections = [...(job.sections ?? [])];
-    const section = { ...sections[sectionIdx] };
-    const filtered = (section.cost_centers ?? []).filter((cc) => cc.id !== ccId);
-    if (filtered.length === (section.cost_centers?.length ?? 0)) return simproError(c, 404, "Cost center not found");
-    section.cost_centers = filtered;
-    sections[sectionIdx] = section;
-    s.jobs.update(id, { sections });
-    return c.json({ ID: ccId });
-  });
+export function nextExternalId(ss: SimproStore, collection: keyof SimproStore, companyId: number): number {
+  const col = ss[collection] as { all(): Array<{ company_id: number; external_id: number }> };
+  const siblings = col.all().filter((r) => r.company_id === companyId);
+  if (siblings.length === 0) return 10000 + companyId;
+  return Math.max(...siblings.map((s) => s.external_id)) + 1;
 }

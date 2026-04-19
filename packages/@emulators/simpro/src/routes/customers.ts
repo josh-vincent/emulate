@@ -1,117 +1,164 @@
+import type { Context } from "hono";
 import type { RouteContext } from "@emulators/core";
-import { getSimproStore } from "../store.js";
+import { getSimproStore, type SimproStore } from "../store.js";
+import type { SimproAddress, SimproCustomer } from "../entities.js";
 import {
+  isDisplayAll,
+  paginate,
+  parseJson,
+  parsePagination,
+  rateLimit,
+  requireAuth,
   simproError,
-  simproPaginate,
-  parseSimproBody,
-  parseId,
+  simproNotFound,
+  simproValidation,
 } from "../helpers.js";
 import { formatCustomer } from "../formatters.js";
+import { nextExternalId } from "./jobs.js";
 
-const C = "/api/v1.0/companies/:c";
+export function customerRoutes({ app, store }: RouteContext): void {
+  const ss = getSimproStore(store);
 
-export function customerRoutes(ctx: RouteContext): void {
-  const { app, store } = ctx;
-  const ss = () => getSimproStore(store);
+  const guard = (c: Context): Response | null => {
+    const rateEnabled = store.getData<boolean>("simpro.rate_limit_enabled") ?? false;
+    const rl = rateLimit(c, rateEnabled);
+    if (rl) return rl;
+    const auth = requireAuth(c, ss);
+    if (auth) return auth as unknown as Response;
+    return null;
+  };
 
-  // List customers — filter: Type, Status, q=name/company
-  app.get(`${C}/customers/`, (c) => {
-    const typeFilter = c.req.query("Type");
-    const statusFilter = c.req.query("Status");
-    const q = c.req.query("q")?.toLowerCase();
+  const list = (type?: "company" | "individual") => (c: Context) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
 
-    let customers = ss().customers.all();
-    if (typeFilter) customers = customers.filter((cu) => cu.type === typeFilter);
-    if (statusFilter) customers = customers.filter((cu) => cu.status === statusFilter);
-    if (q) {
-      customers = customers.filter(
-        (cu) =>
-          cu.company_name.toLowerCase().includes(q) ||
-          cu.given_name.toLowerCase().includes(q) ||
-          cu.family_name.toLowerCase().includes(q) ||
-          cu.email.toLowerCase().includes(q),
+    const companyId = Number(c.req.param("cid")) || 0;
+    let items = ss.customers.all().filter((x) => x.company_id === companyId || companyId === 0);
+    if (type) items = items.filter((x) => x.type === type);
+
+    const search = c.req.query("Search");
+    if (search) {
+      const q = search.toLowerCase();
+      items = items.filter((x) =>
+        (x.company_name ?? "").toLowerCase().includes(q) ||
+        (x.given_name ?? "").toLowerCase().includes(q) ||
+        (x.family_name ?? "").toLowerCase().includes(q) ||
+        (x.email ?? "").toLowerCase().includes(q),
       );
     }
-    return simproPaginate(c, customers, formatCustomer);
-  });
 
-  // Create customer
-  app.post(`${C}/customers/`, async (c) => {
-    const body = await parseSimproBody(c);
-    const customer = ss().customers.insert({
-      type: (body.Type as "Company" | "Individual") ?? "Company",
-      company_name: (body.CompanyName as string) ?? "",
-      given_name: (body.GivenName as string) ?? "",
-      family_name: (body.FamilyName as string) ?? "",
-      phone1: (body.Phone1 as string) ?? "",
-      phone2: (body.Phone2 as string) ?? "",
-      mobile: (body.Mobile as string) ?? "",
-      fax: (body.Fax as string) ?? "",
-      email: (body.Email as string) ?? "",
-      tax_number: (body.TaxNumber as string) ?? "",
-      mail_address: ((body.MailAddress as Record<string, string>)?.Address) ?? "",
-      mail_suburb: ((body.MailAddress as Record<string, string>)?.Suburb) ?? "",
-      mail_state: ((body.MailAddress as Record<string, string>)?.State) ?? "",
-      mail_postcode: ((body.MailAddress as Record<string, string>)?.Postcode) ?? "",
-      mail_country: ((body.MailAddress as Record<string, string>)?.Country) ?? "Australia",
-      payment_term: (body.PaymentTerm as number) ?? 30,
-      payment_term_type: (body.PaymentTermType as string) ?? "Day",
-      status: (body.Status as "Active" | "Inactive") ?? "Active",
-      custom_fields: (body.CustomFields as []) ?? [],
-    });
-    return c.json(formatCustomer(customer), 201);
-  });
+    const archived = c.req.query("Archived");
+    if (archived === "true") items = items.filter((x) => x.archived);
+    if (archived === "false") items = items.filter((x) => !x.archived);
 
-  // Get customer
-  app.get(`${C}/customers/:id`, (c) => {
-    const id = parseId(c.req.param("id"));
-    if (!id) return simproError(c, 400, "Invalid ID");
-    const customer = ss().customers.get(id);
-    if (!customer) return simproError(c, 404, "Customer not found");
+    const pagination = parsePagination(c);
+    const page = paginate(c, items, pagination);
+    return c.json(page.map(formatCustomer));
+  };
+
+  app.get("/api/v1.0/companies/:cid/customers/", list());
+  app.get("/api/v1.0/companies/:cid/customers/companies/", list("company"));
+  app.get("/api/v1.0/companies/:cid/customers/individuals/", list("individual"));
+
+  app.get("/api/v1.0/companies/:cid/customers/:id", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+
+    const customer = ss.customers.findOneBy("external_id", Number(c.req.param("id")));
+    if (!customer) return simproNotFound(c);
     return c.json(formatCustomer(customer));
   });
 
-  // Update customer
-  app.put(`${C}/customers/:id`, async (c) => {
-    const id = parseId(c.req.param("id"));
-    if (!id) return simproError(c, 400, "Invalid ID");
-    const s = ss();
-    const existing = s.customers.get(id);
-    if (!existing) return simproError(c, 404, "Customer not found");
+  const createCustomer = async (c: Context, type: "company" | "individual") => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
 
-    const body = await parseSimproBody(c);
-    const mailAddress = (body.MailAddress as Record<string, string>) ?? {};
+    let body: Record<string, unknown>;
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
 
-    const updated = s.customers.update(id, {
-      type: (body.Type as "Company" | "Individual") ?? existing.type,
-      company_name: (body.CompanyName as string) ?? existing.company_name,
-      given_name: (body.GivenName as string) ?? existing.given_name,
-      family_name: (body.FamilyName as string) ?? existing.family_name,
-      phone1: (body.Phone1 as string) ?? existing.phone1,
-      phone2: (body.Phone2 as string) ?? existing.phone2,
-      mobile: (body.Mobile as string) ?? existing.mobile,
-      fax: (body.Fax as string) ?? existing.fax,
-      email: (body.Email as string) ?? existing.email,
-      tax_number: (body.TaxNumber as string) ?? existing.tax_number,
-      mail_address: mailAddress.Address ?? existing.mail_address,
-      mail_suburb: mailAddress.Suburb ?? existing.mail_suburb,
-      mail_state: mailAddress.State ?? existing.mail_state,
-      mail_postcode: mailAddress.Postcode ?? existing.mail_postcode,
-      mail_country: mailAddress.Country ?? existing.mail_country,
-      payment_term: (body.PaymentTerm as number) ?? existing.payment_term,
-      payment_term_type: (body.PaymentTermType as string) ?? existing.payment_term_type,
-      status: (body.Status as "Active" | "Inactive") ?? existing.status,
-      custom_fields: (body.CustomFields as []) ?? existing.custom_fields,
+    if (type === "company" && !body.CompanyName) {
+      return simproValidation(c, "CompanyName", "CompanyName is required for company customers.");
+    }
+    if (type === "individual" && !body.FamilyName) {
+      return simproValidation(c, "FamilyName", "FamilyName is required for individual customers.");
+    }
+
+    const companyId = Number(c.req.param("cid")) || 0;
+    const externalId = nextExternalId(ss, "customers", companyId);
+
+    const customer = ss.customers.insert({
+      company_id: companyId,
+      external_id: externalId,
+      type,
+      company_name: (body.CompanyName as string) ?? null,
+      given_name: (body.GivenName as string) ?? null,
+      family_name: (body.FamilyName as string) ?? null,
+      title: (body.Title as string) ?? null,
+      email: (body.Email as string) ?? null,
+      phone_primary: ((body.Phone as { Primary?: string } | undefined)?.Primary) ?? null,
+      website: (body.Website as string) ?? null,
+      ein: (body.EIN as string) ?? null,
+      address: (body.Address as SimproAddress) ?? null,
+      tax_code_id: ((body.TaxCode as { ID?: number } | undefined)?.ID) ?? null,
+      payment_terms: (body.PaymentTerms as number) ?? null,
+      archived: false,
+      tags: (body.Tags as string[]) ?? [],
+      custom_fields: [],
     });
-    return c.json(formatCustomer(updated!));
-  });
 
-  // Delete customer
-  app.delete(`${C}/customers/:id`, (c) => {
-    const id = parseId(c.req.param("id"));
-    if (!id) return simproError(c, 400, "Invalid ID");
-    const deleted = ss().customers.delete(id);
-    if (!deleted) return simproError(c, 404, "Customer not found");
-    return c.json({ ID: id });
+    return c.json(formatCustomer(customer), 201);
+  };
+
+  app.post("/api/v1.0/companies/:cid/customers/companies/", (c) => createCustomer(c, "company"));
+  app.post("/api/v1.0/companies/:cid/customers/individuals/", (c) => createCustomer(c, "individual"));
+
+  const updateCustomer = async (c: Context) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+
+    const customer = ss.customers.findOneBy("external_id", Number(c.req.param("id")));
+    if (!customer) return simproNotFound(c);
+
+    let body: Record<string, unknown>;
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
+
+    const patch: Partial<SimproCustomer> = {
+      ...(body.CompanyName !== undefined && { company_name: body.CompanyName as string | null }),
+      ...(body.GivenName !== undefined && { given_name: body.GivenName as string | null }),
+      ...(body.FamilyName !== undefined && { family_name: body.FamilyName as string | null }),
+      ...(body.Email !== undefined && { email: body.Email as string | null }),
+      ...(body.Archived !== undefined && { archived: Boolean(body.Archived) }),
+      ...(body.Tags !== undefined && { tags: body.Tags as string[] }),
+      ...(body.Address !== undefined && { address: body.Address as SimproAddress | null }),
+    };
+    const phone = body.Phone as { Primary?: string } | undefined;
+    if (phone?.Primary !== undefined) patch.phone_primary = phone.Primary;
+
+    const updated = ss.customers.update(customer.id, patch)!;
+    return c.json(formatCustomer(updated));
+  };
+
+  app.put("/api/v1.0/companies/:cid/customers/:id", updateCustomer);
+  app.patch("/api/v1.0/companies/:cid/customers/:id", updateCustomer);
+
+  app.delete("/api/v1.0/companies/:cid/customers/:id", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const customer = ss.customers.findOneBy("external_id", Number(c.req.param("id")));
+    if (!customer) return simproNotFound(c);
+    ss.customers.delete(customer.id);
+    return c.body(null, 204);
   });
+}
+
+export function _customerStoreRef(ss: SimproStore) {
+  return ss.customers;
 }

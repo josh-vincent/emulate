@@ -1,273 +1,402 @@
-import { formatDate } from "./helpers.js";
-import type { SimproStore } from "./store.js";
 import type {
-  SimproCustomer,
-  SimproSite,
-  SimproJob,
-  JobSection,
-  JobCostCenter,
-  SimproQuote,
-  SimproInvoice,
-  SimproStaff,
-  SimproContractor,
-  SimproSchedule,
   SimproAsset,
-  SimproCostCenter,
-  SimproLaborRate,
-  SimproTaxCode,
   SimproCatalogItem,
+  SimproContact,
+  SimproContractor,
+  SimproCostCenter,
+  SimproCustomer,
+  SimproInvoice,
+  SimproJob,
+  SimproLabourItem,
+  SimproLabourRate,
+  SimproMasterCostCenter,
+  SimproOneOffItem,
+  SimproPrebuildItem,
+  SimproQuote,
+  SimproSchedule,
+  SimproSection,
+  SimproSite,
+  SimproStaff,
   SimproStatus,
-  SimproZone,
-  SimproCustomField,
-  SimproWebhook,
+  SimproStockItem,
+  SimproTaxCode,
 } from "./entities.js";
+import type { SimproStore } from "./store.js";
 
-export function formatCustomer(c: SimproCustomer): object {
+/**
+ * PascalCase translators: snake_case store row → Simpro API PascalCase shape.
+ * The `display=all` flag controls whether nested Sections / Items are expanded.
+ */
+
+const dateOnly = (iso: string | null | undefined): string | null => {
+  if (!iso) return null;
+  return iso.length >= 10 ? iso.slice(0, 10) : iso;
+};
+
+export function formatCustomerRef(customer: SimproCustomer | undefined) {
+  if (!customer) return null;
   return {
-    ID: c.id,
-    Type: c.type,
-    CompanyName: c.company_name,
+    ID: customer.external_id,
+    CompanyName: customer.company_name,
+    GivenName: customer.given_name,
+    FamilyName: customer.family_name,
+  };
+}
+
+export function formatSiteRef(site: SimproSite | undefined) {
+  if (!site) return null;
+  return { ID: site.external_id, Name: site.name };
+}
+
+export function formatContactRef(contact: SimproContact | undefined) {
+  if (!contact) return null;
+  return {
+    ID: contact.external_id,
+    GivenName: contact.given_name,
+    FamilyName: contact.family_name,
+  };
+}
+
+export function formatStaffRef(staff: SimproStaff | undefined) {
+  if (!staff) return null;
+  return {
+    ID: staff.external_id,
+    Name: `${staff.given_name} ${staff.family_name}`.trim(),
+  };
+}
+
+export function formatStatus(status: SimproStatus | undefined) {
+  if (!status) return null;
+  return { ID: status.external_id, Name: status.name };
+}
+
+export function formatTaxCodeRef(tc: SimproTaxCode | undefined) {
+  if (!tc) return null;
+  return { ID: tc.external_id, Name: tc.name };
+}
+
+export function formatMasterCostCenterRef(cc: SimproMasterCostCenter | undefined) {
+  if (!cc) return null;
+  return { ID: cc.external_id, Name: cc.name };
+}
+
+export function formatMasterCostCenter(cc: SimproMasterCostCenter) {
+  return {
+    ID: cc.external_id,
+    Name: cc.name,
+    Archived: cc.archived,
+    IncomeAccount: cc.income_account,
+    ExpenseAccount: cc.expense_account,
+  };
+}
+
+export function formatTaxCode(tc: SimproTaxCode) {
+  return { ID: tc.external_id, Name: tc.name, Rate: tc.rate };
+}
+
+export function formatLabourRate(lr: SimproLabourRate) {
+  return { ID: lr.external_id, Name: lr.name, Rate: lr.rate };
+}
+
+export function formatCustomer(c: SimproCustomer) {
+  const base = {
+    ID: c.external_id,
+    Archived: c.archived,
+    Email: c.email,
+    Phone: { Primary: c.phone_primary },
+    Address: c.address,
+    Tags: c.tags,
+    CustomFields: c.custom_fields,
+  };
+  if (c.type === "company") {
+    return {
+      ...base,
+      CompanyName: c.company_name,
+      EIN: c.ein,
+      Website: c.website,
+      PaymentTerms: c.payment_terms,
+    };
+  }
+  return {
+    ...base,
+    Title: c.title,
     GivenName: c.given_name,
     FamilyName: c.family_name,
-    Phone1: c.phone1,
-    Phone2: c.phone2,
-    Mobile: c.mobile,
-    Fax: c.fax,
-    Email: c.email,
-    TaxNumber: c.tax_number,
-    MailAddress: {
-      Address: c.mail_address,
-      Suburb: c.mail_suburb,
-      State: c.mail_state,
-      Postcode: c.mail_postcode,
-      Country: c.mail_country,
-    },
-    Status: c.status,
-    CustomFields: c.custom_fields ?? [],
   };
 }
 
-export function formatSite(s: SimproSite, ss: SimproStore): object {
-  const customer = ss.customers.get(s.customer_id);
+export function formatSite(s: SimproSite, contact?: SimproContact) {
   return {
-    ID: s.id,
+    ID: s.external_id,
     Name: s.name,
-    Customer: {
-      ID: s.customer_id,
-      CompanyName: customer?.company_name ?? "",
-    },
-    Address: {
-      Address: s.address,
-      Suburb: s.suburb,
-      State: s.state,
-      Postcode: s.postcode,
-      Country: s.country,
-    },
-    Contact: {
-      Name: s.contact_name,
-      Phone: s.contact_phone,
-      Email: s.contact_email,
-    },
+    Address: s.address,
+    Contact: contact
+      ? {
+          ID: contact.external_id,
+          GivenName: contact.given_name,
+          FamilyName: contact.family_name,
+          Phone: { Primary: contact.phone_primary },
+          Email: contact.email,
+        }
+      : null,
+    Archived: s.archived,
   };
 }
 
-export function formatJobCostCenter(cc: JobCostCenter): object {
+export function formatStaff(s: SimproStaff) {
   return {
-    ID: cc.id,
+    ID: s.external_id,
+    GivenName: s.given_name,
+    FamilyName: s.family_name,
+    Email: s.email,
+    Active: s.active,
+  };
+}
+
+export function formatContractor(c: SimproContractor) {
+  return { ID: c.external_id, Name: c.name, Email: c.email, Archived: c.archived };
+}
+
+export interface FormatJobOptions {
+  displayAll?: boolean;
+  ss?: SimproStore;
+}
+
+export function formatJob(job: SimproJob, opts: FormatJobOptions = {}) {
+  const { displayAll = false, ss } = opts;
+
+  const customer = ss?.customers.findOneBy("external_id", job.customer_id);
+  const site =
+    job.site_id && ss ? ss.sites.findOneBy("external_id", job.site_id) ?? undefined : undefined;
+  const customerContact =
+    job.customer_contact_id && ss
+      ? ss.contacts.findOneBy("external_id", job.customer_contact_id) ?? undefined
+      : undefined;
+  const siteContact =
+    job.site_contact_id && ss
+      ? ss.contacts.findOneBy("external_id", job.site_contact_id) ?? undefined
+      : undefined;
+  const salesperson =
+    job.salesperson_id && ss
+      ? ss.staff.findOneBy("external_id", job.salesperson_id) ?? undefined
+      : undefined;
+  const projectManager =
+    job.project_manager_id && ss
+      ? ss.staff.findOneBy("external_id", job.project_manager_id) ?? undefined
+      : undefined;
+  const status = job.status_id && ss ? ss.statuses.findOneBy("external_id", job.status_id) ?? undefined : undefined;
+  const technicians = ss
+    ? job.technician_ids
+        .map((id) => ss.staff.findOneBy("external_id", id))
+        .filter((t): t is SimproStaff => !!t)
+        .map(formatStaffRef)
+    : [];
+
+  const base: Record<string, unknown> = {
+    ID: job.external_id,
+    Type: job.type,
+    Name: job.name,
+    Description: job.description,
+    OrderNo: job.order_no,
+    RequestNo: job.request_no,
+    Customer: formatCustomerRef(customer),
+    CustomerContact: formatContactRef(customerContact),
+    Site: formatSiteRef(site),
+    SiteContact: formatContactRef(siteContact),
+    Salesperson: formatStaffRef(salesperson),
+    ProjectManager: formatStaffRef(projectManager),
+    Technicians: technicians,
+    Stage: job.stage,
+    Status: formatStatus(status),
+    DateIssued: dateOnly(job.date_issued),
+    DueDate: dateOnly(job.due_date),
+    DueTime: job.due_time,
+    Tags: job.tags,
+    CustomFields: job.custom_fields,
+    Total: {
+      ExTax: job.total_ex_tax,
+      Tax: job.total_tax,
+      IncTax: job.total_inc_tax,
+    },
+    DateModified: job.date_modified,
+  };
+
+  if (displayAll && ss) {
+    const sections = ss.sections
+      .findBy("job_id", job.external_id)
+      .sort((a, b) => a.display_order - b.display_order)
+      .map((section) => formatSection(section, { displayAll: true, ss }));
+    base.Sections = sections;
+  }
+
+  return base;
+}
+
+export function formatSection(section: SimproSection, opts: FormatJobOptions = {}) {
+  const { displayAll = false, ss } = opts;
+  const base: Record<string, unknown> = {
+    ID: section.external_id,
+    Name: section.name,
+    Description: section.description,
+    DisplayOrder: section.display_order,
+  };
+  if (displayAll && ss) {
+    base.CostCenters = ss.costCenters
+      .findBy("section_id", section.external_id)
+      .map((cc) => formatCostCenter(cc, { displayAll: true, ss }));
+  }
+  return base;
+}
+
+export function formatCostCenter(cc: SimproCostCenter, opts: FormatJobOptions = {}) {
+  const { displayAll = false, ss } = opts;
+  const masterCostCenter =
+    cc.master_cost_center_id && ss
+      ? ss.masterCostCenters.findOneBy("external_id", cc.master_cost_center_id) ?? undefined
+      : undefined;
+  const taxCode =
+    cc.tax_code_id && ss ? ss.taxCodes.findOneBy("external_id", cc.tax_code_id) ?? undefined : undefined;
+
+  const base: Record<string, unknown> = {
+    ID: cc.external_id,
     Name: cc.name,
-    CostCenter: { ID: cc.cost_center_id, Name: "" },
-    LaborRate: { ID: cc.labor_rate_id ?? 0, Name: "" },
-    TotalExTax: cc.total_ex_tax,
+    CostCenter: formatMasterCostCenterRef(masterCostCenter),
+    TaxCode: formatTaxCodeRef(taxCode),
+    BillingType: cc.billing_type,
+    Billable: cc.billable,
+    Stage: cc.stage,
+    ExTax: cc.ex_tax,
+    Tax: cc.tax,
+    IncTax: cc.inc_tax,
+    InvoicedExTax: cc.invoiced_ex_tax,
+    Markup: cc.markup,
+    Discount: cc.discount,
+    IsVariation: cc.is_variation,
+    ContractorWorkOrderID: cc.contractor_work_order_id,
+    DateModified: cc.date_modified,
+  };
+
+  if (displayAll && ss) {
+    base.Items = {
+      CatalogItems: ss.catalogItems.findBy("cost_center_id", cc.external_id).map(formatCatalogItem),
+      LabourItems: ss.labourItems.findBy("cost_center_id", cc.external_id).map(formatLabourItem),
+      OneOffItems: ss.oneOffItems.findBy("cost_center_id", cc.external_id).map(formatOneOffItem),
+      PrebuildItems: ss.prebuildItems.findBy("cost_center_id", cc.external_id).map(formatPrebuildItem),
+      ServiceFeeItems: [],
+      StockItems: [],
+    };
+  }
+
+  return base;
+}
+
+export function formatCatalogItem(item: SimproCatalogItem) {
+  return {
+    Type: "Catalog" as const,
+    StockItemID: item.stock_item_id,
+    Name: item.name,
+    PartNo: item.part_no,
+    Quantity: item.quantity,
+    BasePrice: item.base_price,
+    Markup: item.markup,
+    SellPrice: item.sell_price,
+    ExTax: item.ex_tax,
   };
 }
 
-export function formatSection(s: JobSection): object {
+export function formatLabourItem(item: SimproLabourItem) {
   return {
-    ID: s.id,
-    Name: s.name,
-    CostCenters: (s.cost_centers ?? []).map(formatJobCostCenter),
+    Type: "Labour" as const,
+    LabourID: item.labour_id,
+    Name: item.name,
+    Hours: item.hours,
+    LabourRate: item.labour_rate,
+    Markup: item.markup,
+    SellPrice: item.sell_price,
+    ExTax: item.ex_tax,
   };
 }
 
-export function formatJob(j: SimproJob, ss: SimproStore): object {
-  const customer = ss.customers.get(j.customer_id);
-  const site = j.site_id ? ss.sites.get(j.site_id) : null;
+export function formatOneOffItem(item: SimproOneOffItem) {
   return {
-    ID: j.id,
-    Type: "Job",
-    OrderNo: j.order_no,
-    Description: j.description,
-    Customer: {
-      ID: j.customer_id,
-      CompanyName: customer?.company_name ?? "",
-    },
-    Site: {
-      ID: j.site_id ?? 0,
-      Name: site?.name ?? "",
-    },
-    Stage: j.stage,
-    Status: { ID: j.status_id ?? 0, Name: "" },
-    DateIssued: formatDate(j.issued_date),
-    DateDue: formatDate(j.due_date),
-    TotalExTax: j.total_ex_tax,
-    TotalIncTax: j.total_inc_tax,
-    Tags: j.tags ?? [],
-    Sections: (j.sections ?? []).map(formatSection),
+    Type: "OneOff" as const,
+    Description: item.description,
+    Quantity: item.quantity,
+    EstCost: item.est_cost,
+    ActCost: item.act_cost,
+    Markup: item.markup,
+    SellPrice: item.sell_price,
+    ExTax: item.ex_tax,
   };
 }
 
-export function formatQuote(q: SimproQuote, ss: SimproStore): object {
-  const customer = ss.customers.get(q.customer_id);
-  const site = q.site_id ? ss.sites.get(q.site_id) : null;
+export function formatPrebuildItem(item: SimproPrebuildItem) {
   return {
-    ID: q.id,
-    Type: "Quote",
-    OrderNo: q.order_no,
-    Description: q.description,
-    Customer: {
-      ID: q.customer_id,
-      CompanyName: customer?.company_name ?? "",
-    },
-    Site: {
-      ID: q.site_id ?? 0,
-      Name: site?.name ?? "",
-    },
+    Type: "Prebuild" as const,
+    PrebuildID: item.prebuild_id,
+    Name: item.name,
+    Quantity: item.quantity,
+    CostPrice: item.cost_price,
+    Markup: item.markup,
+    SellPrice: item.sell_price,
+    ExTax: item.ex_tax,
+  };
+}
+
+export function formatStockItem(item: SimproStockItem) {
+  return {
+    ID: item.external_id,
+    Name: item.name,
+    PartNo: item.part_no,
+    UnitPrice: item.unit_price,
+  };
+}
+
+export function formatQuote(q: SimproQuote) {
+  return {
+    ID: q.external_id,
+    Name: q.name,
+    Customer: { ID: q.customer_id },
+    Site: q.site_id ? { ID: q.site_id } : null,
     Stage: q.stage,
-    Status: { ID: q.status_id ?? 0, Name: "" },
-    DateIssued: formatDate(q.issued_date),
-    DateDue: formatDate(q.due_date),
-    TotalExTax: q.total_ex_tax,
-    TotalIncTax: q.total_inc_tax,
+    Total: { ExTax: q.total_ex_tax, IncTax: q.total_inc_tax },
+    DateIssued: dateOnly(q.date_issued),
     ConvertedJob: q.converted_job_id ? { ID: q.converted_job_id } : null,
   };
 }
 
-export function formatInvoice(inv: SimproInvoice, ss: SimproStore): object {
-  const customer = ss.customers.get(inv.customer_id);
-  const job = inv.job_id ? ss.jobs.get(inv.job_id) : null;
+export function formatInvoice(i: SimproInvoice) {
   return {
-    ID: inv.id,
-    InvoiceNo: inv.invoice_no,
-    Customer: {
-      ID: inv.customer_id,
-      CompanyName: customer?.company_name ?? "",
-    },
-    Job: {
-      ID: inv.job_id ?? 0,
-      OrderNo: job?.order_no ?? "",
-    },
-    Status: inv.status,
-    TotalExTax: inv.total_ex_tax,
-    TotalIncTax: inv.total_inc_tax,
-    AmountPaid: inv.amount_paid,
-    Balance: inv.balance,
-    DateIssued: formatDate(inv.issued_date),
-    DateDue: formatDate(inv.due_date),
+    ID: i.external_id,
+    Job: { ID: i.job_id },
+    Type: i.type,
+    Stage: i.stage,
+    Total: { ExTax: i.total_ex_tax, IncTax: i.total_inc_tax },
+    Paid: i.paid,
+    DateIssued: dateOnly(i.date_issued),
   };
 }
 
-export function formatStaff(s: SimproStaff): object {
+export function formatSchedule(s: SimproSchedule) {
   return {
-    ID: s.id,
-    GivenName: s.given_name,
-    FamilyName: s.family_name,
-    Email: s.email,
-    Phone: s.phone,
-    Mobile: s.mobile,
-    Role: { ID: s.role_id ?? 0, Name: s.role_name ?? "" },
-    Status: s.status,
-  };
-}
-
-export function formatContractor(c: SimproContractor): object {
-  return {
-    ID: c.id,
-    CompanyName: c.company_name,
-    GivenName: c.given_name,
-    FamilyName: c.family_name,
-    Email: c.email,
-    Phone: c.phone,
-    Status: c.status,
-  };
-}
-
-export function formatSchedule(s: SimproSchedule, ss: SimproStore): object {
-  const job = ss.jobs.get(s.job_id);
-  const staff = s.staff_id ? ss.staff.get(s.staff_id) : null;
-  return {
-    ID: s.id,
-    Job: { ID: s.job_id, OrderNo: job?.order_no ?? "" },
-    CostCenter: { ID: s.cost_center_id ?? 0, Name: s.cost_center_name ?? "" },
-    Staff: {
-      ID: s.staff_id ?? 0,
-      GivenName: staff?.given_name ?? "",
-      FamilyName: staff?.family_name ?? "",
-    },
+    ID: s.external_id,
+    Job: { ID: s.job_id },
+    Section: s.section_id ? { ID: s.section_id } : null,
+    CostCenter: s.cost_center_id ? { ID: s.cost_center_id } : null,
+    Technician: { ID: s.technician_id },
     Date: s.date,
-    Blocks: s.blocks ?? [],
-    Notes: s.notes ?? "",
+    StartTime: s.start_time,
+    Duration: s.duration_minutes,
   };
 }
 
-export function formatAsset(a: SimproAsset, ss: SimproStore): object {
-  const customer = ss.customers.get(a.customer_id);
-  const site = a.site_id ? ss.sites.get(a.site_id) : null;
+export function formatAsset(a: SimproAsset) {
   return {
-    ID: a.id,
+    ID: a.external_id,
     Name: a.name,
-    AssetType: { ID: a.asset_type_id ?? 0, Name: a.asset_type_name ?? "" },
-    Customer: {
-      ID: a.customer_id,
-      CompanyName: customer?.company_name ?? "",
-    },
-    Site: {
-      ID: a.site_id ?? 0,
-      Name: site?.name ?? "",
-    },
-    SerialNo: a.serial_no ?? "",
-    ServiceLevel: { ID: a.service_level_id ?? 0, Name: a.service_level_name ?? "" },
-    DateNextService: a.next_service_date ?? "",
-    Status: a.status ?? "Active",
-    DateInstalled: a.date_installed ?? "",
-    CustomFields: a.custom_fields ?? [],
+    Customer: { ID: a.customer_id },
+    Site: a.site_id ? { ID: a.site_id } : null,
+    AssetType: a.asset_type,
+    SerialNumber: a.serial_number,
   };
-}
-
-export function formatCostCenter(cc: SimproCostCenter): object {
-  return { ID: cc.id, Name: cc.name, Description: cc.description };
-}
-
-export function formatLaborRate(lr: SimproLaborRate): object {
-  return { ID: lr.id, Name: lr.name, Rate: lr.rate };
-}
-
-export function formatTaxCode(tc: SimproTaxCode): object {
-  return { ID: tc.id, Name: tc.name, Rate: tc.rate, Description: tc.description };
-}
-
-export function formatCatalogItem(ci: SimproCatalogItem): object {
-  return {
-    ID: ci.id,
-    Name: ci.name,
-    PartNo: ci.part_no,
-    UnitPrice: ci.unit_price,
-    CostCenter: { ID: ci.cost_center_id ?? 0, Name: "" },
-    Description: ci.description,
-  };
-}
-
-export function formatStatus(s: SimproStatus): object {
-  return { ID: s.id, Name: s.name, Color: s.color };
-}
-
-export function formatZone(z: SimproZone): object {
-  return { ID: z.id, Name: z.name, Description: z.description };
-}
-
-export function formatCustomField(cf: SimproCustomField): object {
-  return { ID: cf.id, Name: cf.name, EntityType: cf.entity_type, FieldType: cf.field_type };
-}
-
-export function formatWebhook(w: SimproWebhook): object {
-  return { ID: w.id, URL: w.url, Events: w.events, Active: w.active };
 }

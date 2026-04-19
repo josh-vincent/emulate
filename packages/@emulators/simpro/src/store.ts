@@ -1,62 +1,136 @@
 import { Store, type Collection } from "@emulators/core";
 import type {
-  SimproCustomer,
-  SimproSite,
-  SimproJob,
-  SimproQuote,
-  SimproInvoice,
-  SimproStaff,
-  SimproContractor,
-  SimproSchedule,
   SimproAsset,
-  SimproCostCenter,
-  SimproLaborRate,
-  SimproTaxCode,
   SimproCatalogItem,
-  SimproStatus,
-  SimproZone,
+  SimproCompany,
+  SimproContact,
+  SimproContractor,
+  SimproCostCenter,
   SimproCustomField,
-  SimproWebhook,
+  SimproCustomer,
+  SimproInvoice,
+  SimproJob,
+  SimproLabourItem,
+  SimproLabourRate,
+  SimproMasterCostCenter,
+  SimproOAuthCode,
+  SimproOAuthToken,
+  SimproOneOffItem,
+  SimproPrebuildItem,
+  SimproQuote,
+  SimproSchedule,
+  SimproSection,
+  SimproSite,
+  SimproStaff,
+  SimproStatus,
+  SimproStockItem,
+  SimproTaxCode,
+  SimproWebhookEvent,
+  SimproWebhookSubscription,
+  SimproZone,
 } from "./entities.js";
 
 export interface SimproStore {
+  companies: Collection<SimproCompany>;
+  masterCostCenters: Collection<SimproMasterCostCenter>;
+  taxCodes: Collection<SimproTaxCode>;
+  labourRates: Collection<SimproLabourRate>;
+  statuses: Collection<SimproStatus>;
   customers: Collection<SimproCustomer>;
   sites: Collection<SimproSite>;
-  jobs: Collection<SimproJob>;
-  quotes: Collection<SimproQuote>;
-  invoices: Collection<SimproInvoice>;
+  contacts: Collection<SimproContact>;
   staff: Collection<SimproStaff>;
   contractors: Collection<SimproContractor>;
+  jobs: Collection<SimproJob>;
+  sections: Collection<SimproSection>;
+  costCenters: Collection<SimproCostCenter>;
+  catalogItems: Collection<SimproCatalogItem>;
+  labourItems: Collection<SimproLabourItem>;
+  oneOffItems: Collection<SimproOneOffItem>;
+  prebuildItems: Collection<SimproPrebuildItem>;
+  stockItems: Collection<SimproStockItem>;
+  quotes: Collection<SimproQuote>;
+  invoices: Collection<SimproInvoice>;
   schedules: Collection<SimproSchedule>;
   assets: Collection<SimproAsset>;
-  costCenters: Collection<SimproCostCenter>;
-  laborRates: Collection<SimproLaborRate>;
-  taxCodes: Collection<SimproTaxCode>;
-  catalogItems: Collection<SimproCatalogItem>;
-  statuses: Collection<SimproStatus>;
   zones: Collection<SimproZone>;
   customFields: Collection<SimproCustomField>;
-  webhooks: Collection<SimproWebhook>;
+  oauthCodes: Collection<SimproOAuthCode>;
+  oauthTokens: Collection<SimproOAuthToken>;
+  webhookSubscriptions: Collection<SimproWebhookSubscription>;
+  webhookEvents: Collection<SimproWebhookEvent>;
 }
 
 export function getSimproStore(store: Store): SimproStore {
   return {
-    customers: store.collection<SimproCustomer>("simpro.customers", ["email"]),
-    sites: store.collection<SimproSite>("simpro.sites", ["customer_id"]),
-    jobs: store.collection<SimproJob>("simpro.jobs", ["customer_id", "site_id"]),
-    quotes: store.collection<SimproQuote>("simpro.quotes", ["customer_id"]),
-    invoices: store.collection<SimproInvoice>("simpro.invoices", ["customer_id", "job_id"]),
-    staff: store.collection<SimproStaff>("simpro.staff", ["email"]),
-    contractors: store.collection<SimproContractor>("simpro.contractors"),
-    schedules: store.collection<SimproSchedule>("simpro.schedules", ["job_id", "staff_id"]),
-    assets: store.collection<SimproAsset>("simpro.assets", ["customer_id", "site_id"]),
-    costCenters: store.collection<SimproCostCenter>("simpro.cost_centers"),
-    laborRates: store.collection<SimproLaborRate>("simpro.labor_rates"),
-    taxCodes: store.collection<SimproTaxCode>("simpro.tax_codes"),
-    catalogItems: store.collection<SimproCatalogItem>("simpro.catalog_items"),
-    statuses: store.collection<SimproStatus>("simpro.statuses", ["entity_type"]),
-    zones: store.collection<SimproZone>("simpro.zones"),
-    customFields: store.collection<SimproCustomField>("simpro.custom_fields"),
-    webhooks: store.collection<SimproWebhook>("simpro.webhooks"),
+    companies: store.collection<SimproCompany>("simpro.companies", ["company_id"]),
+    masterCostCenters: store.collection<SimproMasterCostCenter>("simpro.master_cost_centers", [
+      "company_id",
+      "external_id",
+    ]),
+    taxCodes: store.collection<SimproTaxCode>("simpro.tax_codes", ["company_id", "external_id"]),
+    labourRates: store.collection<SimproLabourRate>("simpro.labour_rates", ["company_id", "external_id"]),
+    statuses: store.collection<SimproStatus>("simpro.statuses", ["company_id", "external_id", "kind"]),
+    customers: store.collection<SimproCustomer>("simpro.customers", ["company_id", "external_id", "type"]),
+    sites: store.collection<SimproSite>("simpro.sites", ["company_id", "external_id", "customer_id"]),
+    contacts: store.collection<SimproContact>("simpro.contacts", [
+      "company_id",
+      "external_id",
+      "site_id",
+      "customer_id",
+    ]),
+    staff: store.collection<SimproStaff>("simpro.staff", ["company_id", "external_id"]),
+    contractors: store.collection<SimproContractor>("simpro.contractors", ["company_id", "external_id"]),
+    jobs: store.collection<SimproJob>("simpro.jobs", ["company_id", "external_id", "customer_id", "site_id"]),
+    sections: store.collection<SimproSection>("simpro.sections", ["company_id", "external_id", "job_id"]),
+    costCenters: store.collection<SimproCostCenter>("simpro.cost_centers", [
+      "company_id",
+      "external_id",
+      "job_id",
+      "section_id",
+    ]),
+    catalogItems: store.collection<SimproCatalogItem>("simpro.catalog_items", [
+      "company_id",
+      "external_id",
+      "cost_center_id",
+    ]),
+    labourItems: store.collection<SimproLabourItem>("simpro.labour_items", [
+      "company_id",
+      "external_id",
+      "cost_center_id",
+    ]),
+    oneOffItems: store.collection<SimproOneOffItem>("simpro.oneoff_items", [
+      "company_id",
+      "external_id",
+      "cost_center_id",
+    ]),
+    prebuildItems: store.collection<SimproPrebuildItem>("simpro.prebuild_items", [
+      "company_id",
+      "external_id",
+      "cost_center_id",
+    ]),
+    stockItems: store.collection<SimproStockItem>("simpro.stock_items", ["company_id", "external_id"]),
+    quotes: store.collection<SimproQuote>("simpro.quotes", ["company_id", "external_id", "customer_id"]),
+    invoices: store.collection<SimproInvoice>("simpro.invoices", ["company_id", "external_id", "job_id"]),
+    schedules: store.collection<SimproSchedule>("simpro.schedules", [
+      "company_id",
+      "external_id",
+      "job_id",
+      "technician_id",
+    ]),
+    assets: store.collection<SimproAsset>("simpro.assets", ["company_id", "external_id", "customer_id"]),
+    zones: store.collection<SimproZone>("simpro.zones", ["company_id", "external_id"]),
+    customFields: store.collection<SimproCustomField>("simpro.custom_fields", ["company_id", "external_id"]),
+    oauthCodes: store.collection<SimproOAuthCode>("simpro.oauth_codes", ["code"]),
+    oauthTokens: store.collection<SimproOAuthToken>("simpro.oauth_tokens", ["access_token", "refresh_token"]),
+    webhookSubscriptions: store.collection<SimproWebhookSubscription>("simpro.webhook_subscriptions", [
+      "company_id",
+      "external_id",
+    ]),
+    webhookEvents: store.collection<SimproWebhookEvent>("simpro.webhook_events", [
+      "company_id",
+      "subscription_id",
+      "event",
+    ]),
   };
 }
