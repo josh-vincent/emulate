@@ -90,7 +90,7 @@ export function sectionRoutes({ app, store }: RouteContext): void {
     return c.json(formatSection(section, { ss }), 201);
   });
 
-  app.put("/api/v1.0/companies/:cid/jobs/:jid/sections/:sid", async (c) => {
+  app.patch("/api/v1.0/companies/:cid/jobs/:jid/sections/:sid", async (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
 
@@ -104,14 +104,14 @@ export function sectionRoutes({ app, store }: RouteContext): void {
       return simproError(c, 400, "Problems parsing JSON.");
     }
 
-    const updated = ss.sections.update(section.id, {
+    ss.sections.update(section.id, {
       ...(body.Name !== undefined && { name: String(body.Name) }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
       ...(body.DisplayOrder !== undefined && { display_order: Number(body.DisplayOrder) }),
       date_modified: nowIso(),
-    })!;
+    });
 
-    return c.json(formatSection(updated, { ss }));
+    return c.body(null, 204);
   });
 
   app.delete("/api/v1.0/companies/:cid/jobs/:jid/sections/:sid", (c) => {

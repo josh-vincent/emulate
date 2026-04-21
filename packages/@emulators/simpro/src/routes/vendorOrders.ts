@@ -79,7 +79,7 @@ export function vendorOrderRoutes({ app, store }: RouteContext): void {
     if (!vo) return simproNotFound(c);
     let body: Record<string, unknown>;
     try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
-    const updated = ss.vendorOrders.update(vo.id, {
+    ss.vendorOrders.update(vo.id, {
       ...(body.Stage !== undefined && { stage: body.Stage as "Draft" | "Sent" | "PartReceived" | "Received" }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
       ...(body.TotalExTax !== undefined && { total_ex_tax: Number(body.TotalExTax) }),
@@ -87,8 +87,8 @@ export function vendorOrderRoutes({ app, store }: RouteContext): void {
       ...(body.DateIssued !== undefined && { date_issued: body.DateIssued as string | null }),
       ...(body.Vendor !== undefined && { vendor_id: (body.Vendor as { ID?: number }).ID ?? null }),
       ...(body.Job !== undefined && { job_id: (body.Job as { ID?: number }).ID ?? null }),
-    })!;
-    return c.json(formatVendorOrder(updated));
+    });
+    return c.body(null, 204);
   });
 
   app.delete("/api/v1.0/companies/:cid/vendorOrders/:id", (c) => {

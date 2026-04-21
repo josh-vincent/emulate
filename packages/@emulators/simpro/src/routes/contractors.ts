@@ -81,7 +81,7 @@ export function contractorRoutes({ app, store }: RouteContext): void {
     if (!contractor) return simproNotFound(c);
     let body: Record<string, unknown>;
     try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
-    const updated = ss.contractors.update(contractor.id, {
+    ss.contractors.update(contractor.id, {
       ...(body.CompanyName !== undefined && { company_name: body.CompanyName as string | null }),
       ...(body.GivenName !== undefined && { given_name: body.GivenName as string | null }),
       ...(body.FamilyName !== undefined && { family_name: body.FamilyName as string | null }),
@@ -91,8 +91,8 @@ export function contractorRoutes({ app, store }: RouteContext): void {
       ...(body.Fax !== undefined && { fax: body.Fax as string | null }),
       ...(body.Address !== undefined && { address: body.Address as Record<string, string> | null }),
       ...(body.Archived !== undefined && { archived: Boolean(body.Archived) }),
-    })!;
-    return c.json(formatContractor(updated));
+    });
+    return c.body(null, 204);
   });
 
   app.delete("/api/v1.0/companies/:cid/contractors/:id", (c) => {

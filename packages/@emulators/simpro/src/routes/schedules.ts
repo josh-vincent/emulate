@@ -47,7 +47,7 @@ export function scheduleRoutes({ app, store }: RouteContext): void {
 
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);
-    return c.json(page.map(formatSchedule));
+    return c.json(page.map((s) => formatSchedule(s)));
   });
 
   app.get("/api/v1.0/companies/:cid/schedules/:id", (c) => {
@@ -83,22 +83,6 @@ export function scheduleRoutes({ app, store }: RouteContext): void {
       duration_minutes: (body.DurationMinutes as number) ?? 60,
     });
     return c.json(formatSchedule(s), 201);
-  });
-
-  app.patch("/api/v1.0/companies/:cid/schedules/:id", async (c) => {
-    const blocked = guard(c);
-    if (blocked) return blocked;
-    const s = ss.schedules.findOneBy("external_id", Number(c.req.param("id")));
-    if (!s) return simproNotFound(c);
-    let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
-    const updated = ss.schedules.update(s.id, {
-      ...(body.Date !== undefined && { date: body.Date as string }),
-      ...(body.StartTime !== undefined && { start_time: body.StartTime as string }),
-      ...(body.DurationMinutes !== undefined && { duration_minutes: Number(body.DurationMinutes) }),
-      ...(body.Technician !== undefined && { technician_id: (body.Technician as { ID: number }).ID }),
-    })!;
-    return c.json(formatSchedule(updated));
   });
 
   app.delete("/api/v1.0/companies/:cid/schedules/:id", (c) => {

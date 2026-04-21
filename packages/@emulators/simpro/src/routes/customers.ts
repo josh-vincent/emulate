@@ -142,8 +142,8 @@ export function customerRoutes({ app, store }: RouteContext): void {
     const phone = body.Phone as { Primary?: string } | undefined;
     if (phone?.Primary !== undefined) patch.phone_primary = phone.Primary;
 
-    const updated = ss.customers.update(customer.id, patch)!;
-    return c.json(formatCustomer(updated));
+    ss.customers.update(customer.id, patch);
+    return c.body(null, 204);
   };
 
   app.put("/api/v1.0/companies/:cid/customers/:id", updateCustomer);

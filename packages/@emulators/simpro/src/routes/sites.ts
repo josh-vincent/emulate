@@ -119,11 +119,8 @@ export function siteRoutes({ app, store }: RouteContext): void {
     const contact = body.Contact as { ID?: number } | undefined;
     if (contact?.ID !== undefined) patch.contact_id = contact.ID;
 
-    const updated = ss.sites.update(site.id, patch)!;
-    const contactEntity = updated.contact_id
-      ? ss.contacts.findOneBy("external_id", updated.contact_id) ?? undefined
-      : undefined;
-    return c.json(formatSite(updated, contactEntity));
+    ss.sites.update(site.id, patch);
+    return c.body(null, 204);
   };
 
   app.put("/api/v1.0/companies/:cid/sites/:id", updateSite);

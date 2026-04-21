@@ -87,7 +87,7 @@ export function quoteRoutes({ app, store }: RouteContext): void {
       project_manager_id:
         ((body.ProjectManager as { ID?: number } | undefined)?.ID) ?? null,
       status_id: ((body.Status as { ID?: number } | undefined)?.ID) ?? null,
-      stage: "Open",
+      stage: "InProgress",
       total_ex_tax: 0,
       total_tax: 0,
       total_inc_tax: 0,
@@ -107,17 +107,17 @@ export function quoteRoutes({ app, store }: RouteContext): void {
     if (!q) return simproNotFound(c);
     let body: Record<string, unknown>;
     try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
-    const updated = ss.quotes.update(q.id, {
+    ss.quotes.update(q.id, {
       ...(body.Name !== undefined && { name: String(body.Name) }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
-      ...(body.Stage !== undefined && { stage: body.Stage as "Open" | "Approved" | "Converted" | "Cancelled" }),
+      ...(body.Stage !== undefined && { stage: body.Stage as "InProgress" | "Complete" | "Approved" | "Cancelled" | "Converted" }),
       ...(body.DueDate !== undefined && { due_date: body.DueDate as string | null }),
       ...(body.Status !== undefined && { status_id: (body.Status as { ID?: number }).ID ?? null }),
       ...(body.OrderNo !== undefined && { order_no: body.OrderNo as string | null }),
       ...(body.Tags !== undefined && { tags: body.Tags as string[] }),
       date_modified: nowIso(),
-    })!;
-    return c.json(formatQuote(updated, ss));
+    });
+    return c.body(null, 204);
   });
 
   app.put("/api/v1.0/companies/:cid/quotes/:id", async (c) => {
@@ -136,7 +136,7 @@ export function quoteRoutes({ app, store }: RouteContext): void {
       salesperson_id: ((body.Salesperson as { ID?: number } | undefined)?.ID) ?? null,
       project_manager_id: ((body.ProjectManager as { ID?: number } | undefined)?.ID) ?? null,
       status_id: ((body.Status as { ID?: number } | undefined)?.ID) ?? null,
-      stage: (body.Stage as "Open" | "Approved" | "Converted" | "Cancelled") ?? q.stage,
+      stage: (body.Stage as "InProgress" | "Complete" | "Approved" | "Cancelled" | "Converted") ?? q.stage,
       due_date: (body.DueDate as string | null) ?? null,
       tags: (body.Tags as string[]) ?? [],
       date_modified: nowIso(),

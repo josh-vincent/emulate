@@ -76,13 +76,13 @@ export function staffRoutes({ app, store }: RouteContext): void {
     if (!staff) return simproNotFound(c);
     let body: Record<string, unknown>;
     try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
-    const updated = ss.staff.update(staff.id, {
+    ss.staff.update(staff.id, {
       ...(body.GivenName !== undefined && { given_name: body.GivenName as string }),
       ...(body.FamilyName !== undefined && { family_name: body.FamilyName as string }),
       ...(body.Email !== undefined && { email: body.Email as string | null }),
       ...(body.Active !== undefined && { active: Boolean(body.Active) }),
-    })!;
-    return c.json(formatStaff(updated));
+    });
+    return c.body(null, 204);
   });
 
   app.delete("/api/v1.0/companies/:cid/staff/:id", (c) => {

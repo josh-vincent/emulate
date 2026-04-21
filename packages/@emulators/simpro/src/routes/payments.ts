@@ -55,15 +55,25 @@ export function paymentRoutes({ app, store }: RouteContext): void {
     let body: Record<string, unknown>;
     try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
 
-    const customerRef = body.Customer as { ID?: number } | undefined;
-    if (!customerRef?.ID) return simproValidation(c, "Customer.ID", "Customer is required.");
-    const customer = ss.customers.findOneBy("external_id", customerRef.ID);
-    if (!customer) return simproValidation(c, "Customer.ID", "Customer not found.", customerRef.ID);
-
-    const amount = Number(body.Amount ?? 0);
+    // Swagger body: { Payment: { PaymentMethod, Date, Amount, ... }, Invoices: [{ID}], Notes }
+    const paymentObj = body.Payment as Record<string, unknown> | undefined;
+    const invoicesArr = (body.Invoices as Array<{ ID: number }> | undefined) ?? [];
+    // Also support legacy flat fields for backward compat
+    const amount = Number(paymentObj?.Amount ?? body.Amount ?? 0);
     if (!amount) return simproValidation(c, "Amount", "Amount is required and must be non-zero.");
 
-    const invoiceRef = body.Invoice as { ID?: number } | undefined;
+    // Derive customer from first invoice or explicit Customer field
+    const firstInvoiceId = invoicesArr[0]?.ID ?? (body.Invoice as { ID?: number } | undefined)?.ID ?? null;
+    let customerId: number | null = (body.Customer as { ID?: number } | undefined)?.ID ?? null;
+    if (!customerId && firstInvoiceId) {
+      const inv = ss.invoices.findOneBy("external_id", firstInvoiceId);
+      if (inv) {
+        const job = ss.jobs.findOneBy("external_id", inv.job_id);
+        if (job) customerId = job.customer_id;
+      }
+    }
+    if (!customerId) return simproValidation(c, "Customer.ID", "Customer is required.");
+
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "customerPayments", companyId);
     const now = nowIso();
@@ -71,19 +81,23 @@ export function paymentRoutes({ app, store }: RouteContext): void {
     const payment = ss.customerPayments.insert({
       company_id: companyId,
       external_id: externalId,
-      customer_id: customerRef.ID,
-      invoice_id: invoiceRef?.ID ?? null,
+      customer_id: customerId,
+      invoice_id: firstInvoiceId,
       amount,
-      date: (body.Date as string) ?? now.slice(0, 10),
-      payment_method: (body.PaymentMethod as string | null) ?? null,
+      date: (paymentObj?.Date as string) ?? (body.Date as string) ?? now.slice(0, 10),
+      payment_method: (paymentObj?.PaymentMethod as string | null) ?? (body.PaymentMethod as string | null) ?? null,
       notes: (body.Notes as string | null) ?? null,
       date_created: now,
       date_modified: now,
     });
 
-    // Update invoice.paid if linked
-    if (invoiceRef?.ID) {
-      const inv = ss.invoices.findOneBy("external_id", invoiceRef.ID);
+    // Update invoice.paid for all linked invoices
+    for (const invRef of invoicesArr) {
+      const inv = ss.invoices.findOneBy("external_id", invRef.ID);
+      if (inv) ss.invoices.update(inv.id, { paid: inv.paid + amount });
+    }
+    if (invoicesArr.length === 0 && firstInvoiceId) {
+      const inv = ss.invoices.findOneBy("external_id", firstInvoiceId);
       if (inv) ss.invoices.update(inv.id, { paid: inv.paid + amount });
     }
 
@@ -97,14 +111,15 @@ export function paymentRoutes({ app, store }: RouteContext): void {
     if (!p) return simproNotFound(c);
     let body: Record<string, unknown>;
     try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
-    const updated = ss.customerPayments.update(p.id, {
-      ...(body.Amount !== undefined && { amount: Number(body.Amount) }),
-      ...(body.Date !== undefined && { date: body.Date as string }),
-      ...(body.PaymentMethod !== undefined && { payment_method: body.PaymentMethod as string | null }),
+    const paymentBody = body.Payment as Record<string, unknown> | undefined;
+    ss.customerPayments.update(p.id, {
+      ...(paymentBody?.Amount !== undefined && { amount: Number(paymentBody.Amount) }),
+      ...(paymentBody?.Date !== undefined && { date: paymentBody.Date as string }),
+      ...(paymentBody?.PaymentMethod !== undefined && { payment_method: paymentBody.PaymentMethod as string | null }),
       ...(body.Notes !== undefined && { notes: body.Notes as string | null }),
       date_modified: nowIso(),
-    })!;
-    return c.json(formatPayment(updated));
+    });
+    return c.body(null, 204);
   });
 
   app.delete("/api/v1.0/companies/:cid/customerPayments/:id", (c) => {

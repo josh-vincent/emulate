@@ -167,7 +167,7 @@ export function jobRoutes({ app, store }: RouteContext): void {
       return simproError(c, 400, "Problems parsing JSON.");
     }
 
-    const updated = ss.jobs.update(job.id, {
+    ss.jobs.update(job.id, {
       ...(body.Name !== undefined && { name: String(body.Name) }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
       ...(body.Stage !== undefined && {
@@ -178,9 +178,9 @@ export function jobRoutes({ app, store }: RouteContext): void {
       ...(body.OrderNo !== undefined && { order_no: body.OrderNo as string | null }),
       ...(body.Tags !== undefined && { tags: body.Tags as string[] }),
       date_modified: nowIso(),
-    })!;
+    });
 
-    return c.json(formatJob(updated, { ss }));
+    return c.body(null, 204);
   });
 
   app.delete("/api/v1.0/companies/:cid/jobs/:jid", (c) => {

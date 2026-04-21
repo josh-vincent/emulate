@@ -25,6 +25,23 @@ import { paymentRoutes } from "./routes/payments.js";
 import { creditNoteRoutes } from "./routes/creditNotes.js";
 import { vendorRoutes } from "./routes/vendors.js";
 import { vendorOrderRoutes } from "./routes/vendorOrders.js";
+import { employeeRoutes } from "./routes/employees.js";
+import { leadRoutes } from "./routes/leads.js";
+import { noteRoutes } from "./routes/notes.js";
+import { taskRoutes } from "./routes/tasks.js";
+import { setupResourceRoutes } from "./routes/setupResources.js";
+import { contractorResourceRoutes } from "./routes/contractorResources.js";
+import { costCenterLineItemRoutes } from "./routes/costCenterLineItems.js";
+import { plantRoutes } from "./routes/plants.js";
+import { prebuildRoutes } from "./routes/prebuilds.js";
+import { recurringInvoiceRoutes } from "./routes/recurringInvoices.js";
+import { recurringJobRoutes } from "./routes/recurringJobs.js";
+import { activityScheduleRoutes } from "./routes/activitySchedules.js";
+import { logsAndMiscRoutes } from "./routes/logsAndMisc.js";
+import { quoteSectionRoutes } from "./routes/quoteSections.js";
+import { stockRoutes } from "./routes/stock.js";
+import { timesheetRoutes } from "./routes/timesheets.js";
+import { vendorSubResourceRoutes } from "./routes/vendorSubResources.js";
 import type { SimproAttachmentParentType } from "./entities.js";
 
 export { getSimproStore, type SimproStore } from "./store.js";
@@ -116,7 +133,7 @@ export interface SimproSeedConfig {
     salesperson_id?: number | null;
     project_manager_id?: number | null;
     status_id?: number | null;
-    stage?: "Open" | "Approved" | "Converted" | "Cancelled";
+    stage?: "InProgress" | "Complete" | "Approved" | "Cancelled" | "Converted";
     total_ex_tax?: number;
     total_tax?: number;
     total_inc_tax?: number;
@@ -143,7 +160,7 @@ export interface SimproSeedConfig {
     id: number;
     company_id?: number;
     job_id: number;
-    type?: "TaxInvoice" | "ProgressClaim" | "CreditNote";
+    type?: "TaxInvoice" | "ProgressInvoice" | "Deposit" | "RequestForClaim";
     stage?: 2 | 5;
     total_ex_tax?: number;
     total_inc_tax?: number;
@@ -425,7 +442,7 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: SimproSee
       salesperson_id: q.salesperson_id ?? null,
       project_manager_id: q.project_manager_id ?? null,
       status_id: q.status_id ?? null,
-      stage: q.stage ?? "Open",
+      stage: q.stage ?? "InProgress",
       total_ex_tax: q.total_ex_tax ?? 0,
       total_tax: q.total_tax ?? 0,
       total_inc_tax: q.total_inc_tax ?? 0,
@@ -706,6 +723,23 @@ export const simproPlugin: ServicePlugin = {
     creditNoteRoutes(ctx);
     vendorRoutes(ctx);
     vendorOrderRoutes(ctx);
+    employeeRoutes(ctx);
+    leadRoutes(ctx);
+    noteRoutes(ctx);
+    taskRoutes(ctx);
+    setupResourceRoutes(ctx);
+    contractorResourceRoutes(ctx);
+    costCenterLineItemRoutes(ctx);
+    plantRoutes(ctx);
+    prebuildRoutes(ctx);
+    recurringJobRoutes(ctx);
+    recurringInvoiceRoutes(ctx);
+    activityScheduleRoutes(ctx);
+    quoteSectionRoutes(ctx);
+    stockRoutes(ctx);
+    timesheetRoutes(ctx);
+    vendorSubResourceRoutes(ctx);
+    logsAndMiscRoutes(ctx);
     webhookRoutes(ctx);
     inspectorRoutes(ctx);
   },

@@ -88,7 +88,7 @@ export function assetRoutes({ app, store }: RouteContext): void {
     if (!a) return simproNotFound(c);
     let body: Record<string, unknown>;
     try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
-    const updated = ss.assets.update(a.id, {
+    ss.assets.update(a.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
       ...(body.AssetType !== undefined && { asset_type: body.AssetType as string | null }),
@@ -99,8 +99,8 @@ export function assetRoutes({ app, store }: RouteContext): void {
       ...(body.DateNextService !== undefined && { date_next_service: body.DateNextService as string | null }),
       ...(body.Site !== undefined && { site_id: (body.Site as { ID?: number }).ID ?? null }),
       date_modified: nowIso(),
-    })!;
-    return c.json(formatAsset(updated, ss));
+    });
+    return c.body(null, 204);
   });
 
   app.put("/api/v1.0/companies/:cid/assets/:id", async (c) => {

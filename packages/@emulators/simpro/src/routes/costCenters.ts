@@ -103,7 +103,7 @@ export function costCenterRoutes({ app, store }: RouteContext): void {
     return c.json(formatCostCenter(cc, { ss }), 201);
   });
 
-  app.put("/api/v1.0/companies/:cid/jobs/:jid/sections/:sid/costCenters/:ccid", async (c) => {
+  app.patch("/api/v1.0/companies/:cid/jobs/:jid/sections/:sid/costCenters/:ccid", async (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
 
@@ -117,7 +117,7 @@ export function costCenterRoutes({ app, store }: RouteContext): void {
       return simproError(c, 400, "Problems parsing JSON.");
     }
 
-    const updated = ss.costCenters.update(cc.id, {
+    ss.costCenters.update(cc.id, {
       ...(body.Name !== undefined && { name: String(body.Name) }),
       ...(body.BillingType !== undefined && { billing_type: body.BillingType as BillingType }),
       ...(body.Stage !== undefined && { stage: Number(body.Stage) as CostCenterStage }),
@@ -125,9 +125,9 @@ export function costCenterRoutes({ app, store }: RouteContext): void {
       ...(body.Tax !== undefined && { tax: Number(body.Tax) }),
       ...(body.IncTax !== undefined && { inc_tax: Number(body.IncTax) }),
       date_modified: nowIso(),
-    })!;
+    });
 
-    return c.json(formatCostCenter(updated, { ss }));
+    return c.body(null, 204);
   });
 
   app.delete("/api/v1.0/companies/:cid/jobs/:jid/sections/:sid/costCenters/:ccid", (c) => {

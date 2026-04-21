@@ -44,7 +44,7 @@ export function referenceRoutes({ app, store }: RouteContext): void {
     return c.json(formatTaxCode(tc));
   });
 
-  app.get("/api/v1.0/companies/:cid/setup/labour/rates/", (c) => {
+  app.get("/api/v1.0/companies/:cid/setup/labor/laborRates/", (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
     const companyId = Number(c.req.param("cid")) || 0;
@@ -93,7 +93,7 @@ export function referenceRoutes({ app, store }: RouteContext): void {
     return c.json(items.map((f) => ({ ID: f.external_id, Name: f.name, Type: f.field_type })));
   });
 
-  app.get("/api/v1.0/companies/:cid/setup/labour/rates/:id", (c) => {
+  app.get("/api/v1.0/companies/:cid/setup/labor/laborRates/:id", (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
     const lr = ss.labourRates.findOneBy("external_id", Number(c.req.param("id")));

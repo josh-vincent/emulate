@@ -83,7 +83,7 @@ export function vendorRoutes({ app, store }: RouteContext): void {
     if (!v) return simproNotFound(c);
     let body: Record<string, unknown>;
     try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
-    const updated = ss.vendors.update(v.id, {
+    ss.vendors.update(v.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.EIN !== undefined && { ein: body.EIN as string | null }),
       ...(body.CompanyNo !== undefined && { company_no: body.CompanyNo as string | null }),
@@ -93,8 +93,8 @@ export function vendorRoutes({ app, store }: RouteContext): void {
       ...(body.Fax !== undefined && { fax: body.Fax as string | null }),
       ...(body.Address !== undefined && { address: body.Address as Record<string, string> | null }),
       ...(body.Archived !== undefined && { archived: Boolean(body.Archived) }),
-    })!;
-    return c.json(formatVendor(updated));
+    });
+    return c.body(null, 204);
   });
 
   app.delete("/api/v1.0/companies/:cid/vendors/:id", (c) => {

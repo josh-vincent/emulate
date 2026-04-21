@@ -34,7 +34,7 @@ export function webhookRoutes({ app, store, baseUrl }: RouteContext): void {
     return null;
   };
 
-  app.get("/api/v1.0/companies/:cid/webhooks/", (c) => {
+  app.get("/api/v1.0/companies/:cid/setup/webhooks/", (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
     const companyId = Number(c.req.param("cid")) || 0;
@@ -52,7 +52,7 @@ export function webhookRoutes({ app, store, baseUrl }: RouteContext): void {
     );
   });
 
-  app.get("/api/v1.0/companies/:cid/webhooks/:id", (c) => {
+  app.get("/api/v1.0/companies/:cid/setup/webhooks/:id", (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
     const w = ss.webhookSubscriptions.findOneBy("external_id", Number(c.req.param("id")));
@@ -60,7 +60,7 @@ export function webhookRoutes({ app, store, baseUrl }: RouteContext): void {
     return c.json({ ID: w.external_id, URL: w.url, Events: w.events, Active: w.active });
   });
 
-  app.post("/api/v1.0/companies/:cid/webhooks/", async (c) => {
+  app.post("/api/v1.0/companies/:cid/setup/webhooks/", async (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
 
@@ -97,7 +97,7 @@ export function webhookRoutes({ app, store, baseUrl }: RouteContext): void {
     );
   });
 
-  app.delete("/api/v1.0/companies/:cid/webhooks/:id", (c) => {
+  app.delete("/api/v1.0/companies/:cid/setup/webhooks/:id", (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
     const w = ss.webhookSubscriptions.findOneBy("external_id", Number(c.req.param("id")));
@@ -107,7 +107,7 @@ export function webhookRoutes({ app, store, baseUrl }: RouteContext): void {
   });
 
   // Debug endpoint for tests: list recent events fired
-  app.get("/api/v1.0/companies/:cid/webhooks/_events", (c) => {
+  app.get("/api/v1.0/companies/:cid/setup/webhooks/_events", (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
     const companyId = Number(c.req.param("cid")) || 0;

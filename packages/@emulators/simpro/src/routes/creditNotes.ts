@@ -68,7 +68,7 @@ export function creditNoteRoutes({ app, store }: RouteContext): void {
       company_id: companyId,
       external_id: externalId,
       customer_id: customerRef.ID,
-      invoice_id: (body.Invoice as { ID?: number } | undefined)?.ID ?? null,
+      invoice_id: (body.InvoiceNo as number | null) ?? (body.Invoice as { ID?: number } | undefined)?.ID ?? null,
       job_id: (body.Job as { ID?: number } | undefined)?.ID ?? null,
       total_ex_tax: Number(body.TotalExTax ?? 0),
       total_inc_tax: Number(body.TotalIncTax ?? 0),
@@ -87,14 +87,14 @@ export function creditNoteRoutes({ app, store }: RouteContext): void {
     if (!cn) return simproNotFound(c);
     let body: Record<string, unknown>;
     try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
-    const updated = ss.creditNotes.update(cn.id, {
+    ss.creditNotes.update(cn.id, {
       ...(body.TotalExTax !== undefined && { total_ex_tax: Number(body.TotalExTax) }),
       ...(body.TotalIncTax !== undefined && { total_inc_tax: Number(body.TotalIncTax) }),
       ...(body.DateIssued !== undefined && { date_issued: body.DateIssued as string }),
       ...(body.Stage !== undefined && { stage: Number(body.Stage) as 2 | 5 }),
       ...(body.Notes !== undefined && { notes: body.Notes as string | null }),
-    })!;
-    return c.json(formatCreditNote(updated));
+    });
+    return c.body(null, 204);
   });
 
   app.delete("/api/v1.0/companies/:cid/creditNotes/:id", (c) => {

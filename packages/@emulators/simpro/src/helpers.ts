@@ -144,12 +144,26 @@ export function jobStageFromString(stage: string): number {
 
 export function ccStageToString(stage: number): string {
   const map: Record<number, string> = {
+    1: "Declined",
     2: "Pending",
-    3: "Progress",
+    3: "InProgress",
     4: "Complete",
     5: "Invoiced",
+    6: "AwaitingApproval",
   };
   return map[stage] ?? "Pending";
+}
+
+export function ccStageFromString(stage: string): number {
+  const map: Record<string, number> = {
+    Declined: 1,
+    Pending: 2,
+    InProgress: 3,
+    Complete: 4,
+    Invoiced: 5,
+    AwaitingApproval: 6,
+  };
+  return map[stage] ?? 2;
 }
 
 /**
