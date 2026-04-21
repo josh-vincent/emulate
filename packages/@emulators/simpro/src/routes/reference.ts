@@ -92,4 +92,36 @@ export function referenceRoutes({ app, store }: RouteContext): void {
       .filter((f) => (f.company_id === companyId || companyId === 0) && f.entity === entity);
     return c.json(items.map((f) => ({ ID: f.external_id, Name: f.name, Type: f.field_type })));
   });
+
+  app.get("/api/v1.0/companies/:cid/setup/labour/rates/:id", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const lr = ss.labourRates.findOneBy("external_id", Number(c.req.param("id")));
+    if (!lr) return simproNotFound(c);
+    return c.json(formatLabourRate(lr));
+  });
+
+  app.get("/api/v1.0/companies/:cid/setup/statuses/:id", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const st = ss.statuses.findOneBy("external_id", Number(c.req.param("id")));
+    if (!st) return simproNotFound(c);
+    return c.json(formatStatus(st));
+  });
+
+  app.get("/api/v1.0/companies/:cid/catalogs/:id", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const item = ss.stockItems.findOneBy("external_id", Number(c.req.param("id")));
+    if (!item) return simproNotFound(c);
+    return c.json(formatStockItem(item));
+  });
+
+  app.get("/api/v1.0/companies/:cid/setup/zones/:id", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const zone = ss.zones.findOneBy("external_id", Number(c.req.param("id")));
+    if (!zone) return simproNotFound(c);
+    return c.json({ ID: zone.external_id, Name: zone.name });
+  });
 }

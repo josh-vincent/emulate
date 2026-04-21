@@ -20,6 +20,7 @@ import { inspectorRoutes } from "./routes/inspector.js";
 import { contactRoutes } from "./routes/contacts.js";
 import { contractorRoutes } from "./routes/contractors.js";
 import { attachmentRoutes } from "./routes/attachments.js";
+import { companyRoutes } from "./routes/companies.js";
 import type { SimproAttachmentParentType } from "./entities.js";
 
 export { getSimproStore, type SimproStore } from "./store.js";
@@ -681,6 +682,7 @@ export const simproPlugin: ServicePlugin = {
     tokenMap?: TokenMap,
   ): void {
     const ctx: RouteContext = { app, store, webhooks, baseUrl, tokenMap };
+    companyRoutes(ctx);
     oauthRoutes(ctx);
     jobRoutes(ctx);
     sectionRoutes(ctx);

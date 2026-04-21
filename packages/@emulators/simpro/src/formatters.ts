@@ -161,7 +161,7 @@ export function formatSite(s: SimproSite, contact?: SimproContact) {
           ID: contact.external_id,
           GivenName: contact.given_name,
           FamilyName: contact.family_name,
-          Phone: { Primary: contact.phone_primary },
+          Phone: { Primary: contact.phone },
           Email: contact.email,
         }
       : null,
