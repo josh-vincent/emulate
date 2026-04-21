@@ -94,4 +94,27 @@ export function staffRoutes({ app, store }: RouteContext): void {
     return c.body(null, 204);
   });
 
+  // /employees/ is an alias used by some SimPro API versions
+  app.get("/api/v1.0/companies/:cid/employees/", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const companyId = Number(c.req.param("cid")) || 0;
+    let items = ss.staff.all().filter((s) => s.company_id === companyId || companyId === 0);
+    const search = c.req.query("Search");
+    if (search) {
+      const q = search.toLowerCase();
+      items = items.filter((s) => `${s.given_name} ${s.family_name}`.toLowerCase().includes(q) || (s.email ?? "").toLowerCase().includes(q));
+    }
+    const pagination = parsePagination(c);
+    const page = paginate(c, items, pagination);
+    return c.json(page.map(formatStaff));
+  });
+
+  app.get("/api/v1.0/companies/:cid/employees/:id", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const staff = ss.staff.findOneBy("external_id", Number(c.req.param("id")));
+    if (!staff) return simproNotFound(c);
+    return c.json(formatStaff(staff));
+  });
 }

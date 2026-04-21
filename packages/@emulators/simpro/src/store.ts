@@ -7,6 +7,7 @@ import type {
   SimproContact,
   SimproContractor,
   SimproCostCenter,
+  SimproCreditNote,
   SimproCustomField,
   SimproCustomer,
   SimproInvoice,
@@ -17,6 +18,7 @@ import type {
   SimproOAuthCode,
   SimproOAuthToken,
   SimproOneOffItem,
+  SimproPayment,
   SimproPrebuildItem,
   SimproQuote,
   SimproSchedule,
@@ -26,6 +28,8 @@ import type {
   SimproStatus,
   SimproStockItem,
   SimproTaxCode,
+  SimproVendor,
+  SimproVendorOrder,
   SimproWebhookEvent,
   SimproWebhookSubscription,
   SimproZone,
@@ -52,6 +56,10 @@ export interface SimproStore {
   stockItems: Collection<SimproStockItem>;
   quotes: Collection<SimproQuote>;
   invoices: Collection<SimproInvoice>;
+  customerPayments: Collection<SimproPayment>;
+  creditNotes: Collection<SimproCreditNote>;
+  vendors: Collection<SimproVendor>;
+  vendorOrders: Collection<SimproVendorOrder>;
   schedules: Collection<SimproSchedule>;
   assets: Collection<SimproAsset>;
   zones: Collection<SimproZone>;
@@ -114,6 +122,26 @@ export function getSimproStore(store: Store): SimproStore {
     stockItems: store.collection<SimproStockItem>("simpro.stock_items", ["company_id", "external_id"]),
     quotes: store.collection<SimproQuote>("simpro.quotes", ["company_id", "external_id", "customer_id"]),
     invoices: store.collection<SimproInvoice>("simpro.invoices", ["company_id", "external_id", "job_id"]),
+    customerPayments: store.collection<SimproPayment>("simpro.customer_payments", [
+      "company_id",
+      "external_id",
+      "customer_id",
+      "invoice_id",
+    ]),
+    creditNotes: store.collection<SimproCreditNote>("simpro.credit_notes", [
+      "company_id",
+      "external_id",
+      "customer_id",
+      "invoice_id",
+      "job_id",
+    ]),
+    vendors: store.collection<SimproVendor>("simpro.vendors", ["company_id", "external_id"]),
+    vendorOrders: store.collection<SimproVendorOrder>("simpro.vendor_orders", [
+      "company_id",
+      "external_id",
+      "vendor_id",
+      "job_id",
+    ]),
     schedules: store.collection<SimproSchedule>("simpro.schedules", [
       "company_id",
       "external_id",

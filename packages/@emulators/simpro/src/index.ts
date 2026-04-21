@@ -21,6 +21,10 @@ import { contactRoutes } from "./routes/contacts.js";
 import { contractorRoutes } from "./routes/contractors.js";
 import { attachmentRoutes } from "./routes/attachments.js";
 import { companyRoutes } from "./routes/companies.js";
+import { paymentRoutes } from "./routes/payments.js";
+import { creditNoteRoutes } from "./routes/creditNotes.js";
+import { vendorRoutes } from "./routes/vendors.js";
+import { vendorOrderRoutes } from "./routes/vendorOrders.js";
 import type { SimproAttachmentParentType } from "./entities.js";
 
 export { getSimproStore, type SimproStore } from "./store.js";
@@ -698,6 +702,10 @@ export const simproPlugin: ServicePlugin = {
     contactRoutes(ctx);
     contractorRoutes(ctx);
     attachmentRoutes(ctx);
+    paymentRoutes(ctx);
+    creditNoteRoutes(ctx);
+    vendorRoutes(ctx);
+    vendorOrderRoutes(ctx);
     webhookRoutes(ctx);
     inspectorRoutes(ctx);
   },

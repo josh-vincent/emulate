@@ -120,6 +120,38 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
+export function jobStageToString(stage: number): string {
+  const map: Record<number, string> = {
+    2: "Pending",
+    3: "Progress",
+    4: "Complete",
+    5: "Invoiced",
+    6: "Archived",
+  };
+  return map[stage] ?? "Pending";
+}
+
+export function jobStageFromString(stage: string): number {
+  const map: Record<string, number> = {
+    Pending: 2,
+    Progress: 3,
+    Complete: 4,
+    Invoiced: 5,
+    Archived: 6,
+  };
+  return map[stage] ?? 2;
+}
+
+export function ccStageToString(stage: number): string {
+  const map: Record<number, string> = {
+    2: "Pending",
+    3: "Progress",
+    4: "Complete",
+    5: "Invoiced",
+  };
+  return map[stage] ?? "Pending";
+}
+
 /**
  * Simple per-token fixed-window rate limiter: 10 requests / second.
  * Guarded behind store.setData("simpro.rate_limit_enabled", true).

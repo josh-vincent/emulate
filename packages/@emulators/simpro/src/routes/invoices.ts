@@ -43,7 +43,7 @@ export function invoiceRoutes({ app, store }: RouteContext): void {
 
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);
-    return c.json(page.map(formatInvoice));
+    return c.json(page.map((i) => formatInvoice(i, ss)));
   });
 
   app.get("/api/v1.0/companies/:cid/invoices/:id", (c) => {
@@ -51,7 +51,7 @@ export function invoiceRoutes({ app, store }: RouteContext): void {
     if (blocked) return blocked;
     const inv = ss.invoices.findOneBy("external_id", Number(c.req.param("id")));
     if (!inv) return simproNotFound(c);
-    return c.json(formatInvoice(inv));
+    return c.json(formatInvoice(inv, ss));
   });
 
   app.post("/api/v1.0/companies/:cid/invoices/", async (c) => {
@@ -76,7 +76,7 @@ export function invoiceRoutes({ app, store }: RouteContext): void {
       paid: 0,
       date_issued: (body.DateIssued as string) ?? nowIso().slice(0, 10),
     });
-    return c.json(formatInvoice(inv), 201);
+    return c.json(formatInvoice(inv, ss), 201);
   });
 
   app.patch("/api/v1.0/companies/:cid/invoices/:id", async (c) => {
@@ -93,7 +93,7 @@ export function invoiceRoutes({ app, store }: RouteContext): void {
       ...(body.TotalExTax !== undefined && { total_ex_tax: Number(body.TotalExTax) }),
       ...(body.TotalIncTax !== undefined && { total_inc_tax: Number(body.TotalIncTax) }),
     })!;
-    return c.json(formatInvoice(updated));
+    return c.json(formatInvoice(updated, ss));
   });
 
   app.delete("/api/v1.0/companies/:cid/invoices/:id", (c) => {
@@ -114,6 +114,6 @@ export function invoiceRoutes({ app, store }: RouteContext): void {
     const items = ss.invoices.findBy("job_id", jobId);
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);
-    return c.json(page.map(formatInvoice));
+    return c.json(page.map((i) => formatInvoice(i, ss)));
   });
 }

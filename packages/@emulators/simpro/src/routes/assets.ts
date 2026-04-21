@@ -134,4 +134,27 @@ export function assetRoutes({ app, store }: RouteContext): void {
     ss.assets.delete(a.id);
     return c.body(null, 204);
   });
+
+  // /customerAssets/ alias used by some SimPro API consumers
+  app.get("/api/v1.0/companies/:cid/customerAssets/", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const companyId = Number(c.req.param("cid")) || 0;
+    let items = ss.assets.all().filter((a) => a.company_id === companyId || companyId === 0);
+    const customerId = c.req.query("Customer.ID");
+    if (customerId) items = items.filter((a) => a.customer_id === Number(customerId));
+    const siteId = c.req.query("Site.ID");
+    if (siteId) items = items.filter((a) => a.site_id === Number(siteId));
+    const pagination = parsePagination(c);
+    const page = paginate(c, items, pagination);
+    return c.json(page.map((a) => formatAsset(a, ss)));
+  });
+
+  app.get("/api/v1.0/companies/:cid/customerAssets/:id", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const a = ss.assets.findOneBy("external_id", Number(c.req.param("id")));
+    if (!a) return simproNotFound(c);
+    return c.json(formatAsset(a, ss));
+  });
 }

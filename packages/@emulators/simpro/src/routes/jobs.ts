@@ -5,6 +5,7 @@ import type { JobStage, JobType, SimproJob } from "../entities.js";
 import {
   applyColumns,
   isDisplayAll,
+  jobStageFromString,
   nowIso,
   paginate,
   parseJson,
@@ -169,7 +170,9 @@ export function jobRoutes({ app, store }: RouteContext): void {
     const updated = ss.jobs.update(job.id, {
       ...(body.Name !== undefined && { name: String(body.Name) }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
-      ...(body.Stage !== undefined && { stage: Number(body.Stage) as JobStage }),
+      ...(body.Stage !== undefined && {
+        stage: (typeof body.Stage === "string" ? jobStageFromString(body.Stage) : Number(body.Stage)) as JobStage,
+      }),
       ...(body.DueDate !== undefined && { due_date: body.DueDate as string | null }),
       ...(body.Status !== undefined && { status_id: (body.Status as { ID?: number }).ID ?? null }),
       ...(body.OrderNo !== undefined && { order_no: body.OrderNo as string | null }),

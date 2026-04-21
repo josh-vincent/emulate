@@ -6,7 +6,7 @@ import type { Entity } from "@emulators/core";
  */
 
 export type JobType = "Service" | "Project" | "Prepaid";
-export type JobStage = 2 | 3 | 4 | 5;
+export type JobStage = 2 | 3 | 4 | 5 | 6;
 export type CostCenterStage = 2 | 3 | 4 | 5;
 export type BillingType = "TimeAndMaterials" | "Fixed" | "FlatRate";
 
@@ -178,6 +178,7 @@ export interface SimproCostCenter extends Entity {
   master_cost_center_id: number | null;
   tax_code_id: number | null;
   name: string;
+  description: string | null;
   billing_type: BillingType;
   billable: boolean;
   stage: CostCenterStage;
@@ -298,6 +299,58 @@ export interface SimproInvoice extends Entity {
   total_ex_tax: number;
   total_inc_tax: number;
   paid: number;
+  date_issued: string | null;
+}
+
+export interface SimproPayment extends Entity {
+  company_id: number;
+  external_id: number;
+  customer_id: number;
+  invoice_id: number | null;
+  amount: number;
+  date: string;
+  payment_method: string | null;
+  notes: string | null;
+  date_created: string;
+  date_modified: string;
+}
+
+export interface SimproCreditNote extends Entity {
+  company_id: number;
+  external_id: number;
+  customer_id: number;
+  invoice_id: number | null;
+  job_id: number | null;
+  total_ex_tax: number;
+  total_inc_tax: number;
+  date_issued: string;
+  stage: 2 | 5;
+  notes: string | null;
+}
+
+export interface SimproVendor extends Entity {
+  company_id: number;
+  external_id: number;
+  name: string;
+  ein: string | null;
+  company_no: string | null;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  fax: string | null;
+  address: Record<string, string> | null;
+  archived: boolean;
+}
+
+export interface SimproVendorOrder extends Entity {
+  company_id: number;
+  external_id: number;
+  vendor_id: number | null;
+  job_id: number | null;
+  stage: "Draft" | "Sent" | "PartReceived" | "Received";
+  description: string | null;
+  total_ex_tax: number;
+  total_inc_tax: number;
   date_issued: string | null;
 }
 

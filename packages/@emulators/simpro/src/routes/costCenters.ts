@@ -85,6 +85,7 @@ export function costCenterRoutes({ app, store }: RouteContext): void {
       master_cost_center_id: masterRef?.ID ?? null,
       tax_code_id: taxRef?.ID ?? null,
       name: (body.Name as string) ?? `Cost Center ${externalId}`,
+      description: (body.Description as string | null) ?? null,
       billing_type: (body.BillingType as BillingType) ?? "TimeAndMaterials",
       billable: (body.Billable as boolean) ?? true,
       stage: (body.Stage as CostCenterStage) ?? 2,
