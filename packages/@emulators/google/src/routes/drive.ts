@@ -50,6 +50,30 @@ export function driveRoutes({ app, store }: RouteContext): void {
     return c.json(formatDriveItemResource(item));
   };
 
+  // GET /drive/v3/about — used by getConnectionIdentity in Google Drive provider
+  app.get("/drive/v3/about", (c) => {
+    const authEmail = requireGoogleAuth(c);
+    if (authEmail instanceof Response) return authEmail;
+
+    const user = gs.users.findOneBy("email", authEmail);
+    return c.json({
+      kind: "drive#about",
+      user: {
+        displayName: user?.name ?? authEmail.split("@")[0],
+        emailAddress: authEmail,
+        photoLink: `https://lh3.googleusercontent.com/a/default`,
+        me: true,
+        permissionId: user?.id?.toString() ?? "1",
+      },
+      storageQuota: {
+        limit: "16106127360",
+        usage: "52428800",
+        usageInDrive: "52428800",
+        usageInDriveTrash: "0",
+      },
+    });
+  });
+
   app.get("/drive/v3/files", (c) => {
     const authEmail = requireGoogleAuth(c);
     if (authEmail instanceof Response) return authEmail;
