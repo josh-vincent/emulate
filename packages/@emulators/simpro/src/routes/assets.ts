@@ -37,7 +37,7 @@ export function assetRoutes({ app, store }: RouteContext): void {
 
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);
-    return c.json(page.map(formatAsset));
+    return c.json(page.map((a) => formatAsset(a, ss)));
   });
 
   app.get("/api/v1.0/companies/:cid/assets/:id", (c) => {
@@ -45,6 +45,6 @@ export function assetRoutes({ app, store }: RouteContext): void {
     if (blocked) return blocked;
     const a = ss.assets.findOneBy("external_id", Number(c.req.param("id")));
     if (!a) return simproNotFound(c);
-    return c.json(formatAsset(a));
+    return c.json(formatAsset(a, ss));
   });
 }

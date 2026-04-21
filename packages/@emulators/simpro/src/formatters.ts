@@ -1,5 +1,6 @@
 import type {
   SimproAsset,
+  SimproAttachment,
   SimproCatalogItem,
   SimproContact,
   SimproContractor,
@@ -57,6 +58,31 @@ export function formatContactRef(contact: SimproContact | undefined) {
   };
 }
 
+/**
+ * Full Simpro contact shape for GET /contacts/ and GET /contacts/:id.
+ * Mirrors the real Simpro Build v1.0 response.
+ */
+export function formatContact(contact: SimproContact) {
+  return {
+    ID: contact.external_id,
+    Type: contact.type,
+    Salutation: contact.salutation,
+    GivenName: contact.given_name,
+    FamilyName: contact.family_name,
+    Position: contact.position,
+    Department: contact.department,
+    Email: contact.email,
+    AltEmail: contact.alt_email,
+    Phone: contact.phone,
+    CellPhone: contact.cell_phone,
+    Fax: contact.fax,
+    PrimaryContact: contact.primary_contact,
+    Archived: contact.archived,
+    Customer: contact.customer_id ? { ID: contact.customer_id } : null,
+    Site: contact.site_id ? { ID: contact.site_id } : null,
+  };
+}
+
 export function formatStaffRef(staff: SimproStaff | undefined) {
   if (!staff) return null;
   return {
@@ -67,7 +93,7 @@ export function formatStaffRef(staff: SimproStaff | undefined) {
 
 export function formatStatus(status: SimproStatus | undefined) {
   if (!status) return null;
-  return { ID: status.external_id, Name: status.name };
+  return { ID: status.external_id, Name: status.name, Kind: status.kind };
 }
 
 export function formatTaxCodeRef(tc: SimproTaxCode | undefined) {
@@ -154,7 +180,18 @@ export function formatStaff(s: SimproStaff) {
 }
 
 export function formatContractor(c: SimproContractor) {
-  return { ID: c.external_id, Name: c.name, Email: c.email, Archived: c.archived };
+  return {
+    ID: c.external_id,
+    CompanyName: c.company_name,
+    GivenName: c.given_name,
+    FamilyName: c.family_name,
+    Email: c.email,
+    Phone: c.phone,
+    CellPhone: c.cell_phone,
+    Fax: c.fax,
+    Address: c.address,
+    Archived: c.archived,
+  };
 }
 
 export interface FormatJobOptions {
@@ -343,25 +380,76 @@ export function formatPrebuildItem(item: SimproPrebuildItem) {
   };
 }
 
+/**
+ * Master catalog item as returned by GET /catalogs/ and /catalogs/:id.
+ * Mirrors real Simpro Build v1.0 response shape.
+ */
 export function formatStockItem(item: SimproStockItem) {
   return {
     ID: item.external_id,
     Name: item.name,
     PartNo: item.part_no,
+    Description: item.description,
+    Group: item.group_name ? { Name: item.group_name } : null,
+    SubGroup: item.subgroup_name ? { Name: item.subgroup_name } : null,
+    UnitOfMeasure: item.unit_of_measure,
+    TradePrice: {
+      ExTax: item.trade_price_ex_tax,
+      IncTax: item.trade_price_inc_tax,
+    },
     UnitPrice: item.unit_price,
+    TaxCode: item.tax_code_id ? { ID: item.tax_code_id } : null,
+    Taxable: item.taxable,
+    Supplier: item.supplier_id
+      ? { ID: item.supplier_id, Name: item.supplier_name }
+      : null,
+    SupplierPartNo: item.supplier_part_no,
+    Archived: item.archived,
   };
 }
 
-export function formatQuote(q: SimproQuote) {
+export function formatQuote(q: SimproQuote, ss?: SimproStore) {
+  const customer = ss?.customers.findOneBy("external_id", q.customer_id);
+  const site =
+    q.site_id && ss ? ss.sites.findOneBy("external_id", q.site_id) ?? undefined : undefined;
+  const customerContact =
+    q.customer_contact_id && ss
+      ? ss.contacts.findOneBy("external_id", q.customer_contact_id) ?? undefined
+      : undefined;
+  const siteContact =
+    q.site_contact_id && ss
+      ? ss.contacts.findOneBy("external_id", q.site_contact_id) ?? undefined
+      : undefined;
+  const salesperson =
+    q.salesperson_id && ss
+      ? ss.staff.findOneBy("external_id", q.salesperson_id) ?? undefined
+      : undefined;
+  const projectManager =
+    q.project_manager_id && ss
+      ? ss.staff.findOneBy("external_id", q.project_manager_id) ?? undefined
+      : undefined;
+  const status =
+    q.status_id && ss ? ss.statuses.findOneBy("external_id", q.status_id) ?? undefined : undefined;
+
   return {
     ID: q.external_id,
     Name: q.name,
-    Customer: { ID: q.customer_id },
-    Site: q.site_id ? { ID: q.site_id } : null,
+    Description: q.description,
+    OrderNo: q.order_no,
+    Customer: formatCustomerRef(customer) ?? { ID: q.customer_id },
+    CustomerContact: formatContactRef(customerContact),
+    Site: formatSiteRef(site) ?? (q.site_id ? { ID: q.site_id } : null),
+    SiteContact: formatContactRef(siteContact),
+    Salesperson: formatStaffRef(salesperson),
+    ProjectManager: formatStaffRef(projectManager),
     Stage: q.stage,
-    Total: { ExTax: q.total_ex_tax, IncTax: q.total_inc_tax },
+    Status: formatStatus(status),
+    Total: { ExTax: q.total_ex_tax, Tax: q.total_tax, IncTax: q.total_inc_tax },
     DateIssued: dateOnly(q.date_issued),
+    DueDate: dateOnly(q.due_date),
+    Tags: q.tags,
     ConvertedJob: q.converted_job_id ? { ID: q.converted_job_id } : null,
+    DateModified: q.date_modified,
   };
 }
 
@@ -390,13 +478,35 @@ export function formatSchedule(s: SimproSchedule) {
   };
 }
 
-export function formatAsset(a: SimproAsset) {
+export function formatAttachment(a: SimproAttachment) {
+  return {
+    ID: a.external_id,
+    Filename: a.filename,
+    Description: a.description,
+    MimeType: a.mime_type,
+    Size: a.size,
+    Url: a.url,
+    DateAdded: a.date_added,
+  };
+}
+
+export function formatAsset(a: SimproAsset, ss?: SimproStore) {
+  const customer = ss?.customers.findOneBy("external_id", a.customer_id);
+  const site =
+    a.site_id && ss ? ss.sites.findOneBy("external_id", a.site_id) ?? undefined : undefined;
   return {
     ID: a.external_id,
     Name: a.name,
-    Customer: { ID: a.customer_id },
-    Site: a.site_id ? { ID: a.site_id } : null,
-    AssetType: a.asset_type,
+    Description: a.description,
+    Customer: formatCustomerRef(customer) ?? { ID: a.customer_id },
+    Site: formatSiteRef(site) ?? (a.site_id ? { ID: a.site_id } : null),
+    AssetType: a.asset_type ? { Name: a.asset_type } : null,
+    SerialNo: a.serial_number,
     SerialNumber: a.serial_number,
+    Notes: a.notes,
+    Status: a.status,
+    DateInstalled: dateOnly(a.date_installed),
+    DateNextService: dateOnly(a.date_next_service),
+    DateModified: a.date_modified,
   };
 }

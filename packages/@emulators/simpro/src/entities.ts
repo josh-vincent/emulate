@@ -93,10 +93,19 @@ export interface SimproContact extends Entity {
   external_id: number;
   site_id: number | null;
   customer_id: number | null;
+  type: "Customer" | "Site";
+  salutation: string | null;
   given_name: string;
   family_name: string;
+  position: string | null;
+  department: string | null;
   email: string | null;
-  phone_primary: string | null;
+  alt_email: string | null;
+  phone: string | null;
+  cell_phone: string | null;
+  fax: string | null;
+  primary_contact: boolean;
+  archived: boolean;
 }
 
 export interface SimproStaff extends Entity {
@@ -111,8 +120,14 @@ export interface SimproStaff extends Entity {
 export interface SimproContractor extends Entity {
   company_id: number;
   external_id: number;
-  name: string;
+  company_name: string | null;
+  given_name: string | null;
+  family_name: string | null;
   email: string | null;
+  phone: string | null;
+  cell_phone: string | null;
+  fax: string | null;
+  address: SimproAddress | null;
   archived: boolean;
 }
 
@@ -235,20 +250,43 @@ export interface SimproStockItem extends Entity {
   external_id: number;
   name: string;
   part_no: string;
+  description: string | null;
+  group_name: string | null;
+  subgroup_name: string | null;
+  trade_price_ex_tax: number;
+  trade_price_inc_tax: number;
   unit_price: number;
+  unit_of_measure: string | null;
+  tax_code_id: number | null;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  supplier_part_no: string | null;
+  taxable: boolean;
+  archived: boolean;
 }
 
 export interface SimproQuote extends Entity {
   company_id: number;
   external_id: number;
   name: string;
+  description: string | null;
+  order_no: string | null;
   customer_id: number;
+  customer_contact_id: number | null;
   site_id: number | null;
+  site_contact_id: number | null;
+  salesperson_id: number | null;
+  project_manager_id: number | null;
+  status_id: number | null;
   stage: "Open" | "Approved" | "Converted" | "Cancelled";
   total_ex_tax: number;
+  total_tax: number;
   total_inc_tax: number;
   date_issued: string | null;
+  due_date: string | null;
+  tags: string[];
   converted_job_id: number | null;
+  date_modified: string;
 }
 
 export interface SimproInvoice extends Entity {
@@ -281,14 +319,48 @@ export interface SimproAsset extends Entity {
   customer_id: number;
   site_id: number | null;
   name: string;
+  description: string | null;
   asset_type: string | null;
   serial_number: string | null;
+  status: string | null;
+  notes: string | null;
+  date_installed: string | null;
+  date_next_service: string | null;
+  date_modified: string;
 }
 
 export interface SimproZone extends Entity {
   company_id: number;
   external_id: number;
   name: string;
+}
+
+/**
+ * Attachment row. Simpro exposes attachments as nested collections under each
+ * parent entity (job, quote, invoice, customer, site, asset). We store them in
+ * a single collection keyed by (parent_type, parent_id, external_id) — the
+ * parent_type discriminator lets one list endpoint serve all parents without
+ * introducing five parallel tables.
+ */
+export type SimproAttachmentParentType =
+  | "job"
+  | "quote"
+  | "invoice"
+  | "customer"
+  | "site"
+  | "asset";
+
+export interface SimproAttachment extends Entity {
+  company_id: number;
+  external_id: number;
+  parent_type: SimproAttachmentParentType;
+  parent_id: number;
+  filename: string;
+  description: string | null;
+  mime_type: string | null;
+  size: number;
+  url: string;
+  date_added: string;
 }
 
 export interface SimproCustomField extends Entity {

@@ -71,7 +71,8 @@ export function jobRoutes({ app, store }: RouteContext): void {
     const page = paginate(c, items, pagination);
 
     const displayAll = isDisplayAll(c);
-    const columns = c.req.query("columns") ?? "ID,Name";
+    const columnsParam = c.req.query("columns");
+    const columns = displayAll ? columnsParam : (columnsParam ?? "ID,Name");
     const formatted = page.map((job) => applyColumns(formatJob(job, { displayAll, ss }), columns));
     return c.json(formatted);
   });

@@ -42,7 +42,7 @@ export function quoteRoutes({ app, store }: RouteContext): void {
 
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);
-    return c.json(page.map(formatQuote));
+    return c.json(page.map((q) => formatQuote(q, ss)));
   });
 
   app.get("/api/v1.0/companies/:cid/quotes/:id", (c) => {
@@ -50,7 +50,7 @@ export function quoteRoutes({ app, store }: RouteContext): void {
     if (blocked) return blocked;
     const q = ss.quotes.findOneBy("external_id", Number(c.req.param("id")));
     if (!q) return simproNotFound(c);
-    return c.json(formatQuote(q));
+    return c.json(formatQuote(q, ss));
   });
 
   app.post("/api/v1.0/companies/:cid/quotes/", async (c) => {
@@ -74,14 +74,29 @@ export function quoteRoutes({ app, store }: RouteContext): void {
       company_id: companyId,
       external_id: externalId,
       name: (body.Name as string) ?? `Quote ${externalId}`,
+      description: (body.Description as string | null) ?? null,
+      order_no: (body.OrderNo as string | null) ?? null,
       customer_id: customerRef.ID,
+      customer_contact_id:
+        ((body.CustomerContact as { ID?: number } | undefined)?.ID) ?? null,
       site_id: ((body.Site as { ID?: number } | undefined)?.ID) ?? null,
+      site_contact_id:
+        ((body.SiteContact as { ID?: number } | undefined)?.ID) ?? null,
+      salesperson_id:
+        ((body.Salesperson as { ID?: number } | undefined)?.ID) ?? null,
+      project_manager_id:
+        ((body.ProjectManager as { ID?: number } | undefined)?.ID) ?? null,
+      status_id: ((body.Status as { ID?: number } | undefined)?.ID) ?? null,
       stage: "Open",
       total_ex_tax: 0,
+      total_tax: 0,
       total_inc_tax: 0,
       date_issued: (body.DateIssued as string) ?? nowIso().slice(0, 10),
+      due_date: (body.DueDate as string | null) ?? null,
+      tags: (body.Tags as string[] | undefined) ?? [],
       converted_job_id: null,
+      date_modified: nowIso(),
     });
-    return c.json(formatQuote(q), 201);
+    return c.json(formatQuote(q, ss), 201);
   });
 }

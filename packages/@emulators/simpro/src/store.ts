@@ -1,6 +1,7 @@
 import { Store, type Collection } from "@emulators/core";
 import type {
   SimproAsset,
+  SimproAttachment,
   SimproCatalogItem,
   SimproCompany,
   SimproContact,
@@ -55,6 +56,7 @@ export interface SimproStore {
   assets: Collection<SimproAsset>;
   zones: Collection<SimproZone>;
   customFields: Collection<SimproCustomField>;
+  attachments: Collection<SimproAttachment>;
   oauthCodes: Collection<SimproOAuthCode>;
   oauthTokens: Collection<SimproOAuthToken>;
   webhookSubscriptions: Collection<SimproWebhookSubscription>;
@@ -121,6 +123,12 @@ export function getSimproStore(store: Store): SimproStore {
     assets: store.collection<SimproAsset>("simpro.assets", ["company_id", "external_id", "customer_id"]),
     zones: store.collection<SimproZone>("simpro.zones", ["company_id", "external_id"]),
     customFields: store.collection<SimproCustomField>("simpro.custom_fields", ["company_id", "external_id"]),
+    attachments: store.collection<SimproAttachment>("simpro.attachments", [
+      "company_id",
+      "external_id",
+      "parent_type",
+      "parent_id",
+    ]),
     oauthCodes: store.collection<SimproOAuthCode>("simpro.oauth_codes", ["code"]),
     oauthTokens: store.collection<SimproOAuthToken>("simpro.oauth_tokens", ["access_token", "refresh_token"]),
     webhookSubscriptions: store.collection<SimproWebhookSubscription>("simpro.webhook_subscriptions", [

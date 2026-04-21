@@ -412,6 +412,71 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
       },
     },
   },
+  simpro: {
+    label: "Simpro Premium REST API emulator",
+    endpoints:
+      "OAuth 2.0, jobs, sections, cost centers, customers (companies + individuals), sites, staff, contractors, quotes, invoices, schedules, assets, reference data (tax codes, labour rates, statuses, stock), webhooks, inspector UI",
+    async load() {
+      const mod = await import("@emulators/simpro");
+      return { plugin: mod.simproPlugin, seedFromConfig: mod.seedFromConfig };
+    },
+    defaultFallback() {
+      return { login: "admin@emulator.local", id: 1, scopes: [] };
+    },
+    initConfig: {
+      simpro: {
+        rate_limit_enabled: false,
+        oauth: { client_id: "taskr_dev", client_secret: "taskr_dev_secret" },
+        companies: [{ id: 0, name: "Taskr Test Co" }],
+        tax_codes: [
+          { id: 1, name: "GST", rate: 10 },
+          { id: 2, name: "GST Free", rate: 0 },
+        ],
+        master_cost_centers: [
+          { id: 12, name: "Plumbing Materials", income_account: "4-1000" },
+          { id: 15, name: "Electrical Labour", income_account: "4-1010" },
+        ],
+        customers: [
+          {
+            id: 200,
+            type: "company",
+            company_name: "Acme Facilities Pty Ltd",
+            email: "ops@acme.example",
+            sites: [{ id: 55, name: "North Campus Building A" }],
+          },
+        ],
+        jobs: [
+          {
+            id: 12345,
+            type: "Project",
+            name: "Sprinkler Overhaul Q3",
+            customer_id: 200,
+            site_id: 55,
+            stage: 3,
+            order_no: "PO-4481",
+            sections: [
+              {
+                id: 1001,
+                name: "Zone 1 – Ground Floor",
+                cost_centers: [
+                  { id: 5001, master_cost_center_id: 12, billing_type: "TimeAndMaterials", stage: 3 },
+                  { id: 5002, master_cost_center_id: 15, billing_type: "Fixed", stage: 2 },
+                ],
+              },
+              {
+                id: 1002,
+                name: "Zone 2 – Level 1",
+                cost_centers: [
+                  { id: 5003, master_cost_center_id: 12, billing_type: "TimeAndMaterials", stage: 2 },
+                  { id: 5004, master_cost_center_id: 15, billing_type: "FlatRate", stage: 2 },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  },
   clerk: {
     label: "Clerk authentication and user management emulator",
     endpoints:
@@ -554,60 +619,6 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
               ],
             },
           },
-        ],
-      },
-    },
-  },
-  simpro: {
-    label: "SimPRO field service management API emulator",
-    endpoints:
-      "customers, sites, jobs (sections/cost centres), quotes (convert to job), invoices, " +
-      "staff, contractors, schedules, assets, cost centres, labour rates, " +
-      "tax codes, catalogue, statuses, zones, custom fields, webhooks",
-    async load() {
-      const mod = await import("@emulators/simpro");
-      return { plugin: mod.simproPlugin, seedFromConfig: mod.seedFromConfig };
-    },
-    defaultFallback() {
-      return { login: "sk_test_simpro", id: 1, scopes: [] };
-    },
-    initConfig: {
-      simpro: {
-        customers: [
-          {
-            type: "Company",
-            company_name: "Demo Building Services",
-            email: "accounts@demobuild.com.au",
-            mail_suburb: "Melbourne",
-            mail_state: "VIC",
-          },
-        ],
-        staff: [
-          {
-            given_name: "Demo",
-            family_name: "Tech",
-            email: "tech@demobuild.com.au",
-            role_name: "Technician",
-          },
-        ],
-        jobs: [
-          {
-            order_no: "J-2025-001",
-            description: "Annual Fire Inspection",
-            customer_name: "Demo Building Services",
-            stage: "Progress",
-            total_ex_tax: 500,
-            total_inc_tax: 550,
-          },
-        ],
-        cost_centers: [{ name: "General" }, { name: "Fire Safety" }],
-        tax_codes: [
-          { name: "GST", rate: 10, description: "Goods and Services Tax" },
-          { name: "GST Free", rate: 0, description: "GST exempt" },
-        ],
-        labor_rates: [
-          { name: "Standard", rate: 95 },
-          { name: "After Hours", rate: 142.5 },
         ],
       },
     },
