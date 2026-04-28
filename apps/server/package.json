@@ -1,0 +1,45 @@
+{
+  "name": "@emulators/server",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist .turbo",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@emulators/apple": "workspace:*",
+    "@emulators/aws": "workspace:*",
+    "@emulators/clerk": "workspace:*",
+    "@emulators/core": "workspace:*",
+    "@emulators/github": "workspace:*",
+    "@emulators/google": "workspace:*",
+    "@emulators/microsoft": "workspace:*",
+    "@emulators/mongoatlas": "workspace:*",
+    "@emulators/nango": "workspace:*",
+    "@emulators/okta": "workspace:*",
+    "@emulators/resend": "workspace:*",
+    "@emulators/simpro": "workspace:*",
+    "@emulators/slack": "workspace:*",
+    "@emulators/stripe": "workspace:*",
+    "@emulators/uptick": "workspace:*",
+    "@emulators/vercel": "workspace:*",
+    "@emulators/workos": "workspace:*",
+    "@hono/node-server": "^1",
+    "emulate": "workspace:*",
+    "hono": "^4",
+    "picocolors": "^1.1.1",
+    "yaml": "^2"
+  },
+  "devDependencies": {
+    "tsup": "^8",
+    "tsx": "^4",
+    "typescript": "^5.7"
+  }
+}

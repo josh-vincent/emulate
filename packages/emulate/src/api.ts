@@ -1,6 +1,7 @@
 import { createServer, type AppKeyResolver, type Store } from "@emulators/core";
 import { SERVICE_REGISTRY } from "./registry.js";
-export type { ServiceName } from "./registry.js";
+export { SERVICE_REGISTRY, SERVICE_NAMES } from "./registry.js";
+export type { ServiceName, ServiceEntry, LoadedService } from "./registry.js";
 import type { ServiceName } from "./registry.js";
 import { serve } from "@hono/node-server";
 

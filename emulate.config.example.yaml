@@ -6,6 +6,32 @@ tokens:
     login: octocat
     scopes: [repo, user, read:user, "user:email", workflow]
 
+# Unified user roster (used by apps/server / @emulators/server).
+# Each user is fanned out into the matching emulators below — the
+# per-service blocks (google:, microsoft:, simpro:, ...) are still
+# honoured and take precedence when entries collide on email/login.
+# Each user automatically gets a bearer token "tok_<id>" that
+# authenticates them across every emulator.
+users:
+  - id: alice
+    role: admin
+    email: alice@acme.test
+    name: Alice Admin
+    providers:
+      google:    { gmail: true, calendar: true }
+      microsoft: { teams: ["Engineering"] }
+      simpro:    { staff: true, admin: true }
+      clerk:     true
+      workos:    true
+  - id: bob
+    role: technician
+    email: bob@acme.test
+    name: Bob Tech
+    providers:
+      google:    { gmail: true }
+      simpro:    { staff: true, admin: false }
+      uptick:    true
+
 github:
   users:
     - login: octocat
