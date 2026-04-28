@@ -252,7 +252,16 @@ export class Store {
     for (const collection of this.collections.values()) {
       collection.clear();
     }
-    this._data.clear();
+    // Clear Map/Set values in-place so closures captured by route handlers
+    // (e.g. workos/getWorkOSStore) keep working after a runtime reseed.
+    // Only delete primitives/booleans/init flags.
+    for (const value of this._data.values()) {
+      if (value instanceof Map || value instanceof Set) {
+        (value as Map<unknown, unknown> | Set<unknown>).clear();
+      } else if (Array.isArray(value)) {
+        value.length = 0;
+      }
+    }
   }
 
   snapshot(): StoreSnapshot {
