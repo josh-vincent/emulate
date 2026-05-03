@@ -154,3 +154,26 @@ google:
       mime_type: application/vnd.google-apps.folder
       parent_ids:
         - root
+
+stripe:
+  customers:
+    - email: dev@example.com
+      name: Developer
+    - email: alice@acme.test
+      name: Alice Admin
+  products:
+    - name: Taskr Pro
+      description: Test product for local emulator
+  prices:
+    - product_name: Taskr Pro
+      currency: usd
+      unit_amount: 2900
+      lookup_key: taskr_pro_monthly
+      recurring:
+        interval: month
+
+nango:
+  connections:
+    - id: hubspot-dev
+      provider: hubspot
+      provider_config_key: hubspot

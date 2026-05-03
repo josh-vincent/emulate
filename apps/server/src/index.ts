@@ -10,7 +10,7 @@ import { buildServiceApps, mountDispatcher, type ServiceName } from "./dispatche
 import { createAdminRouter } from "./admin.js";
 
 async function main() {
-  const port = Number.parseInt(process.env.PORT ?? "3000", 10);
+  const port = Number.parseInt(process.env.PORT ?? "4000", 10);
   const baseUrl = process.env.EMULATE_BASE_URL ?? `http://localhost:${port}`;
 
   const loaded = await loadConfig();

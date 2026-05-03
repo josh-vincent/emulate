@@ -2,13 +2,13 @@ import type { AppEnv } from "@emulators/core";
 import type { Hono } from "hono";
 import { getJWKS } from "../keys.js";
 
-export function discoveryRoutes(app: Hono<AppEnv>, _baseUrl: string): void {
+export function discoveryRoutes(app: Hono<AppEnv>, baseUrl: string): void {
   app.get("/sso/jwks/:clientId", async (c) => {
     return c.json(await getJWKS());
   });
 
   app.get("/.well-known/openid-configuration", (c) => {
-    const base = new URL(c.req.url).origin;
+    const base = baseUrl.replace(/\/$/, "");
     return c.json({
       issuer: `${base}/`,
       authorization_endpoint: `${base}/user_management/authorize`,

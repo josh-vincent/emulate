@@ -2,8 +2,10 @@ import { Hono } from "hono";
 import {
   createServer,
   type AppKeyResolver,
+  type CollectionSnapshot,
   type ServicePlugin,
   type Store,
+  type StoreSnapshot,
   type TokenMap,
   type AppEnv,
 } from "@emulators/core";
@@ -99,12 +101,43 @@ export async function buildServiceApps(
   return apps;
 }
 
+// Collections that hold OAuth credentials issued during live connect flows.
+// These must survive a reseed so existing integrations don't break.
+const AUTH_COLLECTIONS = ["oauthTokens", "refreshTokens", "authCodes", "accessTokens"];
+
+// _data Map keys (set via store.setData) that hold auth state. These live in
+// the snapshot's "data" object, not "collections", and must be merged back
+// separately. WorkOS stores refresh tokens, sessions, and auth codes here.
+const AUTH_DATA_KEYS = [
+  "workos_refresh_tokens",
+  "workos_sessions",
+  "workos_auth_codes",
+];
+
 export function reseedApps(
   apps: Map<ServiceName, ServiceApp>,
   serviceConfigs: Record<string, Record<string, unknown> | undefined>,
   baseUrl: string,
 ): void {
   for (const [name, sa] of apps) {
+    // Preserve live OAuth credentials across the reset so connected integrations
+    // don't need to re-authorise every time the seed config changes.
+    const beforeSnap = sa.store.snapshot();
+
+    const savedCollections: Record<string, CollectionSnapshot> = {};
+    for (const colName of AUTH_COLLECTIONS) {
+      if (beforeSnap.collections[colName]) {
+        savedCollections[colName] = beforeSnap.collections[colName];
+      }
+    }
+
+    const savedData: Record<string, unknown> = {};
+    for (const key of AUTH_DATA_KEYS) {
+      if (key in beforeSnap.data) {
+        savedData[key] = beforeSnap.data[key];
+      }
+    }
+
     sa.store.reset();
     const svcBase = `${baseUrl}/${name}`;
     sa.plugin.seed?.(sa.store, svcBase);
@@ -112,33 +145,88 @@ export function reseedApps(
     if (svcSeedConfig && sa.seedFromConfig) {
       sa.seedFromConfig(sa.store, svcBase, svcSeedConfig);
     }
+
+    // Merge saved auth state back on top of the freshly seeded snapshot
+    const hasSaved =
+      Object.keys(savedCollections).length > 0 ||
+      Object.keys(savedData).length > 0;
+    if (hasSaved) {
+      const afterSnap: StoreSnapshot = sa.store.snapshot();
+      for (const [colName, colSnap] of Object.entries(savedCollections)) {
+        afterSnap.collections[colName] = colSnap;
+      }
+      for (const [key, value] of Object.entries(savedData)) {
+        afterSnap.data[key] = value;
+      }
+      sa.store.restore(afterSnap);
+    }
   }
 }
 
+// Paths that some vendor SDKs hit at root because they don't support a
+// path-prefix in their hostname config. We forward these to the matching
+// service so callers configured with HOST=localhost PORT=4000 still work
+// alongside path-routed access at /<service>/*.
+//
+// Order matters: longer / more specific prefixes first.
+const ROOT_FALLBACK_ROUTES: Array<{ prefix: string; service: ServiceName }> = [
+  { prefix: "/user_management", service: "workos" },
+  { prefix: "/sso", service: "workos" },
+  { prefix: "/organizations", service: "workos" },
+  { prefix: "/directory", service: "workos" },
+  { prefix: "/directory_users", service: "workos" },
+  { prefix: "/directory_groups", service: "workos" },
+  { prefix: "/audit_logs", service: "workos" },
+  { prefix: "/events", service: "workos" },
+  { prefix: "/portal", service: "workos" },
+];
+
+async function forwardToService(
+  sa: ServiceApp,
+  raw: Request,
+  pathOverride?: string,
+): Promise<Response> {
+  const url = new URL(raw.url);
+  const path = pathOverride ?? url.pathname;
+  const targetUrl = new URL(path + url.search, url.origin);
+  const init: RequestInit & { duplex?: string } = {
+    method: raw.method,
+    headers: raw.headers,
+  };
+  if (MUTATING_METHODS.has(raw.method)) {
+    init.body = raw.body;
+    init.duplex = "half";
+  }
+  return sa.hono.fetch(new Request(targetUrl.toString(), init as RequestInit));
+}
+
 export function mountDispatcher(parent: Hono<AppEnv>, apps: Map<ServiceName, ServiceApp>): void {
-  parent.all("/:service/*", async (c) => {
+  parent.all("/:service/*", async (c, next) => {
     const serviceName = c.req.param("service") as ServiceName;
     const sa = apps.get(serviceName);
-    if (!sa) return c.json({ message: `Unknown service: ${serviceName}` }, 404);
+    // Unknown first segment — let downstream root-fallback / 404 handle it.
+    if (!sa) return next();
 
     const url = new URL(c.req.url);
     const stripped = url.pathname.slice(`/${serviceName}`.length) || "/";
-    const strippedUrl = new URL(stripped + url.search, url.origin);
-
-    const original = c.req.raw;
-    const init: RequestInit & { duplex?: string } = {
-      method: original.method,
-      headers: original.headers,
-    };
-    if (MUTATING_METHODS.has(original.method)) {
-      init.body = original.body;
-      init.duplex = "half";
-    }
-    const strippedReq = new Request(strippedUrl.toString(), init as RequestInit);
-
-    let response = await sa.hono.fetch(strippedReq);
+    let response = await forwardToService(sa, c.req.raw, stripped);
     response = await rewriteResponse(response, `/${serviceName}`);
     return response;
+  });
+
+  // Root-level fallback for SDKs that don't support a path prefix. Matches
+  // a small allowlist of well-known vendor paths and forwards them to the
+  // service unchanged (no prefix rewrite, since the caller is treating the
+  // server as if it were the vendor's root).
+  parent.all("*", async (c, next) => {
+    const url = new URL(c.req.url);
+    const match = ROOT_FALLBACK_ROUTES.find((r) =>
+      url.pathname === r.prefix || url.pathname.startsWith(`${r.prefix}/`),
+    );
+    if (!match) return next();
+    const sa = apps.get(match.service);
+    if (!sa) return next();
+    return forwardToService(sa, c.req.raw);
   });
 }
 

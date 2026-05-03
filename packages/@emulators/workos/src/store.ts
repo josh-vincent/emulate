@@ -204,7 +204,9 @@ export function getWorkOSStore(store: Store) {
     consumeRefreshToken(token: string): RefreshTokenEntry | null {
       const entry = refreshTokens.get(token);
       if (!entry) return null;
-      refreshTokens.delete(token);
+      // Emulator: keep the token in the map so concurrent RSC requests
+      // that all arrive before the first refresh completes don't invalidate
+      // each other's sessions. Real WorkOS rotates tokens; we don't need to.
       return entry;
     },
 
