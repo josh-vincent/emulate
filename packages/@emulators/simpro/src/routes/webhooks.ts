@@ -50,6 +50,16 @@ export function webhookRoutes({ app, store, baseUrl }: RouteContext): void {
     );
   });
 
+  // Debug endpoint for tests: list recent events fired. Registered before the
+  // `/:id` route so the static `_events` segment isn't swallowed as an id.
+  app.get("/api/v1.0/companies/:cid/setup/webhooks/_events", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const companyId = Number(c.req.param("cid")) || 0;
+    const items = ss.webhookEvents.all().filter((e) => e.company_id === companyId || companyId === 0);
+    return c.json(items);
+  });
+
   app.get("/api/v1.0/companies/:cid/setup/webhooks/:id", (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
@@ -102,15 +112,6 @@ export function webhookRoutes({ app, store, baseUrl }: RouteContext): void {
     if (!w) return simproNotFound(c);
     ss.webhookSubscriptions.delete(w.id);
     return c.body(null, 204);
-  });
-
-  // Debug endpoint for tests: list recent events fired
-  app.get("/api/v1.0/companies/:cid/setup/webhooks/_events", (c) => {
-    const blocked = guard(c);
-    if (blocked) return blocked;
-    const companyId = Number(c.req.param("cid")) || 0;
-    const items = ss.webhookEvents.all().filter((e) => e.company_id === companyId || companyId === 0);
-    return c.json(items);
   });
 
   void baseUrl; // unused but part of RouteContext
