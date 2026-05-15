@@ -3,13 +3,17 @@ import type { RouteContext } from "@emulators/core";
 import { escapeHtml, renderInspectorPage, type InspectorTab } from "@emulators/core";
 import { getSimproStore } from "../store.js";
 
+// Routes and hrefs are service-relative. The multi-service dispatcher strips
+// the `/simpro` segment before forwarding and re-prefixes outbound Location
+// headers + HTML href/action attributes, so hardcoding `/simpro` here would
+// make the inspector unreachable when mounted at /simpro/* (the default).
 const TABS: InspectorTab[] = [
-  { id: "customers", label: "Customers", href: "/simpro/inspector/customers" },
-  { id: "jobs", label: "Jobs", href: "/simpro/inspector/jobs" },
-  { id: "sections", label: "Sections", href: "/simpro/inspector/sections" },
-  { id: "costCenters", label: "Cost Centers", href: "/simpro/inspector/cost-centers" },
-  { id: "invoices", label: "Invoices", href: "/simpro/inspector/invoices" },
-  { id: "webhooks", label: "Webhooks", href: "/simpro/inspector/webhooks" },
+  { id: "customers", label: "Customers", href: "/inspector/customers" },
+  { id: "jobs", label: "Jobs", href: "/inspector/jobs" },
+  { id: "sections", label: "Sections", href: "/inspector/sections" },
+  { id: "costCenters", label: "Cost Centers", href: "/inspector/cost-centers" },
+  { id: "invoices", label: "Invoices", href: "/inspector/invoices" },
+  { id: "webhooks", label: "Webhooks", href: "/inspector/webhooks" },
 ];
 
 const table = (headers: string[], rows: string[][]): string => {
@@ -24,9 +28,9 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
   const render = (active: string, body: string, c: Context) =>
     c.html(renderInspectorPage("Simpro Emulator", TABS, active, body, "simpro"));
 
-  app.get("/simpro", (c) => c.redirect("/simpro/inspector/customers"));
+  app.get("/", (c) => c.redirect("/inspector/customers"));
 
-  app.get("/simpro/inspector/customers", (c) => {
+  app.get("/inspector/customers", (c) => {
     const rows = ss.customers
       .all()
       .map((cust) => [
@@ -39,21 +43,21 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
     return render("customers", table(["ID", "Type", "Name", "Email", "Archived"], rows), c);
   });
 
-  app.get("/simpro/inspector/jobs", (c) => {
+  app.get("/inspector/jobs", (c) => {
     const rows = ss.jobs
       .all()
       .map((j) => [String(j.external_id), j.type, j.name, String(j.stage), j.order_no ?? "", String(j.total_ex_tax)]);
     return render("jobs", table(["ID", "Type", "Name", "Stage", "OrderNo", "ExTax"], rows), c);
   });
 
-  app.get("/simpro/inspector/sections", (c) => {
+  app.get("/inspector/sections", (c) => {
     const rows = ss.sections
       .all()
       .map((s) => [String(s.external_id), String(s.job_id), s.name, String(s.display_order)]);
     return render("sections", table(["ID", "Job", "Name", "Order"], rows), c);
   });
 
-  app.get("/simpro/inspector/cost-centers", (c) => {
+  app.get("/inspector/cost-centers", (c) => {
     const rows = ss.costCenters
       .all()
       .map((cc) => [
@@ -68,7 +72,7 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
     return render("costCenters", table(["ID", "Job", "Section", "Name", "Billing", "Stage", "ExTax"], rows), c);
   });
 
-  app.get("/simpro/inspector/invoices", (c) => {
+  app.get("/inspector/invoices", (c) => {
     const rows = ss.invoices
       .all()
       .map((i) => [
@@ -82,7 +86,7 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
     return render("invoices", table(["ID", "Job", "Type", "Stage", "ExTax", "Paid"], rows), c);
   });
 
-  app.get("/simpro/inspector/webhooks", (c) => {
+  app.get("/inspector/webhooks", (c) => {
     const subRows = ss.webhookSubscriptions
       .all()
       .map((w) => [String(w.external_id), w.url, w.events.join(", "), w.active ? "yes" : "no"]);
