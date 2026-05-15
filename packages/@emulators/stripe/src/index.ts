@@ -26,15 +26,18 @@ export { getStripeStore, type StripeStore } from "./store.js";
 export interface StripeSeedConfig {
 	port?: number;
 	customers?: Array<{
+		id?: string;
 		email?: string;
 		name?: string;
 		description?: string;
 	}>;
 	products?: Array<{
+		id?: string;
 		name: string;
 		description?: string;
 	}>;
 	prices?: Array<{
+		id?: string;
 		product_name: string;
 		currency: string;
 		unit_amount: number;
@@ -46,6 +49,11 @@ export interface StripeSeedConfig {
 		price_lookup_key: string;
 		status?: "active" | "trialing" | "past_due";
 		metadata?: Record<string, string>;
+	}>;
+	webhooks?: Array<{
+		url: string;
+		events: string[];
+		secret?: string;
 	}>;
 }
 
@@ -67,6 +75,7 @@ export function seedFromConfig(
 	store: Store,
 	_baseUrl: string,
 	config: StripeSeedConfig,
+	webhooks?: WebhookDispatcher,
 ): void {
 	const ss = getStripeStore(store);
 
@@ -77,7 +86,7 @@ export function seedFromConfig(
 				if (existing) continue;
 			}
 			ss.customers.insert({
-				stripe_id: stripeId("cus"),
+				stripe_id: c.id ?? stripeId("cus"),
 				email: c.email ?? null,
 				name: c.name ?? null,
 				description: c.description ?? null,
@@ -93,7 +102,7 @@ export function seedFromConfig(
 			const product =
 				existingProd ??
 				ss.products.insert({
-					stripe_id: stripeId("prod"),
+					stripe_id: p.id ?? stripeId("prod"),
 					name: p.name,
 					description: p.description ?? null,
 					active: true,
@@ -112,7 +121,7 @@ export function seedFromConfig(
 					if (existingPrice) continue;
 				}
 				ss.prices.insert({
-					stripe_id: stripeId("price"),
+					stripe_id: pr.id ?? stripeId("price"),
 					product_id: product.stripe_id,
 					currency: pr.currency.toLowerCase(),
 					unit_amount: pr.unit_amount,
@@ -167,6 +176,19 @@ export function seedFromConfig(
 				price_lookup_key: price.lookup_key,
 				quantity: 1,
 				metadata: {},
+			});
+		}
+	}
+
+	// Register seed-configured webhook endpoints (upstream)
+	if (config.webhooks && webhooks) {
+		for (const wh of config.webhooks) {
+			webhooks.register({
+				url: wh.url,
+				events: wh.events,
+				active: true,
+				secret: wh.secret,
+				owner: "stripe",
 			});
 		}
 	}
