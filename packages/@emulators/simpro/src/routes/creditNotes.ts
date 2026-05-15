@@ -53,7 +53,11 @@ export function creditNoteRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
 
     const customerRef = body.Customer as { ID?: number } | undefined;
     if (!customerRef?.ID) return simproValidation(c, "Customer.ID", "Customer is required.");
@@ -86,7 +90,11 @@ export function creditNoteRoutes({ app, store }: RouteContext): void {
     const cn = ss.creditNotes.findOneBy("external_id", Number(c.req.param("id")));
     if (!cn) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.creditNotes.update(cn.id, {
       ...(body.TotalExTax !== undefined && { total_ex_tax: Number(body.TotalExTax) }),
       ...(body.TotalIncTax !== undefined && { total_inc_tax: Number(body.TotalIncTax) }),

@@ -16,7 +16,13 @@ import {
 import { nextExternalId } from "./jobs.js";
 
 function formatPrebuild(p: SimproPrebuild) {
-  return { ID: p.external_id, Name: p.name, Description: p.description, Archived: p.archived, DateModified: p.date_modified };
+  return {
+    ID: p.external_id,
+    Name: p.name,
+    Description: p.description,
+    Archived: p.archived,
+    DateModified: p.date_modified,
+  };
 }
 
 function formatPrebuildGroup(g: SimproPrebuildGroup) {
@@ -67,7 +73,11 @@ export function prebuildRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "prebuilds", companyId);
@@ -88,7 +98,11 @@ export function prebuildRoutes({ app, store }: RouteContext): void {
     const p = ss.prebuilds.findOneBy("external_id", Number(c.req.param("pid")));
     if (!p) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.prebuilds.update(p.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
@@ -113,16 +127,18 @@ export function prebuildRoutes({ app, store }: RouteContext): void {
     if (blocked) return blocked;
     const pid = Number(c.req.param("pid"));
     const items = ss.prebuildItems.findBy("prebuild_id", pid);
-    return c.json(paginate(c, items, parsePagination(c)).map((item) => ({
-      ID: item.external_id,
-      Prebuild: { ID: item.prebuild_id },
-      Name: item.name,
-      Quantity: item.quantity,
-      CostPrice: item.cost_price,
-      Markup: item.markup,
-      SellPrice: item.sell_price,
-      ExTax: item.ex_tax,
-    })));
+    return c.json(
+      paginate(c, items, parsePagination(c)).map((item) => ({
+        ID: item.external_id,
+        Prebuild: { ID: item.prebuild_id },
+        Name: item.name,
+        Quantity: item.quantity,
+        CostPrice: item.cost_price,
+        Markup: item.markup,
+        SellPrice: item.sell_price,
+        ExTax: item.ex_tax,
+      })),
+    );
   });
 
   app.get("/api/v1.0/companies/:cid/prebuilds/:pid/catalogs/:catid", (c) => {
@@ -131,14 +147,27 @@ export function prebuildRoutes({ app, store }: RouteContext): void {
     const pid = Number(c.req.param("pid"));
     const item = ss.prebuildItems.findOneBy("external_id", Number(c.req.param("catid")));
     if (!item || item.prebuild_id !== pid) return simproNotFound(c);
-    return c.json({ ID: item.external_id, Prebuild: { ID: item.prebuild_id }, Name: item.name, Quantity: item.quantity, CostPrice: item.cost_price, Markup: item.markup, SellPrice: item.sell_price, ExTax: item.ex_tax });
+    return c.json({
+      ID: item.external_id,
+      Prebuild: { ID: item.prebuild_id },
+      Name: item.name,
+      Quantity: item.quantity,
+      CostPrice: item.cost_price,
+      Markup: item.markup,
+      SellPrice: item.sell_price,
+      ExTax: item.ex_tax,
+    });
   });
 
   app.post("/api/v1.0/companies/:cid/prebuilds/:pid/catalogs/", async (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const pid = Number(c.req.param("pid"));
     const prebuild = ss.prebuilds.findOneBy("external_id", pid);
@@ -156,7 +185,19 @@ export function prebuildRoutes({ app, store }: RouteContext): void {
       sell_price: Number(body.SellPrice ?? 0),
       ex_tax: Number(body.ExTax ?? 0),
     });
-    return c.json({ ID: item.external_id, Prebuild: { ID: item.prebuild_id }, Name: item.name, Quantity: item.quantity, CostPrice: item.cost_price, Markup: item.markup, SellPrice: item.sell_price, ExTax: item.ex_tax }, 201);
+    return c.json(
+      {
+        ID: item.external_id,
+        Prebuild: { ID: item.prebuild_id },
+        Name: item.name,
+        Quantity: item.quantity,
+        CostPrice: item.cost_price,
+        Markup: item.markup,
+        SellPrice: item.sell_price,
+        ExTax: item.ex_tax,
+      },
+      201,
+    );
   });
 
   // ──────────────────────────────────────────────────────────────
@@ -183,7 +224,11 @@ export function prebuildRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "prebuildGroups", companyId);
@@ -202,10 +247,16 @@ export function prebuildRoutes({ app, store }: RouteContext): void {
     const g = ss.prebuildGroups.findOneBy("external_id", Number(c.req.param("gid")));
     if (!g) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.prebuildGroups.update(g.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
-      ...(body.ParentGroup !== undefined && { parent_group_id: (body.ParentGroup as { ID?: number } | null)?.ID ?? null }),
+      ...(body.ParentGroup !== undefined && {
+        parent_group_id: (body.ParentGroup as { ID?: number } | null)?.ID ?? null,
+      }),
     });
     return c.body(null, 204);
   });

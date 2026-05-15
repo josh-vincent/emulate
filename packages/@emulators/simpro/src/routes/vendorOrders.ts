@@ -54,7 +54,11 @@ export function vendorOrderRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "vendorOrders", companyId);
     const now = nowIso();
@@ -78,7 +82,11 @@ export function vendorOrderRoutes({ app, store }: RouteContext): void {
     const vo = ss.vendorOrders.findOneBy("external_id", Number(c.req.param("id")));
     if (!vo) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.vendorOrders.update(vo.id, {
       ...(body.Stage !== undefined && { stage: body.Stage as "Draft" | "Sent" | "PartReceived" | "Received" }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),

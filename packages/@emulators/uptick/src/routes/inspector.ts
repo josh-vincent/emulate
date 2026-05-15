@@ -11,7 +11,11 @@ function activeBadge(active: boolean): string {
 function statusBadge(status: string): string {
   const open = ["open", "pending"];
   const closed = ["resolved", "closed", "completed"];
-  const cls = closed.includes(status.toLowerCase()) ? "badge-granted" : open.includes(status.toLowerCase()) ? "badge-requested" : "badge-denied";
+  const cls = closed.includes(status.toLowerCase())
+    ? "badge-granted"
+    : open.includes(status.toLowerCase())
+      ? "badge-requested"
+      : "badge-denied";
   return `<span class="badge ${cls}">${escapeHtml(status)}</span>`;
 }
 
@@ -39,15 +43,20 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
     let bodyHtml = "";
 
     if (tab === "clients") {
-      const rows = clients.length === 0
-        ? `<tr><td colspan="4" class="inspector-empty">No clients yet.</td></tr>`
-        : clients.map((cl) => `
+      const rows =
+        clients.length === 0
+          ? `<tr><td colspan="4" class="inspector-empty">No clients yet.</td></tr>`
+          : clients
+              .map(
+                (cl) => `
 <tr>
   <td style="color:#1a8c00">${cl.id}</td>
   <td><span style="color:#33ff00;font-weight:600">${escapeHtml(cl.name)}</span></td>
   <td>${escapeHtml(cl.contact_email)}</td>
   <td>${activeBadge(cl.is_active)}</td>
-</tr>`).join("");
+</tr>`,
+              )
+              .join("");
       bodyHtml = `
 <div class="inspector-section">
   <h2>Clients</h2>
@@ -57,11 +66,13 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
   </table>
 </div>`;
     } else if (tab === "properties") {
-      const rows = properties.length === 0
-        ? `<tr><td colspan="5" class="inspector-empty">No properties yet.</td></tr>`
-        : properties.map((p) => {
-            const client = s.clients.get(p.client_id);
-            return `
+      const rows =
+        properties.length === 0
+          ? `<tr><td colspan="5" class="inspector-empty">No properties yet.</td></tr>`
+          : properties
+              .map((p) => {
+                const client = s.clients.get(p.client_id);
+                return `
 <tr>
   <td style="color:#1a8c00">${p.id}</td>
   <td><span style="color:#33ff00;font-weight:600">${escapeHtml(p.name)}</span></td>
@@ -69,7 +80,8 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
   <td>${escapeHtml(p.address_city)}</td>
   <td>${activeBadge(p.is_active)}</td>
 </tr>`;
-          }).join("");
+              })
+              .join("");
       bodyHtml = `
 <div class="inspector-section">
   <h2>Properties</h2>
@@ -79,11 +91,13 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
   </table>
 </div>`;
     } else if (tab === "assets") {
-      const rows = assets.length === 0
-        ? `<tr><td colspan="5" class="inspector-empty">No assets yet.</td></tr>`
-        : assets.map((a) => {
-            const property = a.property_id ? s.properties.get(a.property_id) : null;
-            return `
+      const rows =
+        assets.length === 0
+          ? `<tr><td colspan="5" class="inspector-empty">No assets yet.</td></tr>`
+          : assets
+              .map((a) => {
+                const property = a.property_id ? s.properties.get(a.property_id) : null;
+                return `
 <tr>
   <td style="color:#1a8c00">${a.id}</td>
   <td><span style="color:#33ff00;font-weight:600">${escapeHtml(a.name)}</span></td>
@@ -91,7 +105,8 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
   <td>${escapeHtml(property?.name ?? "—")}</td>
   <td>${activeBadge(a.is_active)}</td>
 </tr>`;
-          }).join("");
+              })
+              .join("");
       bodyHtml = `
 <div class="inspector-section">
   <h2>Assets</h2>
@@ -101,11 +116,13 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
   </table>
 </div>`;
     } else if (tab === "defects") {
-      const rows = defects.length === 0
-        ? `<tr><td colspan="5" class="inspector-empty">No defects yet.</td></tr>`
-        : defects.map((d) => {
-            const asset = d.asset_id ? s.assets.get(d.asset_id) : null;
-            return `
+      const rows =
+        defects.length === 0
+          ? `<tr><td colspan="5" class="inspector-empty">No defects yet.</td></tr>`
+          : defects
+              .map((d) => {
+                const asset = d.asset_id ? s.assets.get(d.asset_id) : null;
+                return `
 <tr>
   <td style="color:#1a8c00">${d.id}</td>
   <td>${escapeHtml(d.description.length > 60 ? d.description.slice(0, 60) + "…" : d.description)}</td>
@@ -113,7 +130,8 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
   <td>${statusBadge(d.status)}</td>
   <td>${escapeHtml(asset?.name ?? "—")}</td>
 </tr>`;
-          }).join("");
+              })
+              .join("");
       bodyHtml = `
 <div class="inspector-section">
   <h2>Defects</h2>

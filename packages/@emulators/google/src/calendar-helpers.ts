@@ -200,7 +200,8 @@ export function updateCalendarEventRecord(
   if (input.end_date_time !== undefined) updates.end_date_time = input.end_date_time;
   if (input.end_date !== undefined) updates.end_date = input.end_date;
   if (input.attendees !== undefined) updates.attendees = input.attendees ?? [];
-  if (input.conference_entry_points !== undefined) updates.conference_entry_points = input.conference_entry_points ?? [];
+  if (input.conference_entry_points !== undefined)
+    updates.conference_entry_points = input.conference_entry_points ?? [];
   if (input.transparency !== undefined) updates.transparency = input.transparency;
   if (input.hangout_link !== undefined) updates.hangout_link = input.hangout_link;
 

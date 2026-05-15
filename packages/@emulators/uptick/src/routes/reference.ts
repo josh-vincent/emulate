@@ -8,12 +8,7 @@ export function referenceRoutes({ app, store }: RouteContext): void {
 
   // Asset types
   app.get("/api/:ver/assettypes/", (c) => {
-    return uptickPaginate(
-      c,
-      us().assetTypes.all(),
-      formatAssetType,
-      `/api/${c.req.param("ver")}/assettypes/`,
-    );
+    return uptickPaginate(c, us().assetTypes.all(), formatAssetType, `/api/${c.req.param("ver")}/assettypes/`);
   });
 
   app.get("/api/:ver/assettypes/:id", (c) => {
@@ -26,12 +21,7 @@ export function referenceRoutes({ app, store }: RouteContext): void {
 
   // Users
   app.get("/api/:ver/users/", (c) => {
-    return uptickPaginate(
-      c,
-      us().users.all(),
-      formatUser,
-      `/api/${c.req.param("ver")}/users/`,
-    );
+    return uptickPaginate(c, us().users.all(), formatUser, `/api/${c.req.param("ver")}/users/`);
   });
 
   app.get("/api/:ver/users/:id", (c) => {

@@ -68,6 +68,7 @@ export async function buildServiceApps(
     const svcSeedConfig = opts.serviceConfigs[name];
     const baseUrl = `${opts.baseUrl}/${name}`;
 
+    // eslint-disable-next-line prefer-const -- reassigned after closure captures it
     let cachedResolver: AppKeyResolver | undefined;
     const appKeyResolver: AppKeyResolver | undefined = loaded.createAppKeyResolver
       ? (appId) => cachedResolver!(appId)
@@ -108,11 +109,7 @@ const AUTH_COLLECTIONS = ["oauthTokens", "refreshTokens", "authCodes", "accessTo
 // _data Map keys (set via store.setData) that hold auth state. These live in
 // the snapshot's "data" object, not "collections", and must be merged back
 // separately. WorkOS stores refresh tokens, sessions, and auth codes here.
-const AUTH_DATA_KEYS = [
-  "workos_refresh_tokens",
-  "workos_sessions",
-  "workos_auth_codes",
-];
+const AUTH_DATA_KEYS = ["workos_refresh_tokens", "workos_sessions", "workos_auth_codes"];
 
 export function reseedApps(
   apps: Map<ServiceName, ServiceApp>,
@@ -147,9 +144,7 @@ export function reseedApps(
     }
 
     // Merge saved auth state back on top of the freshly seeded snapshot
-    const hasSaved =
-      Object.keys(savedCollections).length > 0 ||
-      Object.keys(savedData).length > 0;
+    const hasSaved = Object.keys(savedCollections).length > 0 || Object.keys(savedData).length > 0;
     if (hasSaved) {
       const afterSnap: StoreSnapshot = sa.store.snapshot();
       for (const [colName, colSnap] of Object.entries(savedCollections)) {
@@ -181,11 +176,7 @@ const ROOT_FALLBACK_ROUTES: Array<{ prefix: string; service: ServiceName }> = [
   { prefix: "/portal", service: "workos" },
 ];
 
-async function forwardToService(
-  sa: ServiceApp,
-  raw: Request,
-  pathOverride?: string,
-): Promise<Response> {
+async function forwardToService(sa: ServiceApp, raw: Request, pathOverride?: string): Promise<Response> {
   const url = new URL(raw.url);
   const path = pathOverride ?? url.pathname;
   const targetUrl = new URL(path + url.search, url.origin);
@@ -220,8 +211,8 @@ export function mountDispatcher(parent: Hono<AppEnv>, apps: Map<ServiceName, Ser
   // server as if it were the vendor's root).
   parent.all("*", async (c, next) => {
     const url = new URL(c.req.url);
-    const match = ROOT_FALLBACK_ROUTES.find((r) =>
-      url.pathname === r.prefix || url.pathname.startsWith(`${r.prefix}/`),
+    const match = ROOT_FALLBACK_ROUTES.find(
+      (r) => url.pathname === r.prefix || url.pathname.startsWith(`${r.prefix}/`),
     );
     if (!match) return next();
     const sa = apps.get(match.service);

@@ -39,11 +39,12 @@ export function customerRoutes({ app, store }: RouteContext): void {
     const search = c.req.query("Search");
     if (search) {
       const q = search.toLowerCase();
-      items = items.filter((x) =>
-        (x.company_name ?? "").toLowerCase().includes(q) ||
-        (x.given_name ?? "").toLowerCase().includes(q) ||
-        (x.family_name ?? "").toLowerCase().includes(q) ||
-        (x.email ?? "").toLowerCase().includes(q),
+      items = items.filter(
+        (x) =>
+          (x.company_name ?? "").toLowerCase().includes(q) ||
+          (x.given_name ?? "").toLowerCase().includes(q) ||
+          (x.family_name ?? "").toLowerCase().includes(q) ||
+          (x.email ?? "").toLowerCase().includes(q),
       );
     }
 
@@ -99,11 +100,11 @@ export function customerRoutes({ app, store }: RouteContext): void {
       family_name: (body.FamilyName as string) ?? null,
       title: (body.Title as string) ?? null,
       email: (body.Email as string) ?? null,
-      phone_primary: ((body.Phone as { Primary?: string } | undefined)?.Primary) ?? null,
+      phone_primary: (body.Phone as { Primary?: string } | undefined)?.Primary ?? null,
       website: (body.Website as string) ?? null,
       ein: (body.EIN as string) ?? null,
       address: (body.Address as SimproAddress) ?? null,
-      tax_code_id: ((body.TaxCode as { ID?: number } | undefined)?.ID) ?? null,
+      tax_code_id: (body.TaxCode as { ID?: number } | undefined)?.ID ?? null,
       payment_terms: (body.PaymentTerms as number) ?? null,
       archived: false,
       tags: (body.Tags as string[]) ?? [],

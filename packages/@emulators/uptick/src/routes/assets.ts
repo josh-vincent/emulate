@@ -31,26 +31,19 @@ export function assetRoutes({ app, store }: RouteContext): void {
     const search = c.req.query("search")?.toLowerCase();
     if (search) {
       assets = assets.filter(
-        (a) =>
-          a.name.toLowerCase().includes(search) ||
-          a.asset_number.toLowerCase().includes(search),
+        (a) => a.name.toLowerCase().includes(search) || a.asset_number.toLowerCase().includes(search),
       );
     }
 
-    return uptickPaginate(
-      c,
-      assets,
-      (a) => formatAsset(a, s),
-      `/api/${c.req.param("ver")}/assets/`,
-    );
+    return uptickPaginate(c, assets, (a) => formatAsset(a, s), `/api/${c.req.param("ver")}/assets/`);
   });
 
   app.post("/api/:ver/assets/", async (c) => {
     const s = us();
     const { attributes, relationships } = await parseJsonApiBody(c);
-    const propertyId = relId((relationships.property as Record<string, unknown>));
-    const clientId = relId((relationships.client as Record<string, unknown>));
-    const assetTypeId = relId((relationships.asset_type as Record<string, unknown>));
+    const propertyId = relId(relationships.property as Record<string, unknown>);
+    const clientId = relId(relationships.client as Record<string, unknown>);
+    const assetTypeId = relId(relationships.asset_type as Record<string, unknown>);
 
     // Resolve asset_type_name from id if available
     const assetType = assetTypeId ? s.assetTypes.get(assetTypeId) : null;
@@ -85,9 +78,9 @@ export function assetRoutes({ app, store }: RouteContext): void {
     if (!existing) return uptickError(c, 404, "Not Found");
 
     const { attributes, relationships } = await parseJsonApiBody(c);
-    const propertyId = relId((relationships.property as Record<string, unknown>));
-    const clientId = relId((relationships.client as Record<string, unknown>));
-    const assetTypeId = relId((relationships.asset_type as Record<string, unknown>));
+    const propertyId = relId(relationships.property as Record<string, unknown>);
+    const clientId = relId(relationships.client as Record<string, unknown>);
+    const assetTypeId = relId(relationships.asset_type as Record<string, unknown>);
     const assetType = assetTypeId ? s.assetTypes.get(assetTypeId) : null;
 
     const updated = s.assets.update(id, {

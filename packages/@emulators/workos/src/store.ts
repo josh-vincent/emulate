@@ -129,9 +129,7 @@ export function getWorkOSStore(store: Store) {
       return m;
     },
     getUserMemberships(userId: string): WorkOSMembership[] {
-      return [...memberships.values()].filter(
-        (m) => m.user_id === userId && m.status === "active",
-      );
+      return [...memberships.values()].filter((m) => m.user_id === userId && m.status === "active");
     },
 
     // --- Auth Codes ---
@@ -227,9 +225,7 @@ export function getWorkOSStore(store: Store) {
       return inv;
     },
     listInvitations(organizationId: string): WorkOSInvitation[] {
-      return [...invitations.values()].filter(
-        (i) => i.organization_id === organizationId && i.status === "pending",
-      );
+      return [...invitations.values()].filter((i) => i.organization_id === organizationId && i.status === "pending");
     },
     revokeInvitation(invitationId: string): boolean {
       const inv = invitations.get(invitationId);

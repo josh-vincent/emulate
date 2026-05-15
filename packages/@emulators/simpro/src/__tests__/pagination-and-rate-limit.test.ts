@@ -22,10 +22,9 @@ describe("Simpro pagination + rate limit", () => {
       });
     }
 
-    const res = await app.request(
-      `${BASE}/api/v1.0/companies/0/jobs/12345/sections/?page=2&pageSize=10`,
-      { headers: auth(token) },
-    );
+    const res = await app.request(`${BASE}/api/v1.0/companies/0/jobs/12345/sections/?page=2&pageSize=10`, {
+      headers: auth(token),
+    });
     expect(res.headers.get("Result-Total")).toBe("37"); // 2 seed + 35
     expect(res.headers.get("Result-Pages")).toBe("4");
     expect(res.headers.get("Result-Count")).toBe("10");
@@ -36,10 +35,7 @@ describe("Simpro pagination + rate limit", () => {
   it("pageSize is capped at 250", async () => {
     const { app } = createTestApp();
     const token = await getAccessToken(app);
-    const res = await app.request(
-      `${BASE}/api/v1.0/companies/0/jobs/?pageSize=5000`,
-      { headers: auth(token) },
-    );
+    const res = await app.request(`${BASE}/api/v1.0/companies/0/jobs/?pageSize=5000`, { headers: auth(token) });
     expect(res.status).toBe(200);
     // With only 1 seeded job, total is 1 — but we can assert count fits in 250
     expect(Number(res.headers.get("Result-Count"))).toBeLessThanOrEqual(250);

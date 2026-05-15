@@ -34,9 +34,7 @@ export function sectionRoutes({ app, store }: RouteContext): void {
     const job = ss.jobs.findOneBy("external_id", jobId);
     if (!job) return simproNotFound(c);
 
-    const items = ss.sections
-      .findBy("job_id", jobId)
-      .sort((a, b) => a.display_order - b.display_order);
+    const items = ss.sections.findBy("job_id", jobId).sort((a, b) => a.display_order - b.display_order);
 
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);

@@ -38,9 +38,7 @@ export function contactRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     const companyId = Number(c.req.param("cid")) || 0;
-    const items = ss.contacts
-      .all()
-      .filter((x) => x.company_id === companyId || companyId === 0);
+    const items = ss.contacts.all().filter((x) => x.company_id === companyId || companyId === 0);
     const page = paginate(c, items, parsePagination(c));
     return c.json(page.map(formatContact));
   });
@@ -57,9 +55,7 @@ export function contactRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     const customerId = Number(c.req.param("customerId"));
-    const items = ss.contacts
-      .findBy("customer_id", customerId)
-      .filter((x) => x.type === "Customer");
+    const items = ss.contacts.findBy("customer_id", customerId).filter((x) => x.type === "Customer");
     const page = paginate(c, items, parsePagination(c));
     return c.json(page.map(formatContact));
   });
@@ -77,7 +73,11 @@ export function contactRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.GivenName) return simproValidation(c, "GivenName", "GivenName is required.");
     if (!body.FamilyName) return simproValidation(c, "FamilyName", "FamilyName is required.");
     const companyId = Number(c.req.param("cid")) || 0;
@@ -86,8 +86,8 @@ export function contactRoutes({ app, store }: RouteContext): void {
       company_id: companyId,
       external_id: externalId,
       type: (body.Type as "Customer" | "Site") ?? "Customer",
-      customer_id: ((body.Customer as { ID?: number } | undefined)?.ID) ?? null,
-      site_id: ((body.Site as { ID?: number } | undefined)?.ID) ?? null,
+      customer_id: (body.Customer as { ID?: number } | undefined)?.ID ?? null,
+      site_id: (body.Site as { ID?: number } | undefined)?.ID ?? null,
       salutation: (body.Salutation as string | null) ?? null,
       given_name: body.GivenName as string,
       family_name: body.FamilyName as string,
@@ -110,7 +110,11 @@ export function contactRoutes({ app, store }: RouteContext): void {
     const contact = ss.contacts.findOneBy("external_id", Number(c.req.param("id")));
     if (!contact) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.contacts.update(contact.id, {
       ...(body.GivenName !== undefined && { given_name: body.GivenName as string }),
       ...(body.FamilyName !== undefined && { family_name: body.FamilyName as string }),
@@ -142,7 +146,11 @@ export function contactRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.GivenName) return simproValidation(c, "GivenName", "GivenName is required.");
     if (!body.FamilyName) return simproValidation(c, "FamilyName", "FamilyName is required.");
     const companyId = Number(c.req.param("cid")) || 0;

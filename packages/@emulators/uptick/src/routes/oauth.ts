@@ -22,7 +22,7 @@ export function oauthRoutes({ app }: RouteContext): void {
       grantType = params.get("grant_type") ?? undefined;
     } else {
       // Try JSON fallback
-      const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+      const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
       grantType = typeof body.grant_type === "string" ? body.grant_type : undefined;
     }
 

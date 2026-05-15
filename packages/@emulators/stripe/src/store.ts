@@ -30,6 +30,9 @@ export function getStripeStore(store: Store): StripeStore {
     charges: store.collection<StripeCharge>("stripe.charges", ["stripe_id", "customer_id", "payment_intent_id"]),
     checkoutSessions: store.collection<StripeCheckoutSession>("stripe.checkout_sessions", ["stripe_id", "customer_id"]),
     subscriptions: store.collection<StripeSubscription>("stripe.subscriptions", ["stripe_id", "customer_id"]),
-    subscriptionItems: store.collection<StripeSubscriptionItem>("stripe.subscription_items", ["stripe_id", "subscription_id"]),
+    subscriptionItems: store.collection<StripeSubscriptionItem>("stripe.subscription_items", [
+      "stripe_id",
+      "subscription_id",
+    ]),
   };
 }

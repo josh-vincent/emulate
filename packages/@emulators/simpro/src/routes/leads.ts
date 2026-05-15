@@ -100,13 +100,22 @@ export function leadRoutes({ app, store }: RouteContext): void {
       external_id: externalId,
       name: body.Name as string,
       description: (body.Description as string | null) ?? null,
-      customer_id: body["Customer.ID"] ? Number(body["Customer.ID"]) : (body.Customer && typeof body.Customer === "object" ? Number((body.Customer as Record<string, unknown>).ID ?? 0) || null : null),
-      site_id: body["Site.ID"] ? Number(body["Site.ID"]) : (body.Site && typeof body.Site === "object" ? Number((body.Site as Record<string, unknown>).ID ?? 0) || null : null),
+      customer_id: body["Customer.ID"]
+        ? Number(body["Customer.ID"])
+        : body.Customer && typeof body.Customer === "object"
+          ? Number((body.Customer as Record<string, unknown>).ID ?? 0) || null
+          : null,
+      site_id: body["Site.ID"]
+        ? Number(body["Site.ID"])
+        : body.Site && typeof body.Site === "object"
+          ? Number((body.Site as Record<string, unknown>).ID ?? 0) || null
+          : null,
       status_id: null,
       stage: (body.Stage as SimproLead["stage"]) ?? "New",
-      salesperson_id: body.Salesperson && typeof body.Salesperson === "object"
-        ? Number((body.Salesperson as Record<string, unknown>).ID ?? 0) || null
-        : null,
+      salesperson_id:
+        body.Salesperson && typeof body.Salesperson === "object"
+          ? Number((body.Salesperson as Record<string, unknown>).ID ?? 0) || null
+          : null,
       date_issued: (body.DateIssued as string | null) ?? now.substring(0, 10),
       date_modified: now,
       tags: Array.isArray(body.Tags) ? (body.Tags as string[]) : [],

@@ -49,10 +49,12 @@ export function inspectorRoutes(ctx: RouteContext): void {
     const records = n.allRecordsForConnection(activeConn.id);
     const modelNames = Object.keys(records);
 
-    const sidebar = connections.map((conn) => {
-      const active = conn.id === activeConn.id ? ' class="active"' : "";
-      return `<a href="/?conn=${escapeHtml(conn.id)}"${active}>${escapeHtml(providerIcon(conn.provider))} ${escapeHtml(conn.id)}</a>`;
-    }).join("\n");
+    const sidebar = connections
+      .map((conn) => {
+        const active = conn.id === activeConn.id ? ' class="active"' : "";
+        return `<a href="/?conn=${escapeHtml(conn.id)}"${active}>${escapeHtml(providerIcon(conn.provider))} ${escapeHtml(conn.id)}</a>`;
+      })
+      .join("\n");
 
     // Connection detail card
     const connCard = `
@@ -65,36 +67,55 @@ export function inspectorRoutes(ctx: RouteContext): void {
   </span>
   <span class="user-meta" style="margin-left:auto">${timeAgo(activeConn.updated_at)}</span>
 </div>
-${Object.keys(activeConn.metadata ?? {}).length > 0 ? `
+${
+  Object.keys(activeConn.metadata ?? {}).length > 0
+    ? `
 <div class="info-text" style="margin-top:8px">
   <strong>Metadata:</strong> <code style="color:#1a8c00;font-size:.75rem">${escapeHtml(JSON.stringify(activeConn.metadata))}</code>
-</div>` : ""}
-${activeConn.connection_config && Object.keys(activeConn.connection_config).length > 0 ? `
+</div>`
+    : ""
+}
+${
+  activeConn.connection_config && Object.keys(activeConn.connection_config).length > 0
+    ? `
 <div class="info-text">
   <strong>Config:</strong> <code style="color:#1a8c00;font-size:.75rem">${escapeHtml(JSON.stringify(activeConn.connection_config))}</code>
-</div>` : ""}`;
+</div>`
+    : ""
+}`;
 
     // Records tables per model
-    const recordsHtml = modelNames.length === 0
-      ? `<div class="inspector-empty">No sync records for this connection.</div>`
-      : modelNames.map((model) => {
-        const rows = records[model] ?? [];
-        const keys = rows.length > 0 ? Object.keys(rows[0]).filter((k) => k !== "_nango_metadata").slice(0, 5) : [];
-        const tableRows = rows.slice(0, 25).map((row) =>
-          `<tr>${keys.map((k) => `<td>${escapeHtml(String(row[k] ?? ""))}</td>`).join("")}</tr>`
-        ).join("");
-        const moreNote = rows.length > 25 ? `<p class="info-text">Showing 25 of ${rows.length} records.</p>` : "";
-        return `
+    const recordsHtml =
+      modelNames.length === 0
+        ? `<div class="inspector-empty">No sync records for this connection.</div>`
+        : modelNames
+            .map((model) => {
+              const rows = records[model] ?? [];
+              const keys =
+                rows.length > 0
+                  ? Object.keys(rows[0])
+                      .filter((k) => k !== "_nango_metadata")
+                      .slice(0, 5)
+                  : [];
+              const tableRows = rows
+                .slice(0, 25)
+                .map((row) => `<tr>${keys.map((k) => `<td>${escapeHtml(String(row[k] ?? ""))}</td>`).join("")}</tr>`)
+                .join("");
+              const moreNote = rows.length > 25 ? `<p class="info-text">Showing 25 of ${rows.length} records.</p>` : "";
+              return `
 <div class="inspector-section">
   <h3>${escapeHtml(model)} <span class="badge badge-requested">${rows.length}</span></h3>
-  ${keys.length === 0
-    ? `<div class="inspector-empty">No records.</div>`
-    : `<table class="inspector-table">
+  ${
+    keys.length === 0
+      ? `<div class="inspector-empty">No records.</div>`
+      : `<table class="inspector-table">
     <thead><tr>${keys.map((k) => `<th>${escapeHtml(k)}</th>`).join("")}</tr></thead>
     <tbody>${tableRows}</tbody>
-  </table>${moreNote}`}
+  </table>${moreNote}`
+  }
 </div>`;
-      }).join("");
+            })
+            .join("");
 
     const bodyHtml = `
 <div class="inspector-section">

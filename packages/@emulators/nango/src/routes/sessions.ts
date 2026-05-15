@@ -5,13 +5,17 @@ import type { NangoStoreFacade } from "../store.js";
 function makeSessionToken(): string {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
-  return `nango_session_${Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+  return `nango_session_${Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")}`;
 }
 
 function makeConnectionId(): string {
   const bytes = new Uint8Array(12);
   crypto.getRandomValues(bytes);
-  return `conn_emu_${Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+  return `conn_emu_${Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")}`;
 }
 
 interface EmulatorSession {
@@ -251,9 +255,7 @@ export function sessionRoutes(app: Hono<AppEnv>, baseUrl: string, ns: NangoStore
       //   QuickBooks — realmId (company ID): required for all API calls
       // Seed stable fake values so the resolve helpers succeed in dev.
       const isXero = session.provider === "xero";
-      const isQBO =
-        session.provider === "quickbooks" ||
-        session.provider === "quickbooks-sandbox";
+      const isQBO = session.provider === "quickbooks" || session.provider === "quickbooks-sandbox";
       const connectionConfig: Record<string, unknown> = isXero
         ? { tenantId: "emu-xero-tenant-00000000-0000-0000-0000-000000000001" }
         : isQBO

@@ -56,9 +56,7 @@ export function quoteSectionRoutes({ app, store }: RouteContext): void {
     const quoteId = Number(c.req.param("qid"));
     const quote = ss.quotes.findOneBy("external_id", quoteId);
     if (!quote) return simproNotFound(c);
-    const items = ss.quoteSections
-      .findBy("quote_id", quoteId)
-      .sort((a, b) => a.display_order - b.display_order);
+    const items = ss.quoteSections.findBy("quote_id", quoteId).sort((a, b) => a.display_order - b.display_order);
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);
     return c.json(page.map(formatQuoteSection));
@@ -80,12 +78,15 @@ export function quoteSectionRoutes({ app, store }: RouteContext): void {
     const quote = ss.quotes.findOneBy("external_id", quoteId);
     if (!quote) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "quoteSections", companyId);
     const siblings = ss.quoteSections.findBy("quote_id", quoteId);
-    const displayOrder =
-      siblings.length === 0 ? 1 : Math.max(...siblings.map((s) => s.display_order)) + 1;
+    const displayOrder = siblings.length === 0 ? 1 : Math.max(...siblings.map((s) => s.display_order)) + 1;
     const s = ss.quoteSections.insert({
       company_id: companyId,
       external_id: externalId,
@@ -105,7 +106,11 @@ export function quoteSectionRoutes({ app, store }: RouteContext): void {
     const s = ss.quoteSections.findOneBy("external_id", Number(c.req.param("sid")));
     if (!s || s.quote_id !== quoteId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.quoteSections.update(s.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
@@ -160,7 +165,11 @@ export function quoteSectionRoutes({ app, store }: RouteContext): void {
     const section = ss.quoteSections.findOneBy("external_id", sectionId);
     if (!section) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "quoteCostCenters", companyId);
     const now = nowIso();
@@ -195,11 +204,17 @@ export function quoteSectionRoutes({ app, store }: RouteContext): void {
     const cc = ss.quoteCostCenters.findOneBy("external_id", Number(c.req.param("ccid")));
     if (!cc || cc.section_id !== sectionId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.quoteCostCenters.update(cc.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
-      ...(body.BillingType !== undefined && { billing_type: body.BillingType as "TimeAndMaterials" | "Fixed" | "FlatRate" }),
+      ...(body.BillingType !== undefined && {
+        billing_type: body.BillingType as "TimeAndMaterials" | "Fixed" | "FlatRate",
+      }),
       ...(body.Billable !== undefined && { billable: Boolean(body.Billable) }),
       ...(body.Stage !== undefined && { stage: Number(body.Stage) }),
       ...(body.Markup !== undefined && { markup: Number(body.Markup) }),

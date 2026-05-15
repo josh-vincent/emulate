@@ -80,7 +80,11 @@ export function contractorResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const contractorRef = body.Contractor as { ID?: number } | undefined;
     if (!contractorRef?.ID) return simproValidation(c, "Contractor.ID", "Contractor is required.");
     const companyId = Number(c.req.param("cid")) || 0;
@@ -106,7 +110,11 @@ export function contractorResourceRoutes({ app, store }: RouteContext): void {
     const ci = ss.contractorInvoices.findOneBy("external_id", Number(c.req.param("id")));
     if (!ci) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.contractorInvoices.update(ci.id, {
       ...(body.Stage !== undefined && { stage: body.Stage as SimproContractorInvoice["stage"] }),
       ...(body.TotalExTax !== undefined && { total_ex_tax: Number(body.TotalExTax) }),

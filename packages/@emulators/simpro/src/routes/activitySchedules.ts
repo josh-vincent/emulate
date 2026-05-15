@@ -70,7 +70,11 @@ export function activityScheduleRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
 
     const techRef = body.Technician as { ID?: number } | undefined;
     if (!techRef?.ID) return simproValidation(c, "Technician.ID", "Technician.ID is required.");
@@ -99,7 +103,11 @@ export function activityScheduleRoutes({ app, store }: RouteContext): void {
     const a = ss.activitySchedules.findOneBy("external_id", Number(c.req.param("id")));
     if (!a) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.activitySchedules.update(a.id, {
       ...((body.Technician as { ID?: number } | undefined)?.ID !== undefined && {
         technician_id: (body.Technician as { ID: number }).ID,

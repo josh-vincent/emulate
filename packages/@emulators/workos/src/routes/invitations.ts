@@ -2,11 +2,7 @@ import type { AppEnv, WebhookDispatcher } from "@emulators/core";
 import type { Hono } from "hono";
 import type { WorkOSStoreFacade } from "../store.js";
 
-export function invitationRoutes(
-  app: Hono<AppEnv>,
-  ws: WorkOSStoreFacade,
-  webhooks: WebhookDispatcher,
-): void {
+export function invitationRoutes(app: Hono<AppEnv>, ws: WorkOSStoreFacade, webhooks: WebhookDispatcher): void {
   app.post("/user_management/invitations", async (c) => {
     const body = await c.req.json<{
       email: string;

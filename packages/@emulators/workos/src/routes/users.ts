@@ -9,8 +9,7 @@ export function userRoutes(app: Hono<AppEnv>, ws: WorkOSStoreFacade): void {
     const statusFilter = c.req.query("statuses[]") ?? "active";
 
     const memberships = ws.getUserMemberships(userId);
-    const filtered =
-      statusFilter === "active" ? memberships.filter((m) => m.status === "active") : memberships;
+    const filtered = statusFilter === "active" ? memberships.filter((m) => m.status === "active") : memberships;
 
     const data = filtered.map((m) => ({
       ...m,
@@ -27,8 +26,7 @@ export function userRoutes(app: Hono<AppEnv>, ws: WorkOSStoreFacade): void {
     const statusFilter = c.req.query("statuses[]") ?? "active";
 
     const memberships = userId ? ws.getUserMemberships(userId) : [];
-    const filtered =
-      statusFilter === "active" ? memberships.filter((m) => m.status === "active") : memberships;
+    const filtered = statusFilter === "active" ? memberships.filter((m) => m.status === "active") : memberships;
 
     const data = filtered.map((m) => ({
       ...m,

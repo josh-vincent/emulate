@@ -95,7 +95,11 @@ function registerLineItemRoutes(
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const ccId = Number(c.req.param(ccIdParam));
     const externalId = nextExternalId(ss, "catalogItems", companyId);
@@ -137,7 +141,11 @@ function registerLineItemRoutes(
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const ccId = Number(c.req.param(ccIdParam));
     const externalId = nextExternalId(ss, "labourItems", companyId);
@@ -178,7 +186,11 @@ function registerLineItemRoutes(
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const ccId = Number(c.req.param(ccIdParam));
     const externalId = nextExternalId(ss, "oneOffItems", companyId);
@@ -219,7 +231,11 @@ function registerLineItemRoutes(
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const ccId = Number(c.req.param(ccIdParam));
     const externalId = nextExternalId(ss, "prebuildItems", companyId);
@@ -280,7 +296,9 @@ export function costCenterLineItemRoutes({ app, store }: RouteContext): void {
     const items = ss.costCenters.all().filter((cc) => cc.company_id === companyId || companyId === 0);
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);
-    return c.json(page.map((cc) => ({ ID: cc.external_id, Name: cc.name, Job: { ID: cc.job_id }, Section: { ID: cc.section_id } })));
+    return c.json(
+      page.map((cc) => ({ ID: cc.external_id, Name: cc.name, Job: { ID: cc.job_id }, Section: { ID: cc.section_id } })),
+    );
   });
 
   app.get("/api/v1.0/companies/:cid/jobCostCenters/:id", (c) => {

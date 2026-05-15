@@ -4,7 +4,16 @@ import { getJWKS, signJWT } from "../keys.js";
 import type { WorkOSStoreFacade } from "../store.js";
 import { randomHex } from "../helpers.js";
 
-function buildUserObject(user: { id: string; email: string; first_name: string | null; last_name: string | null; email_verified: boolean; profile_picture_url: string | null; created_at: string; updated_at: string }) {
+function buildUserObject(user: {
+  id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  email_verified: boolean;
+  profile_picture_url: string | null;
+  created_at: string;
+  updated_at: string;
+}) {
   return {
     id: user.id,
     email: user.email,
@@ -101,9 +110,7 @@ export function oauthRoutes(app: Hono<AppEnv>, ws: WorkOSStoreFacade, baseUrl: s
     const rows = users
       .map((u) => {
         const memberships = ws.getUserMemberships(u.id);
-        const orgNames = memberships
-          .map((m) => ws.getOrg(m.organization_id)?.name ?? m.organization_id)
-          .join(", ");
+        const orgNames = memberships.map((m) => ws.getOrg(m.organization_id)?.name ?? m.organization_id).join(", ");
         return `<button type="submit" name="user_id" value="${u.id}"
           style="display:block;width:100%;padding:12px 16px;margin:8px 0;
                  border:1px solid #d0c9ba;border-radius:8px;background:#fff;
@@ -196,11 +203,13 @@ export function oauthRoutes(app: Hono<AppEnv>, ws: WorkOSStoreFacade, baseUrl: s
     if (grantType === "urn:workos:oauth:grant-type:organization-selection") {
       const pendingToken = body.pending_authentication_token ?? body.pendingAuthenticationToken;
       const orgId = body.organization_id ?? body.organizationId;
-      if (!pendingToken) return c.json({ error: "invalid_grant", error_description: "Missing pending_authentication_token" }, 400);
+      if (!pendingToken)
+        return c.json({ error: "invalid_grant", error_description: "Missing pending_authentication_token" }, 400);
       if (!orgId) return c.json({ error: "invalid_grant", error_description: "Missing organization_id" }, 400);
 
       const pending = ws.consumePendingAuthToken(pendingToken);
-      if (!pending) return c.json({ error: "invalid_grant", error_description: "Invalid or expired pending token" }, 400);
+      if (!pending)
+        return c.json({ error: "invalid_grant", error_description: "Invalid or expired pending token" }, 400);
 
       const user = ws.getUser(pending.user_id);
       if (!user) return c.json({ error: "user_not_found" }, 404);
@@ -321,7 +330,11 @@ export function oauthRoutes(app: Hono<AppEnv>, ws: WorkOSStoreFacade, baseUrl: s
 
   // Organization selection
   app.post("/user_management/authenticate/organization_selection", async (c) => {
-    const body = await c.req.json<{ client_id: string; pending_authentication_token: string; organization_id: string }>();
+    const body = await c.req.json<{
+      client_id: string;
+      pending_authentication_token: string;
+      organization_id: string;
+    }>();
     const pending = ws.consumePendingAuthToken(body.pending_authentication_token);
     if (!pending) {
       return c.json({ error: "invalid_grant", error_description: "Invalid or expired pending token" }, 400);

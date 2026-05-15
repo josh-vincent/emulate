@@ -103,7 +103,11 @@ export function vendorSubResourceRoutes({ app, store }: RouteContext): void {
     const vendor = ss.vendors.findOneBy("external_id", vendorId);
     if (!vendor) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "vendorBranches", companyId);
     const b = ss.vendorBranches.insert({
@@ -125,7 +129,11 @@ export function vendorSubResourceRoutes({ app, store }: RouteContext): void {
     const b = ss.vendorBranches.findOneBy("external_id", Number(c.req.param("bid")));
     if (!b || b.vendor_id !== vendorId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.vendorBranches.update(b.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.Address !== undefined && { address: body.Address as Record<string, string> | null }),
@@ -175,7 +183,11 @@ export function vendorSubResourceRoutes({ app, store }: RouteContext): void {
     const vendor = ss.vendors.findOneBy("external_id", vendorId);
     if (!vendor) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "vendorContacts", companyId);
     const vc = ss.vendorContacts.insert({
@@ -198,7 +210,11 @@ export function vendorSubResourceRoutes({ app, store }: RouteContext): void {
     const vc = ss.vendorContacts.findOneBy("external_id", Number(c.req.param("ctid")));
     if (!vc || vc.vendor_id !== vendorId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.vendorContacts.update(vc.id, {
       ...(body.GivenName !== undefined && { given_name: body.GivenName as string }),
       ...(body.FamilyName !== undefined && { family_name: body.FamilyName as string }),
@@ -249,7 +265,11 @@ export function vendorSubResourceRoutes({ app, store }: RouteContext): void {
     const vo = ss.vendorOrders.findOneBy("external_id", voId);
     if (!vo) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "vendorOrderCatalogs", companyId);
     const voc = ss.vendorOrderCatalogs.insert({
@@ -272,7 +292,11 @@ export function vendorSubResourceRoutes({ app, store }: RouteContext): void {
     const voc = ss.vendorOrderCatalogs.findOneBy("external_id", Number(c.req.param("catid")));
     if (!voc || voc.vendor_order_id !== voId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.vendorOrderCatalogs.update(voc.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.Quantity !== undefined && { quantity: Number(body.Quantity) }),
@@ -322,7 +346,11 @@ export function vendorSubResourceRoutes({ app, store }: RouteContext): void {
     const vo = ss.vendorOrders.findOneBy("external_id", voId);
     if (!vo) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "vendorReceipts", companyId);
     const now = nowIso();
@@ -343,7 +371,11 @@ export function vendorSubResourceRoutes({ app, store }: RouteContext): void {
     const vr = ss.vendorReceipts.findOneBy("external_id", Number(c.req.param("rid")));
     if (!vr || vr.vendor_order_id !== voId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.vendorReceipts.update(vr.id, {
       ...(body.DateReceived !== undefined && { date_received: body.DateReceived as string }),
       ...(body.Notes !== undefined && { notes: body.Notes as string | null }),

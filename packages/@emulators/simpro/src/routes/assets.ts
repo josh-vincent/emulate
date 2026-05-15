@@ -57,7 +57,11 @@ export function assetRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const customerRef = body.Customer as { ID?: number } | undefined;
     if (!customerRef?.ID) return simproValidation(c, "Customer.ID", "Customer is required.");
     const companyId = Number(c.req.param("cid")) || 0;
@@ -67,7 +71,7 @@ export function assetRoutes({ app, store }: RouteContext): void {
       company_id: companyId,
       external_id: externalId,
       customer_id: customerRef.ID,
-      site_id: ((body.Site as { ID?: number } | undefined)?.ID) ?? null,
+      site_id: (body.Site as { ID?: number } | undefined)?.ID ?? null,
       name: (body.Name as string) ?? `Asset ${externalId}`,
       description: (body.Description as string | null) ?? null,
       asset_type: (body.AssetType as string | null) ?? null,
@@ -87,7 +91,11 @@ export function assetRoutes({ app, store }: RouteContext): void {
     const a = ss.assets.findOneBy("external_id", Number(c.req.param("id")));
     if (!a) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.assets.update(a.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
@@ -109,10 +117,14 @@ export function assetRoutes({ app, store }: RouteContext): void {
     const a = ss.assets.findOneBy("external_id", Number(c.req.param("id")));
     if (!a) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const updated = ss.assets.update(a.id, {
-      customer_id: ((body.Customer as { ID?: number } | undefined)?.ID) ?? a.customer_id,
-      site_id: ((body.Site as { ID?: number } | undefined)?.ID) ?? null,
+      customer_id: (body.Customer as { ID?: number } | undefined)?.ID ?? a.customer_id,
+      site_id: (body.Site as { ID?: number } | undefined)?.ID ?? null,
       name: (body.Name as string) ?? a.name,
       description: (body.Description as string | null) ?? null,
       asset_type: (body.AssetType as string | null) ?? null,

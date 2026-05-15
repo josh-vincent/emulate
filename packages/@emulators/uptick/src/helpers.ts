@@ -15,7 +15,7 @@ export async function parseJsonApiBody(c: Context): Promise<{
   relationships: Record<string, unknown>;
 }> {
   try {
-    const body = await c.req.json() as Record<string, unknown>;
+    const body = (await c.req.json()) as Record<string, unknown>;
     const data = (body.data ?? body) as Record<string, unknown>;
     return {
       attributes: (data.attributes ?? {}) as Record<string, unknown>,

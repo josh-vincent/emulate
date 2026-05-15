@@ -77,16 +77,12 @@ export function quoteRoutes({ app, store }: RouteContext): void {
       description: (body.Description as string | null) ?? null,
       order_no: (body.OrderNo as string | null) ?? null,
       customer_id: customerRef.ID,
-      customer_contact_id:
-        ((body.CustomerContact as { ID?: number } | undefined)?.ID) ?? null,
-      site_id: ((body.Site as { ID?: number } | undefined)?.ID) ?? null,
-      site_contact_id:
-        ((body.SiteContact as { ID?: number } | undefined)?.ID) ?? null,
-      salesperson_id:
-        ((body.Salesperson as { ID?: number } | undefined)?.ID) ?? null,
-      project_manager_id:
-        ((body.ProjectManager as { ID?: number } | undefined)?.ID) ?? null,
-      status_id: ((body.Status as { ID?: number } | undefined)?.ID) ?? null,
+      customer_contact_id: (body.CustomerContact as { ID?: number } | undefined)?.ID ?? null,
+      site_id: (body.Site as { ID?: number } | undefined)?.ID ?? null,
+      site_contact_id: (body.SiteContact as { ID?: number } | undefined)?.ID ?? null,
+      salesperson_id: (body.Salesperson as { ID?: number } | undefined)?.ID ?? null,
+      project_manager_id: (body.ProjectManager as { ID?: number } | undefined)?.ID ?? null,
+      status_id: (body.Status as { ID?: number } | undefined)?.ID ?? null,
       stage: "InProgress",
       total_ex_tax: 0,
       total_tax: 0,
@@ -106,11 +102,17 @@ export function quoteRoutes({ app, store }: RouteContext): void {
     const q = ss.quotes.findOneBy("external_id", Number(c.req.param("id")));
     if (!q) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.quotes.update(q.id, {
       ...(body.Name !== undefined && { name: String(body.Name) }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
-      ...(body.Stage !== undefined && { stage: body.Stage as "InProgress" | "Complete" | "Approved" | "Cancelled" | "Converted" }),
+      ...(body.Stage !== undefined && {
+        stage: body.Stage as "InProgress" | "Complete" | "Approved" | "Cancelled" | "Converted",
+      }),
       ...(body.DueDate !== undefined && { due_date: body.DueDate as string | null }),
       ...(body.Status !== undefined && { status_id: (body.Status as { ID?: number }).ID ?? null }),
       ...(body.OrderNo !== undefined && { order_no: body.OrderNo as string | null }),
@@ -126,16 +128,20 @@ export function quoteRoutes({ app, store }: RouteContext): void {
     const q = ss.quotes.findOneBy("external_id", Number(c.req.param("id")));
     if (!q) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const updated = ss.quotes.update(q.id, {
       name: (body.Name as string) ?? q.name,
       description: (body.Description as string | null) ?? null,
       order_no: (body.OrderNo as string | null) ?? null,
-      customer_id: ((body.Customer as { ID?: number } | undefined)?.ID) ?? q.customer_id,
-      site_id: ((body.Site as { ID?: number } | undefined)?.ID) ?? null,
-      salesperson_id: ((body.Salesperson as { ID?: number } | undefined)?.ID) ?? null,
-      project_manager_id: ((body.ProjectManager as { ID?: number } | undefined)?.ID) ?? null,
-      status_id: ((body.Status as { ID?: number } | undefined)?.ID) ?? null,
+      customer_id: (body.Customer as { ID?: number } | undefined)?.ID ?? q.customer_id,
+      site_id: (body.Site as { ID?: number } | undefined)?.ID ?? null,
+      salesperson_id: (body.Salesperson as { ID?: number } | undefined)?.ID ?? null,
+      project_manager_id: (body.ProjectManager as { ID?: number } | undefined)?.ID ?? null,
+      status_id: (body.Status as { ID?: number } | undefined)?.ID ?? null,
       stage: (body.Stage as "InProgress" | "Complete" | "Approved" | "Cancelled" | "Converted") ?? q.stage,
       due_date: (body.DueDate as string | null) ?? null,
       tags: (body.Tags as string[]) ?? [],
@@ -162,7 +168,11 @@ export function quoteRoutes({ app, store }: RouteContext): void {
     if (!q) return simproNotFound(c);
     if (q.stage === "Converted") return simproError(c, 409, "Quote has already been converted.");
     let body: Record<string, unknown> = {};
-    try { body = await parseJson(c); } catch { /* body is optional */ }
+    try {
+      body = await parseJson(c);
+    } catch {
+      /* body is optional */
+    }
     const now = nowIso();
     const jobId = nextExternalId(ss, "jobs", companyId);
     const job = ss.jobs.insert({

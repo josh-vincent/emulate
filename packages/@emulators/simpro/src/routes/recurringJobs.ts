@@ -77,7 +77,11 @@ export function recurringJobRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const customerRef = body.Customer as { ID?: number } | undefined;
     if (!customerRef?.ID) return simproValidation(c, "Customer.ID", "Customer is required.");
@@ -107,7 +111,11 @@ export function recurringJobRoutes({ app, store }: RouteContext): void {
     const rj = ss.recurringJobs.findOneBy("external_id", Number(c.req.param("rjid")));
     if (!rj) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.recurringJobs.update(rj.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
@@ -158,7 +166,11 @@ export function recurringJobRoutes({ app, store }: RouteContext): void {
     const rj = ss.recurringJobs.findOneBy("external_id", rjId);
     if (!rj) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "recurringJobSections", companyId);
@@ -180,7 +192,11 @@ export function recurringJobRoutes({ app, store }: RouteContext): void {
     const s = ss.recurringJobSections.findOneBy("external_id", Number(c.req.param("sid")));
     if (!s || s.recurring_job_id !== rjId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.recurringJobSections.update(s.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
     });
@@ -206,9 +222,9 @@ export function recurringJobRoutes({ app, store }: RouteContext): void {
     if (blocked) return blocked;
     const rjId = Number(c.req.param("rjid"));
     const sId = Number(c.req.param("sid"));
-    const items = ss.recurringJobCostCenters.all().filter(
-      (cc) => cc.recurring_job_id === rjId && cc.section_id === sId,
-    );
+    const items = ss.recurringJobCostCenters
+      .all()
+      .filter((cc) => cc.recurring_job_id === rjId && cc.section_id === sId);
     return c.json(paginate(c, items, parsePagination(c)).map(formatRecurringJobCostCenter));
   });
 
@@ -230,7 +246,11 @@ export function recurringJobRoutes({ app, store }: RouteContext): void {
     const section = ss.recurringJobSections.findOneBy("external_id", sId);
     if (!section || section.recurring_job_id !== rjId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "recurringJobCostCenters", companyId);
@@ -255,10 +275,16 @@ export function recurringJobRoutes({ app, store }: RouteContext): void {
     const cc = ss.recurringJobCostCenters.findOneBy("external_id", Number(c.req.param("ccid")));
     if (!cc || cc.recurring_job_id !== rjId || cc.section_id !== sId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.recurringJobCostCenters.update(cc.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
-      ...(body.BillingType !== undefined && { billing_type: body.BillingType as SimproRecurringJobCostCenter["billing_type"] }),
+      ...(body.BillingType !== undefined && {
+        billing_type: body.BillingType as SimproRecurringJobCostCenter["billing_type"],
+      }),
       ...(body.ExTax !== undefined && { ex_tax: Number(body.ExTax) }),
       ...(body.IncTax !== undefined && { inc_tax: Number(body.IncTax) }),
     });

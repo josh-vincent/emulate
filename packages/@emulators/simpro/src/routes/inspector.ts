@@ -14,9 +14,7 @@ const TABS: InspectorTab[] = [
 
 const table = (headers: string[], rows: string[][]): string => {
   const head = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
-  const body = rows
-    .map((r) => `<tr>${r.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`)
-    .join("");
+  const body = rows.map((r) => `<tr>${r.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("");
   return `<table class="inspector-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 };
 
@@ -44,19 +42,8 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
   app.get("/simpro/inspector/jobs", (c) => {
     const rows = ss.jobs
       .all()
-      .map((j) => [
-        String(j.external_id),
-        j.type,
-        j.name,
-        String(j.stage),
-        j.order_no ?? "",
-        String(j.total_ex_tax),
-      ]);
-    return render(
-      "jobs",
-      table(["ID", "Type", "Name", "Stage", "OrderNo", "ExTax"], rows),
-      c,
-    );
+      .map((j) => [String(j.external_id), j.type, j.name, String(j.stage), j.order_no ?? "", String(j.total_ex_tax)]);
+    return render("jobs", table(["ID", "Type", "Name", "Stage", "OrderNo", "ExTax"], rows), c);
   });
 
   app.get("/simpro/inspector/sections", (c) => {
@@ -78,11 +65,7 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
         String(cc.stage),
         String(cc.ex_tax),
       ]);
-    return render(
-      "costCenters",
-      table(["ID", "Job", "Section", "Name", "Billing", "Stage", "ExTax"], rows),
-      c,
-    );
+    return render("costCenters", table(["ID", "Job", "Section", "Name", "Billing", "Stage", "ExTax"], rows), c);
   });
 
   app.get("/simpro/inspector/invoices", (c) => {
@@ -96,20 +79,14 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
         String(i.total_ex_tax),
         String(i.paid),
       ]);
-    return render(
-      "invoices",
-      table(["ID", "Job", "Type", "Stage", "ExTax", "Paid"], rows),
-      c,
-    );
+    return render("invoices", table(["ID", "Job", "Type", "Stage", "ExTax", "Paid"], rows), c);
   });
 
   app.get("/simpro/inspector/webhooks", (c) => {
     const subRows = ss.webhookSubscriptions
       .all()
       .map((w) => [String(w.external_id), w.url, w.events.join(", "), w.active ? "yes" : "no"]);
-    const evRows = ss.webhookEvents
-      .all()
-      .map((e) => [String(e.id), e.event, String(e.entity_id), e.status]);
+    const evRows = ss.webhookEvents.all().map((e) => [String(e.id), e.event, String(e.entity_id), e.status]);
     const body = `
       <h3>Subscriptions</h3>
       ${table(["ID", "URL", "Events", "Active"], subRows)}

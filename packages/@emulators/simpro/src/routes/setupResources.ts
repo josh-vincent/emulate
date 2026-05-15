@@ -66,9 +66,7 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     const companyId = Number(c.req.param("cid")) || 0;
-    const items = ss.setupCustomerGroups
-      .all()
-      .filter((g) => g.company_id === companyId || companyId === 0);
+    const items = ss.setupCustomerGroups.all().filter((g) => g.company_id === companyId || companyId === 0);
     const page = paginate(c, items, parsePagination(c));
     return c.json(page.map((g) => ({ ID: g.external_id, Name: g.name })));
   });
@@ -85,11 +83,19 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupCustomerGroups", companyId);
-    const g = ss.setupCustomerGroups.insert({ company_id: companyId, external_id: externalId, name: body.Name as string });
+    const g = ss.setupCustomerGroups.insert({
+      company_id: companyId,
+      external_id: externalId,
+      name: body.Name as string,
+    });
     return c.json({ ID: g.external_id, Name: g.name }, 201);
   });
 
@@ -99,7 +105,11 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const g = ss.setupCustomerGroups.findOneBy("external_id", Number(c.req.param("id")));
     if (!g) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.setupCustomerGroups.update(g.id, { ...(body.Name !== undefined && { name: body.Name as string }) });
     return c.body(null, 204);
   });
@@ -118,9 +128,7 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     const companyId = Number(c.req.param("cid")) || 0;
-    const items = ss.setupActivities
-      .all()
-      .filter((a) => a.company_id === companyId || companyId === 0);
+    const items = ss.setupActivities.all().filter((a) => a.company_id === companyId || companyId === 0);
     const page = paginate(c, items, parsePagination(c));
     return c.json(page.map((a) => ({ ID: a.external_id, Name: a.name, Color: a.color, Archived: a.archived })));
   });
@@ -137,7 +145,11 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupActivities", companyId);
@@ -157,7 +169,11 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const a = ss.setupActivities.findOneBy("external_id", Number(c.req.param("id")));
     if (!a) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.setupActivities.update(a.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.Color !== undefined && { color: body.Color as string | null }),
@@ -182,7 +198,9 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const companyId = Number(c.req.param("cid")) || 0;
     const items = ss.setupTeams.all().filter((t) => t.company_id === companyId || companyId === 0);
     const page = paginate(c, items, parsePagination(c));
-    return c.json(page.map((t) => ({ ID: t.external_id, Name: t.name, Members: t.member_ids.map((id) => ({ ID: id })) })));
+    return c.json(
+      page.map((t) => ({ ID: t.external_id, Name: t.name, Members: t.member_ids.map((id) => ({ ID: id })) })),
+    );
   });
 
   app.get("/api/v1.0/companies/:cid/setup/teams/:id", (c) => {
@@ -197,14 +215,23 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupTeams", companyId);
     const memberIds = Array.isArray(body.Members)
       ? (body.Members as Record<string, unknown>[]).map((m) => Number(m.ID ?? 0)).filter(Boolean)
       : [];
-    const t = ss.setupTeams.insert({ company_id: companyId, external_id: externalId, name: body.Name as string, member_ids: memberIds });
+    const t = ss.setupTeams.insert({
+      company_id: companyId,
+      external_id: externalId,
+      name: body.Name as string,
+      member_ids: memberIds,
+    });
     return c.json({ ID: t.external_id, Name: t.name, Members: t.member_ids.map((id) => ({ ID: id })) }, 201);
   });
 
@@ -230,11 +257,19 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupSecurityGroups", companyId);
-    const g = ss.setupSecurityGroups.insert({ company_id: companyId, external_id: externalId, name: body.Name as string });
+    const g = ss.setupSecurityGroups.insert({
+      company_id: companyId,
+      external_id: externalId,
+      name: body.Name as string,
+    });
     return c.json({ ID: g.external_id, Name: g.name }, 201);
   });
 
@@ -262,7 +297,11 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupStatusCodes", companyId);
@@ -300,7 +339,11 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupStatusCodes", companyId);
@@ -338,7 +381,11 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupStatusCodes", companyId);
@@ -376,11 +423,20 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupTags", companyId);
-    const t = ss.setupTags.insert({ company_id: companyId, external_id: externalId, entity_type: "customers", name: body.Name as string });
+    const t = ss.setupTags.insert({
+      company_id: companyId,
+      external_id: externalId,
+      entity_type: "customers",
+      name: body.Name as string,
+    });
     return c.json({ ID: t.external_id, Name: t.name }, 201);
   });
 
@@ -408,11 +464,20 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupTags", companyId);
-    const t = ss.setupTags.insert({ company_id: companyId, external_id: externalId, entity_type: "projects", name: body.Name as string });
+    const t = ss.setupTags.insert({
+      company_id: companyId,
+      external_id: externalId,
+      entity_type: "projects",
+      name: body.Name as string,
+    });
     return c.json({ ID: t.external_id, Name: t.name }, 201);
   });
 
@@ -440,11 +505,20 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupArchiveReasons", companyId);
-    const r = ss.setupArchiveReasons.insert({ company_id: companyId, external_id: externalId, entity_type: "jobs", name: body.Name as string });
+    const r = ss.setupArchiveReasons.insert({
+      company_id: companyId,
+      external_id: externalId,
+      entity_type: "jobs",
+      name: body.Name as string,
+    });
     return c.json({ ID: r.external_id, Name: r.name }, 201);
   });
 
@@ -472,11 +546,20 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupArchiveReasons", companyId);
-    const r = ss.setupArchiveReasons.insert({ company_id: companyId, external_id: externalId, entity_type: "quotes", name: body.Name as string });
+    const r = ss.setupArchiveReasons.insert({
+      company_id: companyId,
+      external_id: externalId,
+      entity_type: "quotes",
+      name: body.Name as string,
+    });
     return c.json({ ID: r.external_id, Name: r.name }, 201);
   });
 
@@ -504,11 +587,20 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupArchiveReasons", companyId);
-    const r = ss.setupArchiveReasons.insert({ company_id: companyId, external_id: externalId, entity_type: "leads", name: body.Name as string });
+    const r = ss.setupArchiveReasons.insert({
+      company_id: companyId,
+      external_id: externalId,
+      entity_type: "leads",
+      name: body.Name as string,
+    });
     return c.json({ ID: r.external_id, Name: r.name }, 201);
   });
 
@@ -519,7 +611,9 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const companyId = Number(c.req.param("cid")) || 0;
     const items = ss.setupMemberships.all().filter((m) => m.company_id === companyId || companyId === 0);
     const page = paginate(c, items, parsePagination(c));
-    return c.json(page.map((m) => ({ ID: m.external_id, Name: m.name, DurationMonths: m.duration_months, Price: m.price })));
+    return c.json(
+      page.map((m) => ({ ID: m.external_id, Name: m.name, DurationMonths: m.duration_months, Price: m.price })),
+    );
   });
 
   app.get("/api/v1.0/companies/:cid/setup/memberships/:id", (c) => {
@@ -534,7 +628,11 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupMemberships", companyId);
@@ -570,7 +668,11 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupResponseTimes", companyId);
@@ -605,7 +707,11 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupChartOfAccounts", companyId);
@@ -641,11 +747,19 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupPaymentMethods", companyId);
-    const m = ss.setupPaymentMethods.insert({ company_id: companyId, external_id: externalId, name: body.Name as string });
+    const m = ss.setupPaymentMethods.insert({
+      company_id: companyId,
+      external_id: externalId,
+      name: body.Name as string,
+    });
     return c.json({ ID: m.external_id, Name: m.name }, 201);
   });
 
@@ -671,7 +785,11 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "setupPaymentTerms", companyId);
@@ -691,7 +809,11 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const entityType = c.req.param("entityType");
@@ -733,7 +855,11 @@ export function setupResourceRoutes({ app, store }: RouteContext): void {
     const f = ss.setupCustomFieldDefs.findOneBy("external_id", Number(c.req.param("cfid")));
     if (!f) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.setupCustomFieldDefs.update(f.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.FieldType !== undefined && { field_type: body.FieldType as SimproSetupCustomField["field_type"] }),

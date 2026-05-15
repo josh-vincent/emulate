@@ -34,7 +34,10 @@ export function staffRoutes({ app, store }: RouteContext): void {
     const search = c.req.query("Search");
     if (search) {
       const q = search.toLowerCase();
-      items = items.filter((s) => `${s.given_name} ${s.family_name}`.toLowerCase().includes(q) || (s.email ?? "").toLowerCase().includes(q));
+      items = items.filter(
+        (s) =>
+          `${s.given_name} ${s.family_name}`.toLowerCase().includes(q) || (s.email ?? "").toLowerCase().includes(q),
+      );
     }
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);
@@ -53,7 +56,11 @@ export function staffRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.GivenName) return simproValidation(c, "GivenName", "GivenName is required.");
     if (!body.FamilyName) return simproValidation(c, "FamilyName", "FamilyName is required.");
     const companyId = Number(c.req.param("cid")) || 0;
@@ -75,7 +82,11 @@ export function staffRoutes({ app, store }: RouteContext): void {
     const staff = ss.staff.findOneBy("external_id", Number(c.req.param("id")));
     if (!staff) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.staff.update(staff.id, {
       ...(body.GivenName !== undefined && { given_name: body.GivenName as string }),
       ...(body.FamilyName !== undefined && { family_name: body.FamilyName as string }),
@@ -103,7 +114,10 @@ export function staffRoutes({ app, store }: RouteContext): void {
     const search = c.req.query("Search");
     if (search) {
       const q = search.toLowerCase();
-      items = items.filter((s) => `${s.given_name} ${s.family_name}`.toLowerCase().includes(q) || (s.email ?? "").toLowerCase().includes(q));
+      items = items.filter(
+        (s) =>
+          `${s.given_name} ${s.family_name}`.toLowerCase().includes(q) || (s.email ?? "").toLowerCase().includes(q),
+      );
     }
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);

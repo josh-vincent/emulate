@@ -20,10 +20,7 @@ export function simproError(
   path: string | null = null,
   value: unknown = null,
 ) {
-  return c.json(
-    { errors: [{ path, message, value } satisfies SimproError] },
-    status as ContentfulStatusCode,
-  );
+  return c.json({ errors: [{ path, message, value } satisfies SimproError] }, status as ContentfulStatusCode);
 }
 
 export function simproNotFound(c: Context) {
@@ -69,11 +66,7 @@ export function parsePagination(c: Context): SimproPagination {
   return { page, pageSize };
 }
 
-export function paginate<T>(
-  c: Context,
-  items: T[],
-  pagination: SimproPagination,
-): T[] {
+export function paginate<T>(c: Context, items: T[], pagination: SimproPagination): T[] {
   const total = items.length;
   const pages = Math.max(1, Math.ceil(total / pagination.pageSize));
   const start = (pagination.page - 1) * pagination.pageSize;
@@ -90,9 +83,15 @@ export function paginate<T>(
  * returned. Nested paths (e.g. Customer.ID) are not honoured — this matches
  * the observed behaviour: the whole "Customer" object is included verbatim.
  */
-export function applyColumns<T extends Record<string, unknown>>(obj: T, columnsParam: string | undefined): Record<string, unknown> {
+export function applyColumns<T extends Record<string, unknown>>(
+  obj: T,
+  columnsParam: string | undefined,
+): Record<string, unknown> {
   if (!columnsParam) return obj;
-  const requested = columnsParam.split(",").map((s) => s.trim()).filter(Boolean);
+  const requested = columnsParam
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (requested.length === 0) return obj;
   const out: Record<string, unknown> = {};
   for (const col of requested) {

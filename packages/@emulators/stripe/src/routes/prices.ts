@@ -80,7 +80,10 @@ export function priceRoutes({ app, store, webhooks }: RouteContext): void {
       type: recurring ? "recurring" : "one_time",
       lookup_key: (body.lookup_key as string) ?? null,
       recurring: recurring
-        ? { interval: (recurring.interval ?? "month") as "month" | "year", interval_count: recurring.interval_count ?? 1 }
+        ? {
+            interval: (recurring.interval ?? "month") as "month" | "year",
+            interval_count: recurring.interval_count ?? 1,
+          }
         : null,
       active: (body.active as boolean) ?? true,
       metadata: (body.metadata as Record<string, string>) ?? {},

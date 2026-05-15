@@ -2,13 +2,7 @@ import type { Context } from "hono";
 import type { RouteContext } from "@emulators/core";
 import { getSimproStore } from "../store.js";
 import type { SimproTimesheet } from "../entities.js";
-import {
-  paginate,
-  parsePagination,
-  rateLimit,
-  requireAuth,
-  simproNotFound,
-} from "../helpers.js";
+import { paginate, parsePagination, rateLimit, requireAuth, simproNotFound } from "../helpers.js";
 
 function formatTimesheet(t: SimproTimesheet) {
   return {
@@ -71,9 +65,7 @@ export function timesheetRoutes({ app, store }: RouteContext): void {
     const companyId = Number(c.req.param("cid")) || 0;
     let items = ss.timesheets
       .all()
-      .filter(
-        (t) => t.employee_id === employeeId && (t.company_id === companyId || companyId === 0),
-      );
+      .filter((t) => t.employee_id === employeeId && (t.company_id === companyId || companyId === 0));
 
     const dateFrom = c.req.query("DateFrom");
     if (dateFrom) items = items.filter((t) => t.date >= dateFrom);
@@ -95,9 +87,7 @@ export function timesheetRoutes({ app, store }: RouteContext): void {
     const companyId = Number(c.req.param("cid")) || 0;
     let items = ss.timesheets
       .all()
-      .filter(
-        (t) => t.contractor_id === contractorId && (t.company_id === companyId || companyId === 0),
-      );
+      .filter((t) => t.contractor_id === contractorId && (t.company_id === companyId || companyId === 0));
 
     const dateFrom = c.req.query("DateFrom");
     if (dateFrom) items = items.filter((t) => t.date >= dateFrom);

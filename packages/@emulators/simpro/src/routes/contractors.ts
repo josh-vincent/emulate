@@ -34,7 +34,9 @@ export function contractorRoutes({ app, store }: RouteContext): void {
     const search = c.req.query("Search");
     if (search) {
       const q = search.toLowerCase();
-      items = items.filter((x) => `${x.given_name ?? ""} ${x.family_name ?? ""} ${x.company_name ?? ""}`.toLowerCase().includes(q));
+      items = items.filter((x) =>
+        `${x.given_name ?? ""} ${x.family_name ?? ""} ${x.company_name ?? ""}`.toLowerCase().includes(q),
+      );
     }
     const archived = c.req.query("Archived");
     if (archived !== undefined) items = items.filter((x) => x.archived === (archived === "true"));
@@ -54,8 +56,13 @@ export function contractorRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
-    if (!body.CompanyName && !body.GivenName) return simproValidation(c, "CompanyName", "CompanyName or GivenName is required.");
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
+    if (!body.CompanyName && !body.GivenName)
+      return simproValidation(c, "CompanyName", "CompanyName or GivenName is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "contractors", companyId);
     const contractor = ss.contractors.insert({
@@ -80,7 +87,11 @@ export function contractorRoutes({ app, store }: RouteContext): void {
     const contractor = ss.contractors.findOneBy("external_id", Number(c.req.param("id")));
     if (!contractor) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.contractors.update(contractor.id, {
       ...(body.CompanyName !== undefined && { company_name: body.CompanyName as string | null }),
       ...(body.GivenName !== undefined && { given_name: body.GivenName as string | null }),

@@ -50,16 +50,21 @@ export function inspectorRoutes(ctx: RouteContext): void {
     let bodyHtml = "";
 
     if (tab === "users") {
-      const rows = users.length === 0
-        ? `<tr><td colspan="5" class="inspector-empty">No users seeded yet.</td></tr>`
-        : users.map((u) => `
+      const rows =
+        users.length === 0
+          ? `<tr><td colspan="5" class="inspector-empty">No users seeded yet.</td></tr>`
+          : users
+              .map(
+                (u) => `
 <tr>
   <td><span class="org-icon" style="display:inline-flex;width:28px;height:28px;font-size:.75rem">${escapeHtml((u.first_name?.[0] ?? u.email[0]).toUpperCase())}</span></td>
   <td><span style="color:#33ff00;font-weight:600">${escapeHtml(u.email)}</span></td>
   <td>${escapeHtml([u.first_name, u.last_name].filter(Boolean).join(" ") || "—")}</td>
   <td>${u.email_verified ? '<span class="badge badge-granted">verified</span>' : '<span class="badge badge-denied">unverified</span>'}</td>
   <td style="color:#1a8c00;font-size:.75rem">${timeAgo(u.created_at)}</td>
-</tr>`).join("");
+</tr>`,
+              )
+              .join("");
 
       bodyHtml = `
 <div class="inspector-section">
@@ -87,15 +92,20 @@ export function inspectorRoutes(ctx: RouteContext): void {
         }
       }
 
-      const rows = orgMap.size === 0
-        ? `<tr><td colspan="4" class="inspector-empty">No organizations found.</td></tr>`
-        : [...orgMap.entries()].map(([id, org]) => `
+      const rows =
+        orgMap.size === 0
+          ? `<tr><td colspan="4" class="inspector-empty">No organizations found.</td></tr>`
+          : [...orgMap.entries()]
+              .map(
+                ([id, org]) => `
 <tr>
   <td><span class="org-icon" style="display:inline-flex;width:28px;height:28px;font-size:.75rem">${escapeHtml(org.name[0].toUpperCase())}</span></td>
   <td><span style="color:#33ff00;font-weight:600">${escapeHtml(org.name)}</span><br><span style="color:#1a8c00;font-size:.75rem">${escapeHtml(org.slug)}</span></td>
   <td style="color:#1a8c00">${escapeHtml(id)}</td>
   <td>${org.memberCount} member${org.memberCount !== 1 ? "s" : ""}</td>
-</tr>`).join("");
+</tr>`,
+              )
+              .join("");
 
       bodyHtml = `
 <div class="inspector-section">
@@ -123,9 +133,10 @@ export function inspectorRoutes(ctx: RouteContext): void {
         }
       }
 
-      const tableRows = rows.length === 0
-        ? `<tr><td colspan="5" class="inspector-empty">No memberships found.</td></tr>`
-        : rows.join("");
+      const tableRows =
+        rows.length === 0
+          ? `<tr><td colspan="5" class="inspector-empty">No memberships found.</td></tr>`
+          : rows.join("");
 
       bodyHtml = `
 <div class="inspector-section">
@@ -147,11 +158,13 @@ export function inspectorRoutes(ctx: RouteContext): void {
       }
       const invs = [...allOrgs].flatMap((orgId) => w.listInvitations(orgId));
 
-      const rows = invs.length === 0
-        ? `<tr><td colspan="5" class="inspector-empty">No pending invitations.</td></tr>`
-        : invs.map((inv) => {
-          const org = w.getOrg(inv.organization_id);
-          return `
+      const rows =
+        invs.length === 0
+          ? `<tr><td colspan="5" class="inspector-empty">No pending invitations.</td></tr>`
+          : invs
+              .map((inv) => {
+                const org = w.getOrg(inv.organization_id);
+                return `
 <tr>
   <td><span style="color:#33ff00;font-weight:600">${escapeHtml(inv.email)}</span></td>
   <td>${escapeHtml(org?.name ?? inv.organization_id)}</td>
@@ -159,7 +172,8 @@ export function inspectorRoutes(ctx: RouteContext): void {
   <td>${statusBadge(inv.status)}</td>
   <td style="color:#1a8c00;font-size:.75rem">${timeAgo(inv.created_at)}</td>
 </tr>`;
-        }).join("");
+              })
+              .join("");
 
       bodyHtml = `
 <div class="inspector-section">

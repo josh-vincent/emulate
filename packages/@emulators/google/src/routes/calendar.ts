@@ -84,14 +84,17 @@ export function calendarRoutes({ app, store }: RouteContext): void {
       time_zone: typeof requestBody.timeZone === "string" ? requestBody.timeZone : "UTC",
     });
 
-    return c.json({
-      kind: "calendar#calendar",
-      etag: `"${calendar.google_id}"`,
-      id: calendar.google_id,
-      summary: calendar.summary,
-      description: calendar.description ?? undefined,
-      timeZone: calendar.time_zone,
-    }, 200);
+    return c.json(
+      {
+        kind: "calendar#calendar",
+        etag: `"${calendar.google_id}"`,
+        id: calendar.google_id,
+        summary: calendar.summary,
+        description: calendar.description ?? undefined,
+        timeZone: calendar.time_zone,
+      },
+      200,
+    );
   });
 
   app.get("/calendar/v3/calendars/:calendarId/events", (c) => {

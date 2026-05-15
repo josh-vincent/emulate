@@ -133,12 +133,7 @@ export function taskRoutes({ app, store }: RouteContext): void {
     const jid = Number(c.req.param("jid"));
     const items = ss.tasks
       .all()
-      .filter(
-        (t) =>
-          t.parent_type === "job" &&
-          t.parent_id === jid &&
-          (t.company_id === companyId || companyId === 0),
-      );
+      .filter((t) => t.parent_type === "job" && t.parent_id === jid && (t.company_id === companyId || companyId === 0));
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);
     return c.json(page.map(formatTask));

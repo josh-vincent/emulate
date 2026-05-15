@@ -38,9 +38,7 @@ export function webhookRoutes({ app, store, baseUrl }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     const companyId = Number(c.req.param("cid")) || 0;
-    const items = ss.webhookSubscriptions
-      .all()
-      .filter((w) => w.company_id === companyId || companyId === 0);
+    const items = ss.webhookSubscriptions.all().filter((w) => w.company_id === companyId || companyId === 0);
     const page = paginate(c, items, parsePagination(c));
     return c.json(
       page.map((w) => ({
@@ -111,21 +109,14 @@ export function webhookRoutes({ app, store, baseUrl }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     const companyId = Number(c.req.param("cid")) || 0;
-    const items = ss.webhookEvents
-      .all()
-      .filter((e) => e.company_id === companyId || companyId === 0);
+    const items = ss.webhookEvents.all().filter((e) => e.company_id === companyId || companyId === 0);
     return c.json(items);
   });
 
   void baseUrl; // unused but part of RouteContext
 }
 
-export async function fireWebhook(
-  ss: SimproStore,
-  companyId: number,
-  event: string,
-  entityId: number,
-): Promise<void> {
+export async function fireWebhook(ss: SimproStore, companyId: number, event: string, entityId: number): Promise<void> {
   const subscriptions = ss.webhookSubscriptions
     .all()
     .filter((w) => w.active && w.company_id === companyId && w.events.includes(event));

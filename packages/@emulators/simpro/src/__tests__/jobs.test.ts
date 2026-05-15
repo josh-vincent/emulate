@@ -6,10 +6,7 @@ describe("Simpro jobs", () => {
     const { app } = createTestApp();
     const token = await getAccessToken(app);
 
-    const res = await app.request(
-      `${BASE}/api/v1.0/companies/0/jobs/?columns=ID,Name,Stage`,
-      { headers: auth(token) },
-    );
+    const res = await app.request(`${BASE}/api/v1.0/companies/0/jobs/?columns=ID,Name,Stage`, { headers: auth(token) });
     expect(res.status).toBe(200);
     expect(res.headers.get("Result-Total")).toBe("1");
     expect(res.headers.get("Result-Pages")).toBe("1");
@@ -18,34 +15,27 @@ describe("Simpro jobs", () => {
     expect(body).toHaveLength(1);
     expect(Object.keys(body[0]).sort()).toEqual(["ID", "Name", "Stage"]);
     expect(body[0].ID).toBe(12345);
-    expect(body[0].Stage).toBe(3);
+    expect(body[0].Stage).toBe("Progress");
   });
 
   it("filters by Customer.ID and Stage", async () => {
     const { app } = createTestApp();
     const token = await getAccessToken(app);
 
-    const match = await app.request(
-      `${BASE}/api/v1.0/companies/0/jobs/?Customer.ID=200&Stage=3`,
-      { headers: auth(token) },
-    );
-    expect((await match.json() as unknown[])).toHaveLength(1);
+    const match = await app.request(`${BASE}/api/v1.0/companies/0/jobs/?Customer.ID=200&Stage=3`, {
+      headers: auth(token),
+    });
+    expect((await match.json()) as unknown[]).toHaveLength(1);
 
-    const miss = await app.request(
-      `${BASE}/api/v1.0/companies/0/jobs/?Customer.ID=999`,
-      { headers: auth(token) },
-    );
-    expect((await miss.json() as unknown[])).toHaveLength(0);
+    const miss = await app.request(`${BASE}/api/v1.0/companies/0/jobs/?Customer.ID=999`, { headers: auth(token) });
+    expect((await miss.json()) as unknown[]).toHaveLength(0);
   });
 
   it("detail endpoint with display=all expands sections + cost centers", async () => {
     const { app } = createTestApp();
     const token = await getAccessToken(app);
 
-    const res = await app.request(
-      `${BASE}/api/v1.0/companies/0/jobs/12345?display=all`,
-      { headers: auth(token) },
-    );
+    const res = await app.request(`${BASE}/api/v1.0/companies/0/jobs/12345?display=all`, { headers: auth(token) });
     expect(res.status).toBe(200);
     const job = (await res.json()) as {
       ID: number;
@@ -84,10 +74,10 @@ describe("Simpro jobs", () => {
       }),
     });
     expect(res.status).toBe(201);
-    const job = (await res.json()) as { ID: number; Name: string; Stage: number };
+    const job = (await res.json()) as { ID: number; Name: string; Stage: string };
     expect(job.ID).toBeGreaterThan(10000);
     expect(job.Name).toBe("New service call");
-    expect(job.Stage).toBe(2);
+    expect(job.Stage).toBe("Pending");
   });
 
   it("PATCH updates job fields", async () => {
@@ -99,9 +89,13 @@ describe("Simpro jobs", () => {
       headers: auth(token),
       body: JSON.stringify({ Stage: 4, Description: "Completed" }),
     });
-    expect(res.status).toBe(200);
-    const job = (await res.json()) as { Stage: number; Description: string };
-    expect(job.Stage).toBe(4);
+    // SimPro's API returns 204 No Content on PATCH/update.
+    expect(res.status).toBe(204);
+
+    const after = await app.request(`${BASE}/api/v1.0/companies/0/jobs/12345`, { headers: auth(token) });
+    expect(after.status).toBe(200);
+    const job = (await after.json()) as { Stage: string; Description: string };
+    expect(job.Stage).toBe("Complete");
     expect(job.Description).toBe("Completed");
   });
 });

@@ -27,18 +27,13 @@ export function propertyRoutes({ app, store }: RouteContext): void {
       properties = properties.filter((p) => p.name.toLowerCase().includes(search));
     }
 
-    return uptickPaginate(
-      c,
-      properties,
-      (p) => formatProperty(p, s),
-      `/api/${c.req.param("ver")}/properties/`,
-    );
+    return uptickPaginate(c, properties, (p) => formatProperty(p, s), `/api/${c.req.param("ver")}/properties/`);
   });
 
   app.post("/api/:ver/properties/", async (c) => {
     const s = us();
     const { attributes, relationships } = await parseJsonApiBody(c);
-    const clientId = relId((relationships.client as Record<string, unknown>)) ?? 0;
+    const clientId = relId(relationships.client as Record<string, unknown>) ?? 0;
     const addr = (attributes.address as Record<string, unknown>) ?? {};
 
     const property = s.properties.insert({
@@ -73,7 +68,7 @@ export function propertyRoutes({ app, store }: RouteContext): void {
 
     const { attributes, relationships } = await parseJsonApiBody(c);
     const addr = (attributes.address as Record<string, unknown>) ?? {};
-    const clientId = relId((relationships.client as Record<string, unknown>));
+    const clientId = relId(relationships.client as Record<string, unknown>);
 
     const updated = s.properties.update(id, {
       name: (attributes.name as string) ?? existing.name,

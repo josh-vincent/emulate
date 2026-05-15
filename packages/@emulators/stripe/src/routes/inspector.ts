@@ -46,20 +46,24 @@ export function inspectorRoutes(ctx: RouteContext): void {
     let bodyHtml = "";
 
     if (tab === "customers") {
-      const rows = customers.length === 0
-        ? `<tr><td colspan="4" class="inspector-empty">No customers yet.</td></tr>`
-        : customers.map((c) => {
-          const subs = subscriptions.filter((s) => s.customer_id === c.stripe_id);
-          const subBadge = subs.length > 0
-            ? subs.map((s) => statusBadge(s.status)).join(" ")
-            : '<span class="badge badge-requested">no subscription</span>';
-          return `
+      const rows =
+        customers.length === 0
+          ? `<tr><td colspan="4" class="inspector-empty">No customers yet.</td></tr>`
+          : customers
+              .map((c) => {
+                const subs = subscriptions.filter((s) => s.customer_id === c.stripe_id);
+                const subBadge =
+                  subs.length > 0
+                    ? subs.map((s) => statusBadge(s.status)).join(" ")
+                    : '<span class="badge badge-requested">no subscription</span>';
+                return `
 <tr>
   <td><span style="color:#33ff00;font-weight:600">${escapeHtml(c.email ?? "—")}</span><br><span style="color:#1a8c00;font-size:.75rem">${escapeHtml(c.name ?? "")}</span></td>
   <td><code style="color:#1a8c00;font-size:.75rem">${escapeHtml(c.stripe_id)}</code></td>
   <td>${subBadge}</td>
 </tr>`;
-        }).join("");
+              })
+              .join("");
 
       bodyHtml = `
 <div class="inspector-section">
@@ -73,22 +77,30 @@ export function inspectorRoutes(ctx: RouteContext): void {
 
     if (tab === "subscriptions") {
       const subItems = s.subscriptionItems.all();
-      const rows = subscriptions.length === 0
-        ? `<tr><td colspan="5" class="inspector-empty">No subscriptions yet.</td></tr>`
-        : subscriptions.map((sub) => {
-          const customer = customers.find((c) => c.stripe_id === sub.customer_id);
-          const items = subItems.filter((i) => i.subscription_id === sub.stripe_id);
-          const priceLabels = items.map((i) => {
-            const price = prices.find((p) => p.stripe_id === i.price_id);
-            const label = price ? `${cents(price.unit_amount, price.currency)}/${price.recurring?.interval ?? ""}` : i.price_id;
-            return `<span style="color:#33ff00">${escapeHtml(label)}</span> ×${i.quantity}`;
-          }).join(", ") || "—";
+      const rows =
+        subscriptions.length === 0
+          ? `<tr><td colspan="5" class="inspector-empty">No subscriptions yet.</td></tr>`
+          : subscriptions
+              .map((sub) => {
+                const customer = customers.find((c) => c.stripe_id === sub.customer_id);
+                const items = subItems.filter((i) => i.subscription_id === sub.stripe_id);
+                const priceLabels =
+                  items
+                    .map((i) => {
+                      const price = prices.find((p) => p.stripe_id === i.price_id);
+                      const label = price
+                        ? `${cents(price.unit_amount, price.currency)}/${price.recurring?.interval ?? ""}`
+                        : i.price_id;
+                      return `<span style="color:#33ff00">${escapeHtml(label)}</span> ×${i.quantity}`;
+                    })
+                    .join(", ") || "—";
 
-          const trialNote = sub.trial_end && sub.trial_end > Date.now() / 1000
-            ? `<br><span style="color:#1a8c00;font-size:.75rem">trial ends ${unixDate(sub.trial_end)}</span>`
-            : "";
+                const trialNote =
+                  sub.trial_end && sub.trial_end > Date.now() / 1000
+                    ? `<br><span style="color:#1a8c00;font-size:.75rem">trial ends ${unixDate(sub.trial_end)}</span>`
+                    : "";
 
-          return `
+                return `
 <tr>
   <td><code style="color:#1a8c00;font-size:.75rem">${escapeHtml(sub.stripe_id)}</code></td>
   <td><span style="color:#33ff00">${escapeHtml(customer?.email ?? sub.customer_id)}</span></td>
@@ -96,7 +108,8 @@ export function inspectorRoutes(ctx: RouteContext): void {
   <td>${priceLabels}</td>
   <td style="color:#1a8c00;font-size:.75rem">${unixDate(sub.current_period_end)}</td>
 </tr>`;
-        }).join("");
+              })
+              .join("");
 
       bodyHtml = `
 <div class="inspector-section">
@@ -109,22 +122,30 @@ export function inspectorRoutes(ctx: RouteContext): void {
     }
 
     if (tab === "products") {
-      const rows = products.length === 0
-        ? `<tr><td colspan="3" class="inspector-empty">No products yet.</td></tr>`
-        : products.map((p) => {
-          const productPrices = prices.filter((pr) => pr.product_id === p.stripe_id);
-          const priceList = productPrices.length === 0 ? "—"
-            : productPrices.map((pr) =>
-              `<span style="color:#33ff00">${escapeHtml(cents(pr.unit_amount, pr.currency))}</span> <span style="color:#1a8c00;font-size:.75rem">${pr.recurring ? `/${pr.recurring.interval}` : "one-time"}</span>`
-            ).join(", ");
-          return `
+      const rows =
+        products.length === 0
+          ? `<tr><td colspan="3" class="inspector-empty">No products yet.</td></tr>`
+          : products
+              .map((p) => {
+                const productPrices = prices.filter((pr) => pr.product_id === p.stripe_id);
+                const priceList =
+                  productPrices.length === 0
+                    ? "—"
+                    : productPrices
+                        .map(
+                          (pr) =>
+                            `<span style="color:#33ff00">${escapeHtml(cents(pr.unit_amount, pr.currency))}</span> <span style="color:#1a8c00;font-size:.75rem">${pr.recurring ? `/${pr.recurring.interval}` : "one-time"}</span>`,
+                        )
+                        .join(", ");
+                return `
 <tr>
   <td><span style="color:#33ff00;font-weight:600">${escapeHtml(p.name)}</span><br><span style="color:#1a8c00;font-size:.75rem">${escapeHtml(p.description ?? "")}</span></td>
   <td><code style="color:#1a8c00;font-size:.75rem">${escapeHtml(p.stripe_id)}</code></td>
   <td>${p.active ? '<span class="badge badge-granted">active</span>' : '<span class="badge badge-denied">inactive</span>'}</td>
   <td>${priceList}</td>
 </tr>`;
-        }).join("");
+              })
+              .join("");
 
       bodyHtml = `
 <div class="inspector-section">
@@ -137,11 +158,13 @@ export function inspectorRoutes(ctx: RouteContext): void {
     }
 
     if (tab === "prices") {
-      const rows = prices.length === 0
-        ? `<tr><td colspan="5" class="inspector-empty">No prices yet.</td></tr>`
-        : prices.map((p) => {
-          const product = products.find((pr) => pr.stripe_id === p.product_id);
-          return `
+      const rows =
+        prices.length === 0
+          ? `<tr><td colspan="5" class="inspector-empty">No prices yet.</td></tr>`
+          : prices
+              .map((p) => {
+                const product = products.find((pr) => pr.stripe_id === p.product_id);
+                return `
 <tr>
   <td><code style="color:#1a8c00;font-size:.75rem">${escapeHtml(p.stripe_id)}</code></td>
   <td>${escapeHtml(product?.name ?? p.product_id)}</td>
@@ -149,7 +172,8 @@ export function inspectorRoutes(ctx: RouteContext): void {
   <td>${p.recurring ? `<span class="badge badge-granted">${escapeHtml(p.recurring.interval)}ly</span>` : '<span class="badge badge-requested">one-time</span>'}</td>
   <td>${p.lookup_key ? `<code style="color:#1a8c00;font-size:.75rem">${escapeHtml(p.lookup_key)}</code>` : "—"}</td>
 </tr>`;
-        }).join("");
+              })
+              .join("");
 
       bodyHtml = `
 <div class="inspector-section">
@@ -162,12 +186,14 @@ export function inspectorRoutes(ctx: RouteContext): void {
     }
 
     if (tab === "payments") {
-      const rows = paymentIntents.length === 0
-        ? `<tr><td colspan="5" class="inspector-empty">No payment intents yet.</td></tr>`
-        : paymentIntents.map((pi) => {
-          const customer = customers.find((c) => c.stripe_id === pi.customer_id);
-          const charge = charges.find((ch) => ch.payment_intent_id === pi.stripe_id);
-          return `
+      const rows =
+        paymentIntents.length === 0
+          ? `<tr><td colspan="5" class="inspector-empty">No payment intents yet.</td></tr>`
+          : paymentIntents
+              .map((pi) => {
+                const customer = customers.find((c) => c.stripe_id === pi.customer_id);
+                const charge = charges.find((ch) => ch.payment_intent_id === pi.stripe_id);
+                return `
 <tr>
   <td><code style="color:#1a8c00;font-size:.75rem">${escapeHtml(pi.stripe_id)}</code></td>
   <td><span style="color:#33ff00;font-weight:600">${cents(pi.amount, pi.currency)}</span></td>
@@ -175,7 +201,8 @@ export function inspectorRoutes(ctx: RouteContext): void {
   <td>${statusBadge(pi.status)}</td>
   <td>${charge ? statusBadge(charge.status) : "—"}</td>
 </tr>`;
-        }).join("");
+              })
+              .join("");
 
       bodyHtml = `
 <div class="inspector-section">

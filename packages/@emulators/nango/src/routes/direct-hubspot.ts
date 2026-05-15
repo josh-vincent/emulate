@@ -13,13 +13,7 @@
 
 import { randomBytes } from "node:crypto";
 import type { Hono } from "hono";
-import {
-  bodyStr,
-  renderCardPage,
-  renderUserButton,
-  type AppEnv,
-  type Store,
-} from "@emulators/core";
+import { bodyStr, renderCardPage, renderUserButton, type AppEnv, type Store } from "@emulators/core";
 
 const SERVICE_LABEL = "HubSpot";
 const PENDING_CODE_TTL_MS = 10 * 60 * 1000;
@@ -81,8 +75,7 @@ export const directHubspotRoutes = (app: Hono<AppEnv>, store: Store): void => {
     const scope = c.req.query("scope") ?? "";
     const state = c.req.query("state") ?? "";
 
-    const subtitle =
-      "Authorize <strong>Taskr</strong> to access your HubSpot hub.";
+    const subtitle = "Authorize <strong>Taskr</strong> to access your HubSpot hub.";
 
     const body = renderUserButton({
       letter: "H",
@@ -98,9 +91,7 @@ export const directHubspotRoutes = (app: Hono<AppEnv>, store: Store): void => {
       },
     });
 
-    return c.html(
-      renderCardPage("Sign in to HubSpot", subtitle, body, SERVICE_LABEL),
-    );
+    return c.html(renderCardPage("Sign in to HubSpot", subtitle, body, SERVICE_LABEL));
   });
 
   app.post("/hubspot-emu/oauth/authorize/callback", async (c) => {
@@ -177,10 +168,7 @@ export const directHubspotRoutes = (app: Hono<AppEnv>, store: Store): void => {
       const refreshToken = params.get("refresh_token") ?? "";
       const existing = getIssuedTokens(store).get(refreshToken);
       if (!existing) {
-        return c.json(
-          { status: "BAD_REFRESH_TOKEN", message: "invalid_refresh_token" },
-          400,
-        );
+        return c.json({ status: "BAD_REFRESH_TOKEN", message: "invalid_refresh_token" }, 400);
       }
       return c.json(
         issueToken({
@@ -201,10 +189,7 @@ export const directHubspotRoutes = (app: Hono<AppEnv>, store: Store): void => {
     const token = c.req.param("token");
     const issued = getIssuedTokens(store).get(token);
     if (!issued) {
-      return c.json(
-        { status: "BAD_AUTH_TOKEN", message: "token_not_found" },
-        404,
-      );
+      return c.json({ status: "BAD_AUTH_TOKEN", message: "token_not_found" }, 404);
     }
     return c.json({
       hub_id: issued.hubId,
@@ -212,10 +197,7 @@ export const directHubspotRoutes = (app: Hono<AppEnv>, store: Store): void => {
       user_id: issued.userId,
       user: issued.userEmail,
       scopes: issued.scope ? issued.scope.split(" ") : [],
-      expires_in: Math.max(
-        0,
-        Math.floor((issued.expiresAt - Date.now()) / 1000),
-      ),
+      expires_in: Math.max(0, Math.floor((issued.expiresAt - Date.now()) / 1000)),
       token_type: "access",
       app_id: 1,
     });

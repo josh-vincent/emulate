@@ -1,12 +1,7 @@
 import type { Context } from "hono";
 import type { RouteContext } from "@emulators/core";
 import { getSimproStore } from "../store.js";
-import type {
-  SimproStockAllocation,
-  SimproStockTake,
-  SimproStockTransfer,
-  SimproStorageDevice,
-} from "../entities.js";
+import type { SimproStockAllocation, SimproStockTake, SimproStockTransfer, SimproStorageDevice } from "../entities.js";
 import {
   nowIso,
   paginate,
@@ -92,7 +87,11 @@ export function stockRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "storageDevices", companyId);
     const sd = ss.storageDevices.insert({
@@ -111,7 +110,11 @@ export function stockRoutes({ app, store }: RouteContext): void {
     const sd = ss.storageDevices.findOneBy("external_id", Number(c.req.param("sdid")));
     if (!sd) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.storageDevices.update(sd.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.Location !== undefined && { location: body.Location as string | null }),
@@ -171,7 +174,11 @@ export function stockRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "stockAllocations", companyId);
     const now = nowIso();
@@ -213,7 +220,11 @@ export function stockRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "stockTakes", companyId);
     const now = nowIso();
@@ -253,7 +264,11 @@ export function stockRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "stockTransfers", companyId);
     const now = nowIso();

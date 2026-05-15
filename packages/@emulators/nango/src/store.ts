@@ -72,8 +72,9 @@ export function getNangoStore(store: Store) {
           // Match by provider name or provider_config_key prefix
           if (
             sibling &&
-            (sibling.provider === provider || sibling.provider_config_key === provider ||
-             sibling.provider_config_key.startsWith(provider)) &&
+            (sibling.provider === provider ||
+              sibling.provider_config_key === provider ||
+              sibling.provider_config_key.startsWith(provider)) &&
             rmap[model]?.length
           ) {
             return rmap[model];

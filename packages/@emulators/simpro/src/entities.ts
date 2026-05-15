@@ -395,13 +395,7 @@ export interface SimproZone extends Entity {
  * parent_type discriminator lets one list endpoint serve all parents without
  * introducing five parallel tables.
  */
-export type SimproAttachmentParentType =
-  | "job"
-  | "quote"
-  | "invoice"
-  | "customer"
-  | "site"
-  | "asset";
+export type SimproAttachmentParentType = "job" | "quote" | "invoice" | "customer" | "site" | "asset";
 
 export interface SimproAttachment extends Entity {
   company_id: number;

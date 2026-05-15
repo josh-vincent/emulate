@@ -56,7 +56,11 @@ export function vendorRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "vendors", companyId);
@@ -82,7 +86,11 @@ export function vendorRoutes({ app, store }: RouteContext): void {
     const v = ss.vendors.findOneBy("external_id", Number(c.req.param("id")));
     if (!v) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.vendors.update(v.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.EIN !== undefined && { ein: body.EIN as string | null }),

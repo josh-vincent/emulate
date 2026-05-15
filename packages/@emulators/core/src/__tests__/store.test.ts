@@ -218,12 +218,30 @@ describe("Store", () => {
     expect(p.all()).toHaveLength(0);
   });
 
-  it("getData/setData stores arbitrary values and reset clears them", () => {
+  it("getData/setData stores arbitrary values", () => {
     store.setData("session", { token: "abc" });
     expect(store.getData<{ token: string }>("session")).toEqual({ token: "abc" });
+  });
+
+  it("reset empties Map/Set/Array data containers in place but preserves their keys", () => {
+    // reset() is reseed-safe: route handlers capture container references
+    // (e.g. workos/getWorkOSStore), so containers are cleared in place rather
+    // than deleted. Plain values are left intact.
+    const sessions = new Map<string, string>([["s1", "tok"]]);
+    const list = ["a", "b"];
+    store.setData("sessions", sessions);
+    store.setData("list", list);
+    store.setData("flag", { initialized: true });
 
     store.reset();
-    expect(store.getData("session")).toBeUndefined();
+
+    // Same references, emptied in place — closures keep working.
+    expect(store.getData<Map<string, string>>("sessions")).toBe(sessions);
+    expect(store.getData<Map<string, string>>("sessions")?.size).toBe(0);
+    expect(store.getData<string[]>("list")).toBe(list);
+    expect(store.getData<string[]>("list")).toHaveLength(0);
+    // Non-container values are preserved across reset.
+    expect(store.getData("flag")).toEqual({ initialized: true });
   });
 });
 

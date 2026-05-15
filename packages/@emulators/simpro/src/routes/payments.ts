@@ -53,7 +53,11 @@ export function paymentRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
 
     // Swagger body: { Payment: { PaymentMethod, Date, Amount, ... }, Invoices: [{ID}], Notes }
     const paymentObj = body.Payment as Record<string, unknown> | undefined;
@@ -110,7 +114,11 @@ export function paymentRoutes({ app, store }: RouteContext): void {
     const p = ss.customerPayments.findOneBy("external_id", Number(c.req.param("id")));
     if (!p) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const paymentBody = body.Payment as Record<string, unknown> | undefined;
     ss.customerPayments.update(p.id, {
       ...(paymentBody?.Amount !== undefined && { amount: Number(paymentBody.Amount) }),

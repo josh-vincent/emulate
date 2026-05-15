@@ -76,8 +76,7 @@ export function proxyRoutes(app: Hono<AppEnv>, ns: NangoStoreFacade): void {
     // Strip the /proxy/ prefix to get the provider-specific path
     const fullPath = c.req.path.replace(/^\/proxy\//, "");
     const connectionId = c.req.header("Connection-Id") ?? c.req.header("connection-id") ?? "";
-    const providerConfigKey =
-      c.req.header("Provider-Config-Key") ?? c.req.header("provider-config-key") ?? "";
+    const providerConfigKey = c.req.header("Provider-Config-Key") ?? c.req.header("provider-config-key") ?? "";
 
     // Determine provider from path or config key
     const isXero = fullPath.startsWith("api.xro/") || providerConfigKey.includes("xero");

@@ -1,7 +1,11 @@
 import type { Context } from "hono";
 import type { RouteContext } from "@emulators/core";
 import { getSimproStore } from "../store.js";
-import type { SimproRecurringInvoice, SimproRecurringInvoiceCostCenter, SimproRecurringInvoiceSection } from "../entities.js";
+import type {
+  SimproRecurringInvoice,
+  SimproRecurringInvoiceCostCenter,
+  SimproRecurringInvoiceSection,
+} from "../entities.js";
 import {
   nowIso,
   paginate,
@@ -74,7 +78,11 @@ export function recurringInvoiceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const customerRef = body.Customer as { ID?: number } | undefined;
     if (!customerRef?.ID) return simproValidation(c, "Customer.ID", "Customer is required.");
     const companyId = Number(c.req.param("cid")) || 0;
@@ -100,7 +108,11 @@ export function recurringInvoiceRoutes({ app, store }: RouteContext): void {
     const ri = ss.recurringInvoices.findOneBy("external_id", Number(c.req.param("riid")));
     if (!ri) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.recurringInvoices.update(ri.id, {
       ...(body.Stage !== undefined && { stage: body.Stage as SimproRecurringInvoice["stage"] }),
       ...(body.Frequency !== undefined && { frequency: body.Frequency as string }),
@@ -148,7 +160,11 @@ export function recurringInvoiceRoutes({ app, store }: RouteContext): void {
     const ri = ss.recurringInvoices.findOneBy("external_id", riId);
     if (!ri) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "recurringInvoiceSections", companyId);
@@ -170,7 +186,11 @@ export function recurringInvoiceRoutes({ app, store }: RouteContext): void {
     const s = ss.recurringInvoiceSections.findOneBy("external_id", Number(c.req.param("sid")));
     if (!s || s.recurring_invoice_id !== riId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.recurringInvoiceSections.update(s.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
     });
@@ -196,9 +216,9 @@ export function recurringInvoiceRoutes({ app, store }: RouteContext): void {
     if (blocked) return blocked;
     const riId = Number(c.req.param("riid"));
     const sId = Number(c.req.param("sid"));
-    const items = ss.recurringInvoiceCostCenters.all().filter(
-      (cc) => cc.recurring_invoice_id === riId && cc.section_id === sId,
-    );
+    const items = ss.recurringInvoiceCostCenters
+      .all()
+      .filter((cc) => cc.recurring_invoice_id === riId && cc.section_id === sId);
     return c.json(paginate(c, items, parsePagination(c)).map(formatRecurringInvoiceCostCenter));
   });
 
@@ -220,7 +240,11 @@ export function recurringInvoiceRoutes({ app, store }: RouteContext): void {
     const section = ss.recurringInvoiceSections.findOneBy("external_id", sId);
     if (!section || section.recurring_invoice_id !== riId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "recurringInvoiceCostCenters", companyId);
@@ -245,10 +269,16 @@ export function recurringInvoiceRoutes({ app, store }: RouteContext): void {
     const cc = ss.recurringInvoiceCostCenters.findOneBy("external_id", Number(c.req.param("ccid")));
     if (!cc || cc.recurring_invoice_id !== riId || cc.section_id !== sId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.recurringInvoiceCostCenters.update(cc.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
-      ...(body.BillingType !== undefined && { billing_type: body.BillingType as SimproRecurringInvoiceCostCenter["billing_type"] }),
+      ...(body.BillingType !== undefined && {
+        billing_type: body.BillingType as SimproRecurringInvoiceCostCenter["billing_type"],
+      }),
       ...(body.ExTax !== undefined && { ex_tax: Number(body.ExTax) }),
       ...(body.IncTax !== undefined && { inc_tax: Number(body.IncTax) }),
     });

@@ -263,25 +263,18 @@ export function formatJob(job: SimproJob, opts: FormatJobOptions = {}) {
   const { displayAll = false, ss } = opts;
 
   const customer = ss?.customers.findOneBy("external_id", job.customer_id);
-  const site = job.site_id && ss ? ss.sites.findOneBy("external_id", job.site_id) ?? undefined : undefined;
+  const site = job.site_id && ss ? (ss.sites.findOneBy("external_id", job.site_id) ?? undefined) : undefined;
   const customerContact =
     job.customer_contact_id && ss
-      ? ss.contacts.findOneBy("external_id", job.customer_contact_id) ?? undefined
+      ? (ss.contacts.findOneBy("external_id", job.customer_contact_id) ?? undefined)
       : undefined;
   const siteContact =
-    job.site_contact_id && ss
-      ? ss.contacts.findOneBy("external_id", job.site_contact_id) ?? undefined
-      : undefined;
+    job.site_contact_id && ss ? (ss.contacts.findOneBy("external_id", job.site_contact_id) ?? undefined) : undefined;
   const salesperson =
-    job.salesperson_id && ss
-      ? ss.staff.findOneBy("external_id", job.salesperson_id) ?? undefined
-      : undefined;
+    job.salesperson_id && ss ? (ss.staff.findOneBy("external_id", job.salesperson_id) ?? undefined) : undefined;
   const projectManager =
-    job.project_manager_id && ss
-      ? ss.staff.findOneBy("external_id", job.project_manager_id) ?? undefined
-      : undefined;
-  const status =
-    job.status_id && ss ? ss.statuses.findOneBy("external_id", job.status_id) ?? undefined : undefined;
+    job.project_manager_id && ss ? (ss.staff.findOneBy("external_id", job.project_manager_id) ?? undefined) : undefined;
+  const status = job.status_id && ss ? (ss.statuses.findOneBy("external_id", job.status_id) ?? undefined) : undefined;
   const technicians = ss
     ? job.technician_ids
         .map((id) => ss.staff.findOneBy("external_id", id))
@@ -375,10 +368,10 @@ export function formatCostCenter(cc: SimproCostCenter, opts: FormatJobOptions = 
   const { displayAll = false, ss } = opts;
   const masterCostCenter =
     cc.master_cost_center_id && ss
-      ? ss.masterCostCenters.findOneBy("external_id", cc.master_cost_center_id) ?? undefined
+      ? (ss.masterCostCenters.findOneBy("external_id", cc.master_cost_center_id) ?? undefined)
       : undefined;
   const taxCode =
-    cc.tax_code_id && ss ? ss.taxCodes.findOneBy("external_id", cc.tax_code_id) ?? undefined : undefined;
+    cc.tax_code_id && ss ? (ss.taxCodes.findOneBy("external_id", cc.tax_code_id) ?? undefined) : undefined;
 
   const base: Record<string, unknown> = {
     ID: cc.external_id,
@@ -482,23 +475,18 @@ export function formatPrebuildItem(item: SimproPrebuildItem) {
 
 export function formatQuote(q: SimproQuote, ss?: SimproStore) {
   const customer = ss?.customers.findOneBy("external_id", q.customer_id);
-  const site = q.site_id && ss ? ss.sites.findOneBy("external_id", q.site_id) ?? undefined : undefined;
+  const site = q.site_id && ss ? (ss.sites.findOneBy("external_id", q.site_id) ?? undefined) : undefined;
   const customerContact =
     q.customer_contact_id && ss
-      ? ss.contacts.findOneBy("external_id", q.customer_contact_id) ?? undefined
+      ? (ss.contacts.findOneBy("external_id", q.customer_contact_id) ?? undefined)
       : undefined;
   const siteContact =
-    q.site_contact_id && ss
-      ? ss.contacts.findOneBy("external_id", q.site_contact_id) ?? undefined
-      : undefined;
+    q.site_contact_id && ss ? (ss.contacts.findOneBy("external_id", q.site_contact_id) ?? undefined) : undefined;
   const salesperson =
-    q.salesperson_id && ss ? ss.staff.findOneBy("external_id", q.salesperson_id) ?? undefined : undefined;
+    q.salesperson_id && ss ? (ss.staff.findOneBy("external_id", q.salesperson_id) ?? undefined) : undefined;
   const projectManager =
-    q.project_manager_id && ss
-      ? ss.staff.findOneBy("external_id", q.project_manager_id) ?? undefined
-      : undefined;
-  const status =
-    q.status_id && ss ? ss.statuses.findOneBy("external_id", q.status_id) ?? undefined : undefined;
+    q.project_manager_id && ss ? (ss.staff.findOneBy("external_id", q.project_manager_id) ?? undefined) : undefined;
+  const status = q.status_id && ss ? (ss.statuses.findOneBy("external_id", q.status_id) ?? undefined) : undefined;
 
   return {
     ID: q.external_id,
@@ -634,7 +622,7 @@ export function formatAttachment(a: SimproAttachment) {
 
 export function formatAsset(a: SimproAsset, ss?: SimproStore) {
   const customer = ss?.customers.findOneBy("external_id", a.customer_id);
-  const site = a.site_id && ss ? ss.sites.findOneBy("external_id", a.site_id) ?? undefined : undefined;
+  const site = a.site_id && ss ? (ss.sites.findOneBy("external_id", a.site_id) ?? undefined) : undefined;
   return {
     ID: a.external_id,
     Name: a.name,
@@ -728,8 +716,8 @@ export function formatVendorOrder(vo: SimproVendorOrder, ss?: SimproStore) {
     Description: vo.description,
     IsInventoryItem: false,
     Stage: vo.stage,
-    Vendor: vendor ? { ID: vendor.external_id, Name: vendor.name } : (vo.vendor_id ? { ID: vo.vendor_id } : null),
-    Job: job ? { ID: job.external_id, Name: job.name } : (vo.job_id ? { ID: vo.job_id } : null),
+    Vendor: vendor ? { ID: vendor.external_id, Name: vendor.name } : vo.vendor_id ? { ID: vo.vendor_id } : null,
+    Job: job ? { ID: job.external_id, Name: job.name } : vo.job_id ? { ID: vo.job_id } : null,
     Totals: { ExTax: vo.total_ex_tax, IncTax: vo.total_inc_tax },
     DateIssued: dateOnly(vo.date_issued),
     DateModified: dateOnly(vo.date_issued),

@@ -67,7 +67,11 @@ export function plantRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "plantTypes", companyId);
@@ -87,7 +91,11 @@ export function plantRoutes({ app, store }: RouteContext): void {
     const pt = ss.plantTypes.findOneBy("external_id", Number(c.req.param("ptid")));
     if (!pt) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.plantTypes.update(pt.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.Description !== undefined && { description: body.Description as string | null }),
@@ -133,7 +141,11 @@ export function plantRoutes({ app, store }: RouteContext): void {
     const pt = ss.plantTypes.findOneBy("external_id", ptId);
     if (!pt) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     if (!body.Name) return simproValidation(c, "Name", "Name is required.");
     const companyId = Number(c.req.param("cid")) || 0;
     const externalId = nextExternalId(ss, "plants", companyId);
@@ -157,7 +169,11 @@ export function plantRoutes({ app, store }: RouteContext): void {
     const p = ss.plants.findOneBy("external_id", Number(c.req.param("pid")));
     if (!p || p.plant_type_id !== ptId) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.plants.update(p.id, {
       ...(body.Name !== undefined && { name: body.Name as string }),
       ...(body.SerialNo !== undefined && { serial_number: body.SerialNo as string | null }),

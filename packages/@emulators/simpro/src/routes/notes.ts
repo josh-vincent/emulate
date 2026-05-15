@@ -65,9 +65,7 @@ function registerParentNoteRoutes(
       .all()
       .filter(
         (n) =>
-          n.parent_type === parentType &&
-          n.parent_id === parentId &&
-          (n.company_id === companyId || companyId === 0),
+          n.parent_type === parentType && n.parent_id === parentId && (n.company_id === companyId || companyId === 0),
       );
     const pagination = parsePagination(c);
     const page = paginate(c, notes, pagination);

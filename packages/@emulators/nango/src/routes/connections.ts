@@ -15,10 +15,9 @@ export function connectionRoutes(app: Hono<AppEnv>, ns: NangoStoreFacade): void 
     }
 
     const forceRefresh = c.req.query("force_refresh") === "true";
-    const isExpired =
-      conn.credentials.expires_at
-        ? new Date(conn.credentials.expires_at).getTime() <= Date.now()
-        : false;
+    const isExpired = conn.credentials.expires_at
+      ? new Date(conn.credentials.expires_at).getTime() <= Date.now()
+      : false;
 
     if (forceRefresh || isExpired) {
       conn = ns.refreshCredentials(id) ?? conn;
@@ -103,14 +102,10 @@ export function connectionRoutes(app: Hono<AppEnv>, ns: NangoStoreFacade): void 
   // Headers: Connection-Id, Provider-Config-Key
   const recordsHandler = (c: Context<AppEnv>) => {
     const connectionId = c.req.header("Connection-Id") ?? c.req.header("connection-id");
-    const providerConfigKey =
-      c.req.header("Provider-Config-Key") ?? c.req.header("provider-config-key");
+    const providerConfigKey = c.req.header("Provider-Config-Key") ?? c.req.header("provider-config-key");
     const model = c.req.query("model");
     if (!connectionId || !model) {
-      return c.json(
-        { message: "Missing Connection-Id header or model query param" },
-        400,
-      );
+      return c.json({ message: "Missing Connection-Id header or model query param" }, 400);
     }
     const raw = ns.getRecords(connectionId, model, providerConfigKey ?? undefined);
     const now = new Date().toISOString();

@@ -102,9 +102,7 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: UptickSee
 
   // 4. Properties (depends on clients)
   for (const p of config.properties ?? []) {
-    const client = p.client_name
-      ? us.clients.all().find((c) => c.name === p.client_name)
-      : null;
+    const client = p.client_name ? us.clients.all().find((c) => c.name === p.client_name) : null;
 
     if (p.client_name && !client) {
       console.warn(`[uptick] seedFromConfig: property "${p.name}" — client "${p.client_name}" not found, skipping`);
@@ -131,19 +129,13 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: UptickSee
 
   // 5. Assets (depends on clients, properties, asset_types)
   for (const a of config.assets ?? []) {
-    const client = a.client_name
-      ? us.clients.all().find((c) => c.name === a.client_name)
-      : null;
-    const property = a.property_name
-      ? us.properties.all().find((p) => p.name === a.property_name)
-      : null;
-    const assetType = a.asset_type_name
-      ? us.assetTypes.all().find((t) => t.name === a.asset_type_name)
-      : null;
+    const client = a.client_name ? us.clients.all().find((c) => c.name === a.client_name) : null;
+    const property = a.property_name ? us.properties.all().find((p) => p.name === a.property_name) : null;
+    const assetType = a.asset_type_name ? us.assetTypes.all().find((t) => t.name === a.asset_type_name) : null;
 
-    const duplicate = us.assets.all().find(
-      (asset) => asset.name === a.name && asset.property_id === (property?.id ?? null),
-    );
+    const duplicate = us.assets
+      .all()
+      .find((asset) => asset.name === a.name && asset.property_id === (property?.id ?? null));
     if (duplicate) continue;
 
     us.assets.insert({
@@ -152,7 +144,7 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: UptickSee
       is_active: a.is_active !== false,
       standard_maintenance: a.standard_maintenance ?? "",
       property_id: property?.id ?? null,
-      client_id: client?.id ?? (property ? us.properties.get(property.id)?.client_id ?? null : null),
+      client_id: client?.id ?? (property ? (us.properties.get(property.id)?.client_id ?? null) : null),
       asset_type_id: assetType?.id ?? null,
       asset_type_name: assetType?.name ?? a.asset_type_name ?? "",
     });
@@ -160,15 +152,17 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: UptickSee
 
   // 6. Defects (depends on assets, properties, clients)
   for (const d of config.defects ?? []) {
-    const asset = d.asset_name
-      ? us.assets.all().find((a) => a.name === d.asset_name)
-      : null;
+    const asset = d.asset_name ? us.assets.all().find((a) => a.name === d.asset_name) : null;
     const property = d.property_name
       ? us.properties.all().find((p) => p.name === d.property_name)
-      : (asset?.property_id ? us.properties.get(asset.property_id) ?? null : null);
+      : asset?.property_id
+        ? (us.properties.get(asset.property_id) ?? null)
+        : null;
     const client = d.client_name
       ? us.clients.all().find((c) => c.name === d.client_name)
-      : (property?.client_id ? us.clients.get(property.client_id) ?? null : null);
+      : property?.client_id
+        ? (us.clients.get(property.client_id) ?? null)
+        : null;
 
     us.defects.insert({
       description: d.description,

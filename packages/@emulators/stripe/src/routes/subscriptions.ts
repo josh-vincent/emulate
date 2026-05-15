@@ -63,8 +63,12 @@ export function subscriptionRoutes({ app, store, webhooks }: RouteContext): void
     const customer = ss.customers.findOneBy("stripe_id", body.customer as string);
     if (!customer) {
       return stripeError(
-        c, 400, "invalid_request_error",
-        `No such customer: '${body.customer}'`, "resource_missing", "customer",
+        c,
+        400,
+        "invalid_request_error",
+        `No such customer: '${body.customer}'`,
+        "resource_missing",
+        "customer",
       );
     }
 
@@ -77,14 +81,25 @@ export function subscriptionRoutes({ app, store, webhooks }: RouteContext): void
     for (let i = 0; i < itemsInput.length; i++) {
       const item = itemsInput[i];
       if (!item.price) {
-        return stripeError(c, 400, "invalid_request_error",
-          `Missing required param: items[${i}][price].`, undefined, `items[${i}][price]`);
+        return stripeError(
+          c,
+          400,
+          "invalid_request_error",
+          `Missing required param: items[${i}][price].`,
+          undefined,
+          `items[${i}][price]`,
+        );
       }
-      const price = ss.prices.findOneBy("stripe_id", item.price)
-        ?? ss.prices.findOneBy("lookup_key", item.price);
+      const price = ss.prices.findOneBy("stripe_id", item.price) ?? ss.prices.findOneBy("lookup_key", item.price);
       if (!price) {
-        return stripeError(c, 400, "invalid_request_error",
-          `No such price: '${item.price}'`, "resource_missing", `items[${i}][price]`);
+        return stripeError(
+          c,
+          400,
+          "invalid_request_error",
+          `No such price: '${item.price}'`,
+          "resource_missing",
+          `items[${i}][price]`,
+        );
       }
     }
 
@@ -167,8 +182,13 @@ export function subscriptionRoutes({ app, store, webhooks }: RouteContext): void
   app.get("/v1/subscriptions/:id", (c) => {
     const sub = ss.subscriptions.findOneBy("stripe_id", c.req.param("id"));
     if (!sub) {
-      return stripeError(c, 404, "invalid_request_error",
-        `No such subscription: '${c.req.param("id")}'`, "resource_missing");
+      return stripeError(
+        c,
+        404,
+        "invalid_request_error",
+        `No such subscription: '${c.req.param("id")}'`,
+        "resource_missing",
+      );
     }
     const items = ss.subscriptionItems.findBy("subscription_id", sub.stripe_id);
     return c.json(formatSubscription(sub, items));
@@ -178,12 +198,22 @@ export function subscriptionRoutes({ app, store, webhooks }: RouteContext): void
   app.post("/v1/subscriptions/:id", async (c) => {
     const sub = ss.subscriptions.findOneBy("stripe_id", c.req.param("id"));
     if (!sub) {
-      return stripeError(c, 404, "invalid_request_error",
-        `No such subscription: '${c.req.param("id")}'`, "resource_missing");
+      return stripeError(
+        c,
+        404,
+        "invalid_request_error",
+        `No such subscription: '${c.req.param("id")}'`,
+        "resource_missing",
+      );
     }
     if (sub.status === "canceled") {
-      return stripeError(c, 400, "invalid_request_error",
-        "Cannot update a canceled subscription.", "subscription_canceled");
+      return stripeError(
+        c,
+        400,
+        "invalid_request_error",
+        "Cannot update a canceled subscription.",
+        "subscription_canceled",
+      );
     }
 
     const body = await parseStripeBody(c);
@@ -214,12 +244,16 @@ export function subscriptionRoutes({ app, store, webhooks }: RouteContext): void
   app.delete("/v1/subscriptions/:id", async (c) => {
     const sub = ss.subscriptions.findOneBy("stripe_id", c.req.param("id"));
     if (!sub) {
-      return stripeError(c, 404, "invalid_request_error",
-        `No such subscription: '${c.req.param("id")}'`, "resource_missing");
+      return stripeError(
+        c,
+        404,
+        "invalid_request_error",
+        `No such subscription: '${c.req.param("id")}'`,
+        "resource_missing",
+      );
     }
     if (sub.status === "canceled") {
-      return stripeError(c, 400, "invalid_request_error",
-        "Subscription is already canceled.", "subscription_canceled");
+      return stripeError(c, 400, "invalid_request_error", "Subscription is already canceled.", "subscription_canceled");
     }
 
     const now = Math.floor(Date.now() / 1000);

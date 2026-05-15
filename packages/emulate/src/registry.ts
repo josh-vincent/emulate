@@ -529,21 +529,22 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
       return { plugin: mod.workosPlugin, seedFromConfig: mod.seedFromConfig };
     },
     defaultFallback(cfg) {
-      const firstEmail =
-        (cfg?.users as Array<{ email?: string }> | undefined)?.[0]?.email ?? "dev@taskrs.com.au";
+      const firstEmail = (cfg?.users as Array<{ email?: string }> | undefined)?.[0]?.email ?? "dev@taskrs.com.au";
       return { login: firstEmail, id: 1, scopes: [] };
     },
     initConfig: {
       workos: {
         users: [
-          { id: "user_dev", email: "dev@taskrs.com.au", first_name: "Dev", last_name: "User", password: "DevPassword123!" },
+          {
+            id: "user_dev",
+            email: "dev@taskrs.com.au",
+            first_name: "Dev",
+            last_name: "User",
+            password: "DevPassword123!",
+          },
         ],
-        organizations: [
-          { id: "org_dev", name: "Dev Org", slug: "dev-org" },
-        ],
-        memberships: [
-          { user_email: "dev@taskrs.com.au", organization_slug: "dev-org", role: "owner" },
-        ],
+        organizations: [{ id: "org_dev", name: "Dev Org", slug: "dev-org" }],
+        memberships: [{ user_email: "dev@taskrs.com.au", organization_slug: "dev-org", role: "owner" }],
         oauth_clients: [
           {
             client_id: "client_test_01",
@@ -580,17 +581,15 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
                 {
                   id: "INV-001",
                   InvoiceNumber: "INV-001",
-                  Total: 1100.00,
-                  AmountDue: 1100.00,
+                  Total: 1100.0,
+                  AmountDue: 1100.0,
                   Status: "AUTHORISED",
                   DateString: "2024-01-15",
                   DueDateString: "2024-02-15",
                   Contact: { ContactID: "CONTACT-001", Name: "Demo Customer" },
                 },
               ],
-              Contact: [
-                { id: "CONTACT-001", Name: "Demo Customer", EmailAddress: "customer@demo.com" },
-              ],
+              Contact: [{ id: "CONTACT-001", Name: "Demo Customer", EmailAddress: "customer@demo.com" }],
             },
           },
           {
@@ -603,8 +602,8 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
                 {
                   Id: "1",
                   DocNumber: "1001",
-                  TotalAmt: 550.00,
-                  Balance: 550.00,
+                  TotalAmt: 550.0,
+                  Balance: 550.0,
                   TxnDate: "2024-01-10",
                   DueDate: "2024-02-10",
                   CustomerRef: { value: "1", name: "Test Customer" },
@@ -658,11 +657,7 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
             asset_type_name: "Fire Hose Reel",
           },
         ],
-        asset_types: [
-          { name: "Fire Hose Reel" },
-          { name: "Fire Extinguisher" },
-          { name: "Fire Panel" },
-        ],
+        asset_types: [{ name: "Fire Hose Reel" }, { name: "Fire Extinguisher" }, { name: "Fire Panel" }],
         users: [
           {
             username: "tech1",

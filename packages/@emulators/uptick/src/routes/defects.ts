@@ -33,20 +33,15 @@ export function defectRoutes({ app, store }: RouteContext): void {
       defects = defects.filter((d) => d.status === statusFilter);
     }
 
-    return uptickPaginate(
-      c,
-      defects,
-      (d) => formatDefect(d, s),
-      `/api/${c.req.param("ver")}/defects/`,
-    );
+    return uptickPaginate(c, defects, (d) => formatDefect(d, s), `/api/${c.req.param("ver")}/defects/`);
   });
 
   app.post("/api/:ver/defects/", async (c) => {
     const s = us();
     const { attributes, relationships } = await parseJsonApiBody(c);
-    const assetId = relId((relationships.asset as Record<string, unknown>));
-    const propertyId = relId((relationships.property as Record<string, unknown>));
-    const clientId = relId((relationships.client as Record<string, unknown>));
+    const assetId = relId(relationships.asset as Record<string, unknown>);
+    const propertyId = relId(relationships.property as Record<string, unknown>);
+    const clientId = relId(relationships.client as Record<string, unknown>);
 
     // Auto-resolve property and client from asset if not provided
     let resolvedPropertyId = propertyId;
@@ -88,9 +83,9 @@ export function defectRoutes({ app, store }: RouteContext): void {
     if (!existing) return uptickError(c, 404, "Not Found");
 
     const { attributes, relationships } = await parseJsonApiBody(c);
-    const assetId = relId((relationships.asset as Record<string, unknown>));
-    const propertyId = relId((relationships.property as Record<string, unknown>));
-    const clientId = relId((relationships.client as Record<string, unknown>));
+    const assetId = relId(relationships.asset as Record<string, unknown>);
+    const propertyId = relId(relationships.property as Record<string, unknown>);
+    const clientId = relId(relationships.client as Record<string, unknown>);
 
     const updated = s.defects.update(id, {
       description: (attributes.description as string) ?? existing.description,

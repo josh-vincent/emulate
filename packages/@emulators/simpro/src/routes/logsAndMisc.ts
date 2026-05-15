@@ -2,13 +2,7 @@ import type { Context } from "hono";
 import type { RouteContext } from "@emulators/core";
 import { getSimproStore } from "../store.js";
 import { formatStaff } from "../formatters.js";
-import {
-  paginate,
-  parsePagination,
-  rateLimit,
-  requireAuth,
-  simproNotFound,
-} from "../helpers.js";
+import { paginate, parsePagination, rateLimit, requireAuth, simproNotFound } from "../helpers.js";
 
 const LOG_RESOURCES = [
   "jobs",
@@ -57,9 +51,7 @@ export function logsAndMiscRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     const companyId = Number(c.req.param("cid")) || 0;
-    const items = ss.staff
-      .all()
-      .filter((s) => (s.company_id === companyId || companyId === 0) && s.active);
+    const items = ss.staff.all().filter((s) => (s.company_id === companyId || companyId === 0) && s.active);
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);
     return c.json(page.map(formatStaff));

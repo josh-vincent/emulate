@@ -45,12 +45,14 @@ export function siteRoutes({ app, store }: RouteContext): void {
 
     const pagination = parsePagination(c);
     const page = paginate(c, items, pagination);
-    return c.json(page.map((site) => {
-      const contact = site.contact_id
-        ? ss.contacts.findOneBy("external_id", site.contact_id) ?? undefined
-        : undefined;
-      return formatSite(site, contact);
-    }));
+    return c.json(
+      page.map((site) => {
+        const contact = site.contact_id
+          ? (ss.contacts.findOneBy("external_id", site.contact_id) ?? undefined)
+          : undefined;
+        return formatSite(site, contact);
+      }),
+    );
   });
 
   app.get("/api/v1.0/companies/:cid/sites/:id", (c) => {
@@ -59,9 +61,7 @@ export function siteRoutes({ app, store }: RouteContext): void {
 
     const site = ss.sites.findOneBy("external_id", Number(c.req.param("id")));
     if (!site) return simproNotFound(c);
-    const contact = site.contact_id
-      ? ss.contacts.findOneBy("external_id", site.contact_id) ?? undefined
-      : undefined;
+    const contact = site.contact_id ? (ss.contacts.findOneBy("external_id", site.contact_id) ?? undefined) : undefined;
     return c.json(formatSite(site, contact));
   });
 
@@ -90,7 +90,7 @@ export function siteRoutes({ app, store }: RouteContext): void {
       customer_id: customerRef.ID,
       name: (body.Name as string) ?? `Site ${externalId}`,
       address: (body.Address as SimproAddress) ?? null,
-      contact_id: ((body.Contact as { ID?: number } | undefined)?.ID) ?? null,
+      contact_id: (body.Contact as { ID?: number } | undefined)?.ID ?? null,
       archived: false,
     });
 

@@ -58,7 +58,11 @@ export function invoiceRoutes({ app, store }: RouteContext): void {
     const blocked = guard(c);
     if (blocked) return blocked;
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     const jobRef = body.Job as { ID?: number } | undefined;
     if (!jobRef?.ID) return simproValidation(c, "Job.ID", "Job is required.");
     const job = ss.jobs.findOneBy("external_id", jobRef.ID);
@@ -85,7 +89,11 @@ export function invoiceRoutes({ app, store }: RouteContext): void {
     const inv = ss.invoices.findOneBy("external_id", Number(c.req.param("id")));
     if (!inv) return simproNotFound(c);
     let body: Record<string, unknown>;
-    try { body = await parseJson(c); } catch { return simproError(c, 400, "Problems parsing JSON."); }
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
     ss.invoices.update(inv.id, {
       ...(body.Stage !== undefined && { stage: Number(body.Stage) as 2 | 5 }),
       ...(body.Paid !== undefined && { paid: Number(body.Paid) }),

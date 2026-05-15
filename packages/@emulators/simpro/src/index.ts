@@ -566,19 +566,12 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: SimproSee
       description: at.description ?? null,
       mime_type: at.mime_type ?? null,
       size: at.size ?? 0,
-      url:
-        at.url ??
-        `https://emulator.local/attachments/${at.parent_type}/${at.parent_id}/${at.id}`,
+      url: at.url ?? `https://emulator.local/attachments/${at.parent_type}/${at.parent_id}/${at.id}`,
       date_added: at.date_added ?? now,
     };
     const existing = ss.attachments
       .all()
-      .find(
-        (a) =>
-          a.parent_type === at.parent_type &&
-          a.parent_id === at.parent_id &&
-          a.external_id === at.id,
-      );
+      .find((a) => a.parent_type === at.parent_type && a.parent_id === at.parent_id && a.external_id === at.id);
     if (existing) ss.attachments.update(existing.id, row);
     else ss.attachments.insert(row);
   }
@@ -593,8 +586,7 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: SimproSee
       group_name: si.group_name ?? null,
       subgroup_name: si.subgroup_name ?? null,
       trade_price_ex_tax: si.trade_price_ex_tax ?? 0,
-      trade_price_inc_tax:
-        si.trade_price_inc_tax ?? si.trade_price_ex_tax ?? 0,
+      trade_price_inc_tax: si.trade_price_inc_tax ?? si.trade_price_ex_tax ?? 0,
       unit_price: si.unit_price ?? si.trade_price_ex_tax ?? 0,
       unit_of_measure: si.unit_of_measure ?? null,
       tax_code_id: si.tax_code_id ?? null,
@@ -629,9 +621,7 @@ function seedDefaults(store: Store, _baseUrl: string): void {
       { id: 12, name: "Plumbing Materials", income_account: "4-1000" },
       { id: 15, name: "Electrical Labour", income_account: "4-1010" },
     ],
-    staff: [
-      { id: 1, given_name: "Taylor", family_name: "Rivera", email: "taylor@emulator.local" },
-    ],
+    staff: [{ id: 1, given_name: "Taylor", family_name: "Rivera", email: "taylor@emulator.local" }],
     customers: [
       {
         id: 200,
@@ -695,13 +685,7 @@ function seedDefaults(store: Store, _baseUrl: string): void {
 
 export const simproPlugin: ServicePlugin = {
   name: "simpro",
-  register(
-    app: Hono<AppEnv>,
-    store: Store,
-    webhooks: WebhookDispatcher,
-    baseUrl: string,
-    tokenMap?: TokenMap,
-  ): void {
+  register(app: Hono<AppEnv>, store: Store, webhooks: WebhookDispatcher, baseUrl: string, tokenMap?: TokenMap): void {
     const ctx: RouteContext = { app, store, webhooks, baseUrl, tokenMap };
     companyRoutes(ctx);
     oauthRoutes(ctx);
