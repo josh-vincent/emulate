@@ -9,7 +9,7 @@ import {
   type TokenMap,
   type AppEnv,
 } from "@emulators/core";
-import { SERVICE_REGISTRY, SERVICE_NAMES, type ServiceName } from "emulate";
+import { SERVICE_REGISTRY, SERVICE_NAMES, type ServiceName } from "./plugins.js";
 
 export interface ServiceApp {
   name: ServiceName;

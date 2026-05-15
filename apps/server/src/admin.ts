@@ -3,7 +3,7 @@ import type { AppEnv } from "@emulators/core";
 import { reseedApps, type ServiceApp, type ServiceName } from "./dispatcher.js";
 import { expandUnifiedUsers, listUnifiedUsers, type MintedToken } from "./seed/users.js";
 import type { EmulateConfig } from "./config.js";
-import { SERVICE_NAMES } from "emulate";
+import { SERVICE_NAMES } from "./plugins.js";
 
 export interface AdminState {
   apps: Map<ServiceName, ServiceApp>;

@@ -3,7 +3,7 @@ import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import pc from "picocolors";
 import { registerFontRoutes, type AppEnv } from "@emulators/core";
-import { SERVICE_NAMES } from "emulate";
+import { SERVICE_NAMES } from "./plugins.js";
 import { loadConfig } from "./config.js";
 import { expandUnifiedUsers } from "./seed/users.js";
 import { buildServiceApps, mountDispatcher, type ServiceName } from "./dispatcher.js";

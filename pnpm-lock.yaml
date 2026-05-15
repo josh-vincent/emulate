@@ -867,33 +867,21 @@ importers:
       '@emulators/mongoatlas':
         specifier: workspace:*
         version: link:../@emulators/mongoatlas
-      '@emulators/nango':
-        specifier: workspace:*
-        version: link:../@emulators/nango
       '@emulators/okta':
         specifier: workspace:*
         version: link:../@emulators/okta
       '@emulators/resend':
         specifier: workspace:*
         version: link:../@emulators/resend
-      '@emulators/simpro':
-        specifier: workspace:*
-        version: link:../@emulators/simpro
       '@emulators/slack':
         specifier: workspace:*
         version: link:../@emulators/slack
       '@emulators/stripe':
         specifier: workspace:*
         version: link:../@emulators/stripe
-      '@emulators/uptick':
-        specifier: workspace:*
-        version: link:../@emulators/uptick
       '@emulators/vercel':
         specifier: workspace:*
         version: link:../@emulators/vercel
-      '@emulators/workos':
-        specifier: workspace:*
-        version: link:../@emulators/workos
       tsup:
         specifier: ^8
         version: 8.5.1(jiti@2.6.1)(postcss@8.5.8)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
