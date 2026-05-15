@@ -218,6 +218,34 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  examples/api-emulators-quickstart:
+    dependencies:
+      '@emulators/core':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/core
+      '@emulators/nango':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/nango
+      '@emulators/simpro':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/simpro
+      '@emulators/uptick':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/uptick
+      hono:
+        specifier: ^4
+        version: 4.12.12
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.19.17
+      tsx:
+        specifier: ^4
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7
+        version: 5.9.3
+
   examples/nextjs-embedded:
     dependencies:
       '@base-ui/react':

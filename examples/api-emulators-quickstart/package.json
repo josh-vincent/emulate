@@ -1,0 +1,25 @@
+{
+  "name": "api-emulators-quickstart",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Runnable end-to-end demos for the Nango, Simpro and Uptick emulators",
+  "scripts": {
+    "nango": "tsx src/nango.ts",
+    "simpro": "tsx src/simpro.ts",
+    "uptick": "tsx src/uptick.ts",
+    "all": "tsx src/nango.ts && tsx src/simpro.ts && tsx src/uptick.ts"
+  },
+  "dependencies": {
+    "@emulators/core": "workspace:*",
+    "@emulators/nango": "workspace:*",
+    "@emulators/simpro": "workspace:*",
+    "@emulators/uptick": "workspace:*",
+    "hono": "^4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5.7"
+  }
+}
