@@ -3,7 +3,13 @@ import type { ServicePlugin, Store, WebhookDispatcher, TokenMap, AppEnv, RouteCo
 import { getMicrosoftStore } from "./store.js";
 import { generateOid, DEFAULT_TENANT_ID } from "./helpers.js";
 import { oauthRoutes } from "./routes/oauth.js";
-import { graphRoutes, seedGraphDefaults, seedGraphFromConfig, type MicrosoftGraphSeedConfig } from "./routes/graph.js";
+import {
+  graphRoutes,
+  seedGraphDefaults,
+  seedGraphFromConfig,
+  storeToGraphSeedConfig,
+  type MicrosoftGraphSeedConfig,
+} from "./routes/graph.js";
 import { inspectorRoutes } from "./routes/inspector.js";
 
 export { getMicrosoftStore, type MicrosoftStore } from "./store.js";
@@ -104,6 +110,44 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: Microsoft
       contacts: config.contacts,
     });
   }
+}
+
+/**
+ * Project live Microsoft state back into the `MicrosoftSeedConfig` shape so
+ * the export round-trips through `seedFromConfig` verbatim. Identity (users,
+ * oauth_clients) is read from the entity store; Graph data (mail, calendar,
+ * drive, teams, contacts) is reversed by `storeToGraphSeedConfig`. `tenant_id`
+ * is omitted when it equals the default tenant, matching the compact
+ * seed-file style (`seedFromConfig` re-defaults it). `client_secret` is
+ * retained — it is static config needed to replay the OAuth flow.
+ */
+export function storeToSeedConfig(store: Store, _baseUrl: string): MicrosoftSeedConfig {
+  const ms = getMicrosoftStore(store);
+  const out: MicrosoftSeedConfig = {};
+
+  const tenant = (id: string): { tenant_id?: string } => (id === DEFAULT_TENANT_ID ? {} : { tenant_id: id });
+
+  const users = ms.users.all();
+  if (users.length)
+    out.users = users.map((u) => ({
+      email: u.email,
+      name: u.name,
+      given_name: u.given_name,
+      family_name: u.family_name,
+      ...tenant(u.tenant_id),
+    }));
+
+  const clients = ms.oauthClients.all();
+  if (clients.length)
+    out.oauth_clients = clients.map((c) => ({
+      client_id: c.client_id,
+      client_secret: c.client_secret,
+      name: c.name,
+      redirect_uris: c.redirect_uris,
+      ...tenant(c.tenant_id),
+    }));
+
+  return { ...out, ...storeToGraphSeedConfig(store) };
 }
 
 export const microsoftPlugin: ServicePlugin = {

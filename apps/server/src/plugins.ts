@@ -23,7 +23,11 @@ const CUSTOM_REGISTRY: Record<CustomServiceName, ServiceEntry> = {
       "OAuth 2.0, jobs, sections, cost centers, customers (companies + individuals), sites, staff, contractors, quotes, invoices, schedules, assets, reference data (tax codes, labour rates, statuses, stock), webhooks, inspector UI",
     async load() {
       const mod = await import("@emulators/simpro");
-      return { plugin: mod.simproPlugin, seedFromConfig: mod.seedFromConfig };
+      return {
+        plugin: mod.simproPlugin,
+        seedFromConfig: mod.seedFromConfig,
+        storeToSeedConfig: mod.storeToSeedConfig,
+      };
     },
     defaultFallback() {
       return { login: "admin@emulator.local", id: 1, scopes: [] };

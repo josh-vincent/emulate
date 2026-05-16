@@ -52,11 +52,53 @@ GET  /_admin/health               # liveness, lists mounted services
 GET  /_admin/users                # unified roster + minted bearer tokens
 GET  /_admin/config               # current config snapshot
 POST /_admin/reset                # wipe all stores (keeps default seed)
-POST /_admin/seed     {body: EmulateConfig}    # full reseed (wipe + apply)
+POST /_admin/seed     {body: EmulateConfig}              # full reseed (wipe + apply)
+POST /_admin/seed?mode=merge  {body: EmulateConfig}      # additive upsert (no wipe)
+GET  /_admin/export   [?service=&format=yaml|json&includeCredentials=true]
 ```
 
 When `EMULATE_ADMIN_TOKEN` is set, all routes except `/health` require
 `Authorization: Bearer <token>`.
+
+### Seed: replace vs. merge
+
+`emulate` is a primitive — the consuming project pushes *its own* seed and
+owns that data. Pushing config for a service **suppresses that service's
+built-in defaults** (e.g. no `testuser@gmail.com`); services with no pushed
+config keep their defaults.
+
+- **`POST /_admin/seed`** (default, `mode=replace`) — wipe and reapply. Live
+  OAuth credentials issued during connect flows are preserved across the
+  reseed so connected integrations don't have to re-authorise.
+- **`POST /_admin/seed?mode=merge`** — additive upsert onto the running store.
+  No wipe, no auth reset. Only the services present in the body are touched.
+  Idempotency depends on each plugin's upsert: `simpro` / `nango` are fully
+  upsert-safe; `google` calendars/events and `uptick` defects duplicate on
+  repeat; `microsoft` Graph arrays are replaced wholesale.
+
+### Export (portable, re-seedable)
+
+`GET /_admin/export` captures live store state back into an
+`EmulateConfig`-shaped payload that `POST /_admin/seed` accepts **verbatim**
+(round-trip invariant) — mutate through the normal API, then export the result
+as the seed for another emulator instance.
+
+- `?service=<name>` — single service (default: all mounted)
+- `?format=yaml|json` — default `json`; `yaml` is human-editable
+- `?includeCredentials=true` — emit nango access/refresh tokens (default:
+  stripped and re-synthesised on re-seed). `oauth_clients.client_secret` is
+  always retained (static config needed to replay OAuth); the internal OAuth
+  token/code collections are never exported.
+
+State exporters exist for **`nango`, `uptick`, `google`, `simpro`, and
+`microsoft`** — these round-trip exactly. Services without an exporter are
+listed under `_meta.export_notes`; that envelope is inert on re-seed, so the
+payload stays directly re-seedable (re-seed those services from their original
+config).
+
+```bash
+BASE=http://localhost:4000 bash apps/server/scripts/test-export-roundtrip.sh
+```
 
 The full E2E test in `scripts/test-admin-seed.sh` exercises:
 1. POST `/_admin/seed` with custom users + seed data

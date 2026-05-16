@@ -286,7 +286,11 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
     endpoints: "OAuth authorize, token exchange, userinfo, OIDC discovery, Graph /me, logout, token revocation",
     async load() {
       const mod = await import("@emulators/microsoft");
-      return { plugin: mod.microsoftPlugin, seedFromConfig: mod.seedFromConfig };
+      return {
+        plugin: mod.microsoftPlugin,
+        seedFromConfig: mod.seedFromConfig,
+        storeToSeedConfig: mod.storeToSeedConfig,
+      };
     },
     defaultFallback(cfg) {
       const firstEmail = (cfg?.users as Array<{ email?: string }> | undefined)?.[0]?.email ?? "testuser@outlook.com";

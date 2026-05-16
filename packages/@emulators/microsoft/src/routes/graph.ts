@@ -914,6 +914,107 @@ export function seedGraphFromConfig(
   );
 }
 
+/**
+ * Reverse of `seedGraphFromConfig`: project the live Graph store (mail,
+ * calendars, events, drive items, teams/channels, contacts) back into the
+ * `MicrosoftGraphSeedConfig` shape so the export round-trips through
+ * `seedGraphFromConfig` verbatim. Only non-empty sections are emitted. Internal
+ * Graph wrappers (changeKey, eTag, webLink, …) are dropped; ids are preserved
+ * so relationships (event→calendar, channel→team) survive a re-seed.
+ */
+export function storeToGraphSeedConfig(store: RouteContext["store"]): MicrosoftGraphSeedConfig {
+  const out: MicrosoftGraphSeedConfig = {};
+  const orUndef = (s: string | null | undefined): string | undefined => (s ? s : undefined);
+
+  const folderIdToName = new Map(getMailFolders(store).map((f) => [f.id, f.displayName]));
+  const messages = getMessages(store);
+  if (messages.length)
+    out.mail_messages = messages.map((m) => ({
+      id: m.id,
+      subject: m.subject,
+      from_name: m.from.emailAddress.name,
+      from_address: m.from.emailAddress.address,
+      to_name: m.toRecipients[0]?.emailAddress.name,
+      to_address: m.toRecipients[0]?.emailAddress.address,
+      body_text: m.body.content,
+      received_date_time: m.receivedDateTime,
+      is_read: m.isRead,
+      folder: folderIdToName.get(m.parentFolderId) ?? "Inbox",
+    }));
+
+  const calendars = getCalendars(store);
+  if (calendars.length)
+    out.calendars = calendars.map((c) => ({ id: c.id, name: c.name, is_default: c.isDefaultCalendar }));
+
+  const events = getEvents(store);
+  if (events.length)
+    out.calendar_events = events.map((e) => ({
+      id: e.id,
+      calendar_id: e.calendarId,
+      subject: e.subject,
+      start: e.start.dateTime,
+      end: e.end.dateTime,
+      time_zone: e.start.timeZone,
+      location: orUndef(e.location?.displayName),
+      body_text: orUndef(e.body?.content),
+      is_all_day: e.isAllDay,
+      attendees: e.attendees.map((a) => ({
+        name: a.emailAddress.name,
+        address: a.emailAddress.address,
+        type: a.type === "resource" ? "required" : a.type,
+      })),
+    }));
+
+  const driveItems = getDriveItems(store);
+  if (driveItems.length)
+    out.drive_items = driveItems.map((d) => ({
+      id: d.id,
+      name: d.name,
+      size: d.size,
+      mime_type: d.file?.mimeType,
+      parent_id: d.parentReference?.id ?? "root",
+      modified_date_time: d.lastModifiedDateTime,
+      created_date_time: d.createdDateTime,
+    }));
+
+  const teams = getTeams(store);
+  if (teams.length) {
+    const channels = getChannels(store);
+    out.teams = teams.map((t) => {
+      const teamChannels = channels.filter((ch) => ch.teamId === t.id);
+      return {
+        id: t.id,
+        display_name: t.displayName,
+        description: orUndef(t.description),
+        ...(teamChannels.length
+          ? {
+              channels: teamChannels.map((ch) => ({
+                id: ch.id,
+                display_name: ch.displayName,
+                description: orUndef(ch.description),
+              })),
+            }
+          : {}),
+      };
+    });
+  }
+
+  const contacts = getContacts(store);
+  if (contacts.length)
+    out.contacts = contacts.map((c) => ({
+      id: c.id,
+      display_name: c.displayName,
+      given_name: orUndef(c.givenName),
+      surname: orUndef(c.surname),
+      email: c.emailAddresses[0]?.address,
+      phone: c.businessPhones[0],
+      job_title: orUndef(c.jobTitle),
+      company_name: orUndef(c.companyName),
+    }));
+
+  return out;
+}
+
 export function seedGraphDefaults(store: RouteContext["store"], baseUrl: string): void {
   const ms = getMicrosoftStore(store);
   const users = ms.users.all();

@@ -602,6 +602,275 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: SimproSee
   }
 }
 
+/**
+ * Project live Simpro state back into the `SimproSeedConfig` shape so the
+ * export round-trips through `seedFromConfig` verbatim. Store rows carry an
+ * internal auto-`id` plus the config-facing `external_id`; this reverses that
+ * mapping (`external_id` → `id`) and re-nests sites under customers and
+ * sections/cost_centers under jobs. `company_id` is omitted when it equals the
+ * default company, matching the compact seed-file style (`seedFromConfig`
+ * re-defaults it). Only the config-supported subset of the ~80 store
+ * collections is emitted; OAuth tokens/codes are never exported.
+ */
+export function storeToSeedConfig(store: Store, _baseUrl: string): SimproSeedConfig {
+  const ss = getSimproStore(store);
+  const out: SimproSeedConfig = {};
+
+  const oauth = store.getData<{ client_id?: string; client_secret?: string }>("simpro.oauth");
+  if (oauth) out.oauth = oauth;
+  if (store.getData<boolean>("simpro.rate_limit_enabled")) out.rate_limit_enabled = true;
+
+  // Drop company_id when it is the default company so the export matches the
+  // compact seed-file style; seedFromConfig re-defaults missing ids to 0.
+  const co = (companyId: number): { company_id?: number } =>
+    companyId === DEFAULT_COMPANY_ID ? {} : { company_id: companyId };
+
+  const companies = ss.companies.all();
+  if (companies.length) out.companies = companies.map((c) => ({ id: c.company_id, name: c.name }));
+
+  const taxCodes = ss.taxCodes.all();
+  if (taxCodes.length)
+    out.tax_codes = taxCodes.map((t) => ({ id: t.external_id, ...co(t.company_id), name: t.name, rate: t.rate }));
+
+  const statuses = ss.statuses.all();
+  if (statuses.length)
+    out.statuses = statuses.map((s) => ({ id: s.external_id, ...co(s.company_id), kind: s.kind, name: s.name }));
+
+  const mccs = ss.masterCostCenters.all();
+  if (mccs.length)
+    out.master_cost_centers = mccs.map((m) => ({
+      id: m.external_id,
+      ...co(m.company_id),
+      name: m.name,
+      income_account: m.income_account,
+      expense_account: m.expense_account,
+    }));
+
+  const staff = ss.staff.all();
+  if (staff.length)
+    out.staff = staff.map((s) => ({
+      id: s.external_id,
+      ...co(s.company_id),
+      given_name: s.given_name,
+      family_name: s.family_name,
+      email: s.email,
+    }));
+
+  const customers = ss.customers.all();
+  if (customers.length)
+    out.customers = customers.map((cu) => {
+      const sites = ss.sites.all().filter((st) => st.customer_id === cu.external_id);
+      return {
+        id: cu.external_id,
+        ...co(cu.company_id),
+        type: cu.type,
+        company_name: cu.company_name,
+        given_name: cu.given_name,
+        family_name: cu.family_name,
+        email: cu.email,
+        ...(sites.length ? { sites: sites.map((st) => ({ id: st.external_id, name: st.name })) } : {}),
+      };
+    });
+
+  const jobs = ss.jobs.all();
+  if (jobs.length)
+    out.jobs = jobs.map((j) => {
+      const sections = ss.sections.all().filter((sec) => sec.job_id === j.external_id);
+      return {
+        id: j.external_id,
+        ...co(j.company_id),
+        type: j.type,
+        name: j.name,
+        description: j.description,
+        customer_id: j.customer_id,
+        site_id: j.site_id,
+        stage: j.stage,
+        order_no: j.order_no,
+        project_manager_id: j.project_manager_id,
+        salesperson_id: j.salesperson_id,
+        status_id: j.status_id,
+        date_issued: j.date_issued,
+        due_date: j.due_date,
+        total_ex_tax: j.total_ex_tax,
+        total_tax: j.total_tax,
+        total_inc_tax: j.total_inc_tax,
+        ...(sections.length
+          ? {
+              sections: sections.map((sec) => {
+                const ccs = ss.costCenters
+                  .all()
+                  .filter((c) => c.job_id === j.external_id && c.section_id === sec.external_id);
+                return {
+                  id: sec.external_id,
+                  name: sec.name,
+                  description: sec.description,
+                  ...(ccs.length
+                    ? {
+                        cost_centers: ccs.map((c) => ({
+                          id: c.external_id,
+                          master_cost_center_id: c.master_cost_center_id,
+                          tax_code_id: c.tax_code_id,
+                          name: c.name,
+                          description: c.description,
+                          billing_type: c.billing_type,
+                          stage: c.stage,
+                          ex_tax: c.ex_tax,
+                          inc_tax: c.inc_tax,
+                        })),
+                      }
+                    : {}),
+                };
+              }),
+            }
+          : {}),
+      };
+    });
+
+  const quotes = ss.quotes.all();
+  if (quotes.length)
+    out.quotes = quotes.map((q) => ({
+      id: q.external_id,
+      ...co(q.company_id),
+      name: q.name,
+      description: q.description,
+      order_no: q.order_no,
+      customer_id: q.customer_id,
+      site_id: q.site_id,
+      salesperson_id: q.salesperson_id,
+      project_manager_id: q.project_manager_id,
+      status_id: q.status_id,
+      stage: q.stage,
+      total_ex_tax: q.total_ex_tax,
+      total_tax: q.total_tax,
+      total_inc_tax: q.total_inc_tax,
+      date_issued: q.date_issued,
+      due_date: q.due_date,
+      tags: q.tags,
+      converted_job_id: q.converted_job_id,
+    }));
+
+  const assets = ss.assets.all();
+  if (assets.length)
+    out.assets = assets.map((a) => ({
+      id: a.external_id,
+      ...co(a.company_id),
+      customer_id: a.customer_id,
+      site_id: a.site_id,
+      name: a.name,
+      description: a.description,
+      asset_type: a.asset_type,
+      serial_number: a.serial_number,
+      status: a.status,
+      notes: a.notes,
+      date_installed: a.date_installed,
+      date_next_service: a.date_next_service,
+    }));
+
+  const invoices = ss.invoices.all();
+  if (invoices.length)
+    out.invoices = invoices.map((iv) => ({
+      id: iv.external_id,
+      ...co(iv.company_id),
+      job_id: iv.job_id,
+      type: iv.type,
+      stage: iv.stage,
+      total_ex_tax: iv.total_ex_tax,
+      total_inc_tax: iv.total_inc_tax,
+      paid: iv.paid,
+      date_issued: iv.date_issued,
+    }));
+
+  const contacts = ss.contacts.all();
+  if (contacts.length)
+    out.contacts = contacts.map((ct) => ({
+      id: ct.external_id,
+      ...co(ct.company_id),
+      type: ct.type,
+      customer_id: ct.customer_id,
+      site_id: ct.site_id,
+      salutation: ct.salutation,
+      given_name: ct.given_name,
+      family_name: ct.family_name,
+      position: ct.position,
+      department: ct.department,
+      email: ct.email,
+      alt_email: ct.alt_email,
+      phone: ct.phone,
+      cell_phone: ct.cell_phone,
+      fax: ct.fax,
+      primary_contact: ct.primary_contact,
+      archived: ct.archived,
+    }));
+
+  const contractors = ss.contractors.all();
+  if (contractors.length)
+    out.contractors = contractors.map((cr) => ({
+      id: cr.external_id,
+      ...co(cr.company_id),
+      company_name: cr.company_name,
+      given_name: cr.given_name,
+      family_name: cr.family_name,
+      email: cr.email,
+      phone: cr.phone,
+      cell_phone: cr.cell_phone,
+      fax: cr.fax,
+      archived: cr.archived,
+    }));
+
+  const schedules = ss.schedules.all();
+  if (schedules.length)
+    out.schedules = schedules.map((sc) => ({
+      id: sc.external_id,
+      ...co(sc.company_id),
+      job_id: sc.job_id,
+      section_id: sc.section_id,
+      cost_center_id: sc.cost_center_id,
+      technician_id: sc.technician_id,
+      date: sc.date,
+      start_time: sc.start_time,
+      duration_minutes: sc.duration_minutes,
+    }));
+
+  const attachments = ss.attachments.all();
+  if (attachments.length)
+    out.attachments = attachments.map((at) => ({
+      id: at.external_id,
+      ...co(at.company_id),
+      parent_type: at.parent_type,
+      parent_id: at.parent_id,
+      filename: at.filename,
+      description: at.description,
+      mime_type: at.mime_type,
+      size: at.size,
+      url: at.url,
+      date_added: at.date_added,
+    }));
+
+  const stockItems = ss.stockItems.all();
+  if (stockItems.length)
+    out.stock_items = stockItems.map((si) => ({
+      id: si.external_id,
+      ...co(si.company_id),
+      name: si.name,
+      part_no: si.part_no,
+      description: si.description,
+      group_name: si.group_name,
+      subgroup_name: si.subgroup_name,
+      unit_of_measure: si.unit_of_measure,
+      trade_price_ex_tax: si.trade_price_ex_tax,
+      trade_price_inc_tax: si.trade_price_inc_tax,
+      unit_price: si.unit_price,
+      tax_code_id: si.tax_code_id,
+      supplier_id: si.supplier_id,
+      supplier_name: si.supplier_name,
+      supplier_part_no: si.supplier_part_no,
+      taxable: si.taxable,
+      archived: si.archived,
+    }));
+
+  return out;
+}
+
 function seedDefaults(store: Store, _baseUrl: string): void {
   const ss = getSimproStore(store);
   if (ss.companies.all().length > 0) return;
