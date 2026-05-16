@@ -802,6 +802,39 @@ persistence: filePersistence('.emulate/state.json'),
 
 The persistence adapter is called on cold start (load) and after every mutating request (save). Saves are serialized via an internal queue to prevent race conditions.
 
+## Nango — multi-provider integration emulator
+
+`@emulators/nango` stands in for a hosted Nango deployment: one emulator manages every linked SaaS account in your tests. It implements the connection management API (`GET /connections/:id`, `GET /connection`, `POST /connection`, metadata PUT/PATCH), the sync records API (`GET /records?model=<Model>`), the hosted connect-session handshake, and a proxy surface with first-class shaping for QuickBooks, Xero, and MYOB (other providers fall through a generic record passthrough).
+
+```yaml
+nango:
+  connections:
+    - id: salesforce-acme
+      provider: salesforce
+      provider_config_key: salesforce
+      connection_config:
+        instance_url: https://acme.my.salesforce.com
+      metadata:
+        organizationId: org_acme
+      records:
+        Account:
+          - { Id: 0011x00000ABCDEAA1, Name: Acme Corp, Industry: Technology }
+```
+
+```bash
+curl -H "Connection-Id: salesforce-acme" \
+     -H "Provider-Config-Key: salesforce" \
+     "http://localhost:4030/records?model=Account"
+```
+
+### Seed library for popular providers
+
+`examples/nango-seeds.yaml` is a drop-in library of seeds for 34 popular providers spanning CRM (Salesforce, Pipedrive, Zoho), accounting (FreshBooks, Wave, plus the built-in Xero/QuickBooks shaping), comms (Discord, Microsoft Teams), email/marketing (Mailchimp, SendGrid, Klaviyo, Gmail), storage (Dropbox, Box), calendar (Google Calendar, Outlook), project tracking (Jira, Linear, Asana, Notion, ClickUp, Monday, Trello), code hosts (GitHub, GitLab), support (Zendesk, Intercom), HR/ATS (BambooHR, Greenhouse, Lever), e-commerce (Shopify), analytics (Mixpanel), and data/forms (Typeform, Airtable, Calendly).
+
+Each entry uses each provider's real API field shapes so client code transfers cleanly from the emulator to production. Copy the connections you need under your `nango:` key in `emulate.config.yaml`.
+
+For a runnable narrated walkthrough (list connections, fetch credentials, merge sync state, pull records, proxy a provider-native call, run the hosted connect-session handshake), see [`examples/api-emulators-quickstart`](./examples/api-emulators-quickstart/).
+
 ## Architecture
 
 ```
