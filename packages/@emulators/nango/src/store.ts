@@ -87,6 +87,18 @@ export function getNangoStore(store: Store) {
       const existing = records.get(connectionId) ?? {};
       records.set(connectionId, { ...existing, [model]: data });
     },
+    /**
+     * Append rows onto a model's live array (creating the model if absent),
+     * leaving sibling models untouched. `setRecords` replaces — this is what a
+     * live activity stream uses to drip one new record at a time.
+     */
+    appendRecords(connectionId: string, model: string, rows: Record<string, unknown>[]): number {
+      const existing = records.get(connectionId) ?? {};
+      const arr = existing[model] ?? [];
+      const next = [...arr, ...rows];
+      records.set(connectionId, { ...existing, [model]: next });
+      return next.length;
+    },
     allRecordsForConnection(connectionId: string): NangoRecordsMap {
       return records.get(connectionId) ?? {};
     },

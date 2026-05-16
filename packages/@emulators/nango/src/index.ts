@@ -5,20 +5,31 @@ import { directHubspotRoutes } from "./routes/direct-hubspot.js";
 import { proxyRoutes } from "./routes/proxy.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { inspectorRoutes } from "./routes/inspector.js";
+import { webhookRoutes } from "./routes/webhooks.js";
+import { getWebhookSettings, setWebhookSettings } from "./webhooks.js";
 import { getNangoStore } from "./store.js";
 import type { NangoConnection, NangoConnectionSeed } from "./types.js";
 
 export type { NangoStoreFacade } from "./store.js";
 export { getNangoStore } from "./store.js";
 export type { NangoConnection, NangoConnectionSeed } from "./types.js";
+export { buildSyncWebhook, buildForwardWebhook, signBody, dispatchNangoWebhook } from "./webhooks.js";
 
 export interface NangoSeedConfig {
   connections?: NangoConnectionSeed[];
+  /** Consumer's webhook callback URL — Nango POSTs sync/forward events here. */
+  webhook_url?: string;
+  /** Secret keying the X-Nango-Signature HMAC on every delivery. */
+  webhook_secret?: string;
 }
 
 export function seedFromConfig(store: Store, _baseUrl: string, config: NangoSeedConfig): void {
   const ns = getNangoStore(store);
   const now = new Date().toISOString();
+
+  if (config.webhook_url !== undefined || config.webhook_secret !== undefined) {
+    setWebhookSettings(store, { url: config.webhook_url ?? null, secret: config.webhook_secret });
+  }
 
   for (const seed of config.connections ?? []) {
     const existing = ns.getConnection(seed.id);
@@ -98,7 +109,11 @@ export function storeToSeedConfig(
     connections.push(seed);
   }
 
-  return { connections };
+  const out: NangoSeedConfig = { connections };
+  const wh = getWebhookSettings(store);
+  if (wh.url) out.webhook_url = wh.url;
+  if (wh.secret) out.webhook_secret = wh.secret;
+  return out;
 }
 
 export const nangoPlugin: ServicePlugin = {
@@ -112,7 +127,8 @@ export const nangoPlugin: ServicePlugin = {
     inspectorRoutes({ app, store, webhooks: _webhooks, baseUrl });
     connectionRoutes(app, ns);
     sessionRoutes(app, baseUrl, ns);
-    proxyRoutes(app, ns);
+    proxyRoutes(app, ns, baseUrl);
+    webhookRoutes(app, ns, store);
     directHubspotRoutes(app, store);
   },
 
