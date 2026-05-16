@@ -100,6 +100,48 @@ config).
 BASE=http://localhost:4000 bash apps/server/scripts/test-export-roundtrip.sh
 ```
 
+### Nango proxy fidelity (Google / Microsoft)
+
+Real Nango's `/proxy` forwards verbatim to the provider's own API, so callers
+see the provider's native JSON. The emulator mirrors that for the common
+providers — it infers the resource from the real-API path and wraps the
+seeded records in the provider's native envelope:
+
+| Provider | Path (after `/proxy/`) | Response shape |
+|---|---|---|
+| `google-mail` | `gmail/v1/users/me/messages[/{id}]` | `{ messages: [{id,threadId}], resultSizeEstimate }`; `/{id}` → full message |
+| `google-drive` | `drive/v3/files[/{id}]` | `{ kind:"drive#fileList", files:[…] }`; `/{id}` → file |
+| `google-calendar` | `calendar/v3/calendars/{cal}/events[/{id}]` | `{ kind:"calendar#events", items:[…] }`; `/{id}` → event |
+| Microsoft Graph | `v1.0/me/{messages\|events\|contacts\|drive…\|joinedTeams}[/{id}]` | `{ "@odata.context", value:[…] }`; `/{id}` → entity |
+| Xero / QuickBooks / MYOB | `api.xro/…`, `v3/company/{realm}/query`, `api.myob.com/…` | native Xero / QBO / MYOB envelope |
+
+Records are returned exactly as seeded — only routing and the envelope are
+synthesised. Model lookup is tolerant: a Drive request resolves records seeded
+under `files`, `DriveFile`, or `GoogleDriveFile` (likewise per resource), so
+align seed model names with your real Nango sync where it matters. Providers
+outside this list fall back to `{ records: [...], path }`.
+
+#### Pagination (matches each provider's real mechanics)
+
+List endpoints paginate exactly like the live APIs, so an SDK that follows
+cursors works unmodified:
+
+| Provider | Page param | Default / max | Cursor returned | Caller resubmits as |
+|---|---|---|---|---|
+| `google-mail` | `maxResults` | 100 / 500 | `nextPageToken` (omitted on last page) | `pageToken` |
+| `google-drive` | `pageSize` | 100 / 1000 | `nextPageToken` (omitted on last page) | `pageToken` |
+| `google-calendar` | `maxResults` | 250 / 2500 | `nextPageToken`; final page → `nextSyncToken` | `pageToken` |
+| Microsoft Graph | `$top` | 100 / 999 | `@odata.nextLink` (absolute URL, omitted on last page) | follow the link verbatim |
+
+- Tokens are opaque (base64url-encoded offsets) — treat them as blobs, exactly
+  as you would the real provider tokens.
+- Gmail `resultSizeEstimate` is the **total** estimate, not the page size.
+- Graph `@odata.count` is emitted only with `$count=true`; `@odata.nextLink` is
+  an absolute URL through this server (`…/nango/proxy/…`) so a Graph SDK
+  follows it straight back to the emulator with no rewrite.
+- Seed sets smaller than the default page size return a single page with no
+  cursor — identical to the real APIs.
+
 The full E2E test in `scripts/test-admin-seed.sh` exercises:
 1. POST `/_admin/seed` with custom users + seed data
 2. WorkOS platform login as the seeded user
@@ -110,6 +152,113 @@ The full E2E test in `scripts/test-admin-seed.sh` exercises:
 ```bash
 BASE=http://localhost:4000 bash apps/server/scripts/test-admin-seed.sh
 ```
+
+### Nango webhooks (sync / forward)
+
+Real Nango POSTs your app two webhook types; the emulator emits both with the
+same envelopes and signature so your existing handler runs unmodified. This is
+how a consumer tests "new calendar events / Teams messages / Gmail arrived"
+and inbound provider events (WhatsApp messages, Graph change notifications)
+without polling or a live provider.
+
+**Register the callback** — push it in the seed (primitive-aligned) or at
+runtime:
+
+```bash
+# seed:  nango.webhook_url + nango.webhook_secret
+curl -X POST http://localhost:4000/nango/webhook-settings \
+  -H 'content-type: application/json' \
+  -d '{ "url": "https://app.test/api/nango/webhook", "secret": "whsec_…" }'
+```
+
+Every delivery is signed: header
+`X-Nango-Signature: <hex HMAC-SHA256(rawBody, secret)>` (Nango's scheme) plus
+`X-Nango-Webhook-Type: sync|forward`.
+
+| Trigger | Request | Webhook delivered |
+|---|---|---|
+| **sync** | `POST /nango/sync/trigger` `{ provider_config_key, connection_id, syncs? }` | `{ type:"sync", connectionId, providerConfigKey, syncName, model, responseResults:{added,updated,deleted}, syncType, modifiedAfter, queryTimeStamp, success }` — one per synced model, `added` = current record count |
+| **forward** | provider POSTs `POST /nango/webhook/{envUuid}/{providerConfigKey}` (raw provider body) | `{ from:<provider>, type:"forward", connectionId, providerConfigKey, payload:<raw body> }` — relayed verbatim; the inbound call always 200s the provider |
+
+`GET /nango/webhook-deliveries` returns the delivery log (status, signature,
+payload) for assertions. A trigger with no callback configured still succeeds
+and simply delivers nothing — exactly as real Nango behaves.
+
+Round-trips: `GET /_admin/export` re-emits `nango.webhook_url` /
+`nango.webhook_secret`, so a captured environment re-seeds with its webhook
+wiring intact.
+
+**Appending live records.** Seeding replaces a model wholesale; to drip a
+single new record onto an already-seeded connection (an email landing, a
+message arriving) use:
+
+```bash
+curl -X POST http://localhost:4000/nango/connections/gm-acme/records/messages \
+  -H 'content-type: application/json' \
+  -d '{ "records": [ { "id": "m-new", "snippet": "just landed" } ] }'
+# → { "model": "messages", "appended": 1, "total": 13 }
+```
+
+`POST /nango/sync/trigger` accepts an explicit `{ "added": 1 }` (plus optional
+`updated` / `deleted` and a `model` filter) so a per-record tick reports
+`added:1` instead of the whole model length.
+
+---
+
+## Simulating live activity (`emulate-sim`)
+
+`@emulators/simulator` is an external CLI that streams new records/events into
+a **running** emulator over time — emails into an inbox, Teams messages,
+WhatsApp inbound, Drive files, Calendar events — exercising the append +
+webhook surface above. It is a pure HTTP client (imports nothing from the
+emulator), so it drives any deployment, and is primitive-aligned: the
+consuming project owns the scenario and the data it pushes.
+
+A scenario is human-editable YAML (or JSON):
+
+```yaml
+base: http://nango.localhost:1355
+durationSec: 600
+streams:
+  - name: gmail-inbox            # sync: append a record, fire a "sync" webhook
+    kind: sync
+    provider: gmail              # gmail | graph-mail | teams | drive | calendar
+    connectionId: gm-acme
+    providerConfigKey: google-mail
+    model: messages
+    ratePerMinute: 12
+    jitter: 0.4                  # ± fractional jitter on the interval
+    # maxCount: 50               # optional per-stream cap
+  - name: whatsapp-inbound       # forward: wrap+relay a provider webhook
+    kind: forward
+    provider: whatsapp
+    connectionId: wa-acme
+    providerConfigKey: whatsapp
+    environmentUuid: env-1
+    ratePerMinute: 8
+```
+
+Each `sync` tick appends one provider-shaped record then triggers a signed
+`type:"sync"` webhook with `added:1`. Each `forward` tick POSTs the provider's
+inbound URL with a Meta-shaped payload, relayed as a `type:"forward"` webhook.
+
+```bash
+pnpm --filter @emulators/simulator build
+
+# continuous daemon (Ctrl-C stops gracefully)
+node packages/@emulators/simulator/dist/cli.js run \
+  packages/@emulators/simulator/examples/inbox-stream.yaml \
+  --base http://localhost:4000/nango
+
+node …/cli.js run scenario.yaml --base <url> --once       # one tick per stream
+node …/cli.js run scenario.yaml --base <url> --dry-run    # generate + log, no HTTP
+node …/cli.js run scenario.yaml --base <url> --duration 60
+```
+
+`connectionId` / `providerConfigKey` must match Nango connections the emulator
+is already seeded with. Combined with `GET /_admin/export`, a stream of
+simulated activity can be captured and replayed as the seed for another
+emulator instance.
 
 ---
 
