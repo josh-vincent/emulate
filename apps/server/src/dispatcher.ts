@@ -18,6 +18,7 @@ export interface ServiceApp {
   tokenMap: TokenMap;
   plugin: ServicePlugin;
   seedFromConfig?: (store: Store, baseUrl: string, config: unknown) => void;
+  storeToSeedConfig?: (store: Store, baseUrl: string, opts?: { includeCredentials?: boolean }) => object;
 }
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -84,9 +85,16 @@ export async function buildServiceApps(
     });
     cachedResolver = loaded.createAppKeyResolver?.(store);
 
-    loaded.plugin.seed?.(store, baseUrl);
-    if (svcSeedConfig && loaded.seedFromConfig) {
+    // emulate is a primitive: if a consumer pushed seed config for this
+    // service, that config owns the state — skip the plugin's built-in
+    // defaults so emulator fixtures don't pollute the consumer's dataset.
+    // `!= null` absorbs the YAML `service:` → `null` footgun.
+    const hasConfig = svcSeedConfig != null;
+    if (!hasConfig) {
+      loaded.plugin.seed?.(store, baseUrl);
+    } else if (loaded.seedFromConfig) {
       loaded.seedFromConfig(store, baseUrl, svcSeedConfig);
+      console.log(`[emulate] ${name}: config present — skipping built-in defaults`);
     }
 
     apps.set(name, {
@@ -96,6 +104,7 @@ export async function buildServiceApps(
       tokenMap,
       plugin: loaded.plugin,
       seedFromConfig: loaded.seedFromConfig,
+      storeToSeedConfig: loaded.storeToSeedConfig,
     });
   }
 
@@ -137,9 +146,13 @@ export function reseedApps(
 
     sa.store.reset();
     const svcBase = `${baseUrl}/${name}`;
-    sa.plugin.seed?.(sa.store, svcBase);
     const svcSeedConfig = serviceConfigs[name];
-    if (svcSeedConfig && sa.seedFromConfig) {
+    // Same primitive rule as buildServiceApps: pushed config suppresses the
+    // plugin's built-in defaults for that service.
+    const hasConfig = svcSeedConfig != null;
+    if (!hasConfig) {
+      sa.plugin.seed?.(sa.store, svcBase);
+    } else if (sa.seedFromConfig) {
       sa.seedFromConfig(sa.store, svcBase, svcSeedConfig);
     }
 

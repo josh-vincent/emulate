@@ -126,7 +126,11 @@ const CUSTOM_REGISTRY: Record<CustomServiceName, ServiceEntry> = {
       "connections (get/list/create/metadata), connect sessions (create/reconnect), proxy (QuickBooks /v3/company/:id/query, Xero /api.xro/2.0/*, MYOB, generic)",
     async load() {
       const mod = await import("@emulators/nango");
-      return { plugin: mod.nangoPlugin, seedFromConfig: mod.seedFromConfig };
+      return {
+        plugin: mod.nangoPlugin,
+        seedFromConfig: mod.seedFromConfig,
+        storeToSeedConfig: mod.storeToSeedConfig,
+      };
     },
     defaultFallback() {
       return { login: "nango-emulator", id: 1, scopes: [] };
@@ -191,7 +195,11 @@ const CUSTOM_REGISTRY: Record<CustomServiceName, ServiceEntry> = {
     endpoints: "clients, properties, assets, defects, asset types, users, oauth2 token",
     async load() {
       const mod = await import("@emulators/uptick");
-      return { plugin: mod.uptickPlugin, seedFromConfig: mod.seedFromConfig };
+      return {
+        plugin: mod.uptickPlugin,
+        seedFromConfig: mod.seedFromConfig,
+        storeToSeedConfig: mod.storeToSeedConfig,
+      };
     },
     defaultFallback() {
       return { login: "sk_test_uptick", id: 1, scopes: [] };

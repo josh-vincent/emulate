@@ -4,6 +4,13 @@ export interface LoadedService {
   plugin: ServicePlugin;
   seedFromConfig?(store: Store, baseUrl: string, config: unknown, webhooks?: WebhookDispatcher): void;
   createAppKeyResolver?(store: Store): AppKeyResolver;
+  /**
+   * Project live store state back into the editable `*SeedConfig` shape this
+   * service's `seedFromConfig` consumes. The result must round-trip: feeding
+   * it back through `seedFromConfig` reconstructs equivalent state. Credentials
+   * are stripped unless `opts.includeCredentials` is set.
+   */
+  storeToSeedConfig?(store: Store, baseUrl: string, opts?: { includeCredentials?: boolean }): object;
 }
 
 export interface ServiceEntry {
@@ -135,7 +142,11 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
       "OAuth authorize, token exchange, userinfo, OIDC discovery, token revocation, Gmail messages/drafts/threads/labels/history/settings, Calendar lists/events/freebusy, Drive files/uploads",
     async load() {
       const mod = await import("@emulators/google");
-      return { plugin: mod.googlePlugin, seedFromConfig: mod.seedFromConfig };
+      return {
+        plugin: mod.googlePlugin,
+        seedFromConfig: mod.seedFromConfig,
+        storeToSeedConfig: mod.storeToSeedConfig,
+      };
     },
     defaultFallback(cfg) {
       const firstEmail = (cfg?.users as Array<{ email?: string }> | undefined)?.[0]?.email ?? "testuser@gmail.com";

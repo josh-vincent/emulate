@@ -176,6 +176,71 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: UptickSee
   }
 }
 
+/**
+ * Project live Uptick state back into the `UptickSeedConfig` shape. Foreign
+ * keys are resolved back to the name-refs `seedFromConfig` expects. Object
+ * insertion order matches `seedFromConfig`'s dependency order
+ * (asset_types → users → clients → properties → assets → defects) so a
+ * round-trip reconstructs equivalent relationships.
+ */
+export function storeToSeedConfig(store: Store, _baseUrl: string): UptickSeedConfig {
+  const us = getUptickStore(store);
+  const clientName = (id: number | null | undefined): string | undefined =>
+    id != null ? (us.clients.get(id)?.name ?? undefined) : undefined;
+  const propertyName = (id: number | null | undefined): string | undefined =>
+    id != null ? (us.properties.get(id)?.name ?? undefined) : undefined;
+  const assetName = (id: number | null | undefined): string | undefined =>
+    id != null ? (us.assets.get(id)?.name ?? undefined) : undefined;
+
+  return {
+    asset_types: us.assetTypes.all().map((t) => ({ name: t.name, description: t.description })),
+    users: us.users.all().map((u) => ({
+      username: u.username,
+      email: u.email,
+      first_name: u.first_name,
+      last_name: u.last_name,
+      is_active: u.is_active,
+    })),
+    clients: us.clients.all().map((c) => ({
+      name: c.name,
+      is_active: c.is_active,
+      sector: c.sector,
+      ref: c.ref,
+      contact_name: c.contact_name,
+      contact_email: c.contact_email,
+    })),
+    properties: us.properties.all().map((p) => ({
+      name: p.name,
+      client_name: clientName(p.client_id),
+      is_active: p.is_active,
+      address_display: p.address_display,
+      address_streetline: p.address_streetline,
+      address_city: p.address_city,
+      address_state: p.address_state,
+      address_postcode: p.address_postal_code,
+      address_country: p.address_country,
+    })),
+    assets: us.assets.all().map((a) => ({
+      name: a.name,
+      asset_number: a.asset_number,
+      is_active: a.is_active,
+      standard_maintenance: a.standard_maintenance,
+      property_name: propertyName(a.property_id),
+      client_name: clientName(a.client_id),
+      asset_type_name: a.asset_type_name || undefined,
+    })),
+    defects: us.defects.all().map((d) => ({
+      description: d.description,
+      notes: d.notes,
+      severity: d.severity,
+      status: d.status,
+      asset_name: assetName(d.asset_id),
+      property_name: propertyName(d.property_id),
+      client_name: clientName(d.client_id),
+    })),
+  };
+}
+
 export const uptickPlugin: ServicePlugin = {
   name: "uptick",
   register(app: Hono<AppEnv>, store: Store, webhooks: WebhookDispatcher, baseUrl: string, tokenMap?: TokenMap): void {

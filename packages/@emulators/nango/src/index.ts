@@ -59,6 +59,48 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: NangoSeed
   }
 }
 
+/**
+ * Project live Nango state back into the `NangoSeedConfig` shape. Round-trips
+ * through `seedFromConfig`. Credentials (access/refresh tokens) are stripped by
+ * default — `seedFromConfig` re-synthesises deterministic `emulator-token-*`
+ * values on replay. Timestamps are intentionally dropped (regenerated on seed).
+ */
+export function storeToSeedConfig(
+  store: Store,
+  _baseUrl: string,
+  opts?: { includeCredentials?: boolean },
+): NangoSeedConfig {
+  const ns = getNangoStore(store);
+  const connections: NangoConnectionSeed[] = [];
+
+  for (const conn of ns.listConnections()) {
+    const seed: NangoConnectionSeed = {
+      id: conn.id,
+      provider: conn.provider,
+      provider_config_key: conn.provider_config_key,
+    };
+    if (Object.keys(conn.connection_config ?? {}).length > 0) {
+      seed.connection_config = conn.connection_config;
+    }
+    if (Object.keys(conn.metadata ?? {}).length > 0) {
+      seed.metadata = conn.metadata;
+    }
+    if (opts?.includeCredentials) {
+      seed.credentials = {
+        access_token: conn.credentials.access_token,
+        refresh_token: conn.credentials.refresh_token,
+      };
+    }
+    const records = ns.allRecordsForConnection(conn.id);
+    if (Object.keys(records).length > 0) {
+      seed.records = records;
+    }
+    connections.push(seed);
+  }
+
+  return { connections };
+}
+
 export const nangoPlugin: ServicePlugin = {
   name: "nango",
 

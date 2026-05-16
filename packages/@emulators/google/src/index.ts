@@ -489,6 +489,110 @@ function seedDriveItems(store: Store, items: GoogleSeedDriveItem[], fallbackEmai
   }
 }
 
+/**
+ * Project live Google state back into the `GoogleSeedConfig` shape. Round-trips
+ * through `seedFromConfig`. System Gmail labels are skipped (they are
+ * auto-recreated by `ensureSystemLabels`); only user labels are exported. Drive
+ * `data` is stored base64url-encoded and decoded back to the UTF-8 string
+ * `seedFromConfig` expects. `oauth_clients.client_secret` is retained — it is
+ * static config required to replay the OAuth flow, not an issued credential.
+ */
+export function storeToSeedConfig(store: Store, _baseUrl: string): GoogleSeedConfig {
+  const gs = getGoogleStore(store);
+  const undef = <T>(v: T | null): T | undefined => (v === null ? undefined : v);
+
+  const config: GoogleSeedConfig = {
+    users: gs.users.all().map((u) => ({
+      email: u.email,
+      name: u.name,
+      given_name: u.given_name,
+      family_name: u.family_name,
+      picture: undef(u.picture),
+      locale: u.locale,
+      email_verified: u.email_verified,
+      hd: undef(u.hd),
+    })),
+    oauth_clients: gs.oauthClients.all().map((c) => ({
+      client_id: c.client_id,
+      client_secret: c.client_secret,
+      name: c.name,
+      redirect_uris: c.redirect_uris,
+    })),
+    labels: gs.labels
+      .all()
+      .filter((l) => l.type === "user")
+      .map((l) => ({
+        id: l.gmail_id,
+        user_email: l.user_email,
+        name: l.name,
+        message_list_visibility: undef(l.message_list_visibility),
+        label_list_visibility: undef(l.label_list_visibility),
+        color_background: undef(l.color_background),
+        color_text: undef(l.color_text),
+      })),
+    messages: gs.messages.all().map((m) => ({
+      id: m.gmail_id,
+      thread_id: m.thread_id,
+      user_email: m.user_email,
+      from: m.from,
+      to: m.to,
+      cc: undef(m.cc),
+      bcc: undef(m.bcc),
+      reply_to: undef(m.reply_to),
+      subject: m.subject,
+      snippet: m.snippet,
+      body_text: undef(m.body_text),
+      body_html: undef(m.body_html),
+      label_ids: m.label_ids,
+      date: undef(m.date_header),
+      internal_date: m.internal_date,
+      message_id: m.message_id,
+      references: undef(m.references),
+      in_reply_to: undef(m.in_reply_to),
+    })),
+    calendars: gs.calendars.all().map((c) => ({
+      id: c.google_id,
+      user_email: c.user_email,
+      summary: c.summary,
+      description: undef(c.description),
+      time_zone: c.time_zone,
+      primary: c.primary,
+      selected: c.selected,
+      access_role: c.access_role,
+    })),
+    calendar_events: gs.calendarEvents.all().map((e) => ({
+      id: e.google_id,
+      user_email: e.user_email,
+      calendar_id: e.calendar_google_id,
+      status: e.status,
+      summary: e.summary,
+      description: undef(e.description),
+      location: undef(e.location),
+      start_date_time: undef(e.start_date_time),
+      start_date: undef(e.start_date),
+      end_date_time: undef(e.end_date_time),
+      end_date: undef(e.end_date),
+      attendees: e.attendees.map((a) => ({ email: a.email, display_name: undef(a.display_name) })),
+      conference_entry_points: e.conference_entry_points.map((p) => ({
+        entry_point_type: p.entry_point_type,
+        uri: p.uri,
+        label: undef(p.label),
+      })),
+      hangout_link: undef(e.hangout_link),
+    })),
+    drive_items: gs.driveItems.all().map((d) => ({
+      id: d.google_id,
+      user_email: d.user_email,
+      name: d.name,
+      mime_type: d.mime_type,
+      parent_ids: d.parent_google_ids,
+      data: d.data === null ? undefined : Buffer.from(d.data, "base64url").toString("utf8"),
+    })),
+  };
+
+  return config;
+}
+
 export const googlePlugin: ServicePlugin = {
   name: "google",
   register(app: Hono<AppEnv>, store: Store, webhooks: WebhookDispatcher, baseUrl: string, tokenMap?: TokenMap): void {
