@@ -35,6 +35,11 @@ normalised records out of the sync API, proxy a provider-native QuickBooks
 query, then run the hosted connect-session handshake to materialise a new
 connection.
 
+For a wider catalogue of seed entries spanning 30+ popular Nango providers
+(Salesforce, HubSpot, Jira, GitHub, Shopify, Zendesk, Slack, and many more)
+see [`../../examples/nango-seeds.yaml`](../nango-seeds.yaml). Copy the
+connections you want into your `emulate.config.yaml` under the `nango:` key.
+
 ### `simpro` — field-service job management
 
 The Simpro OAuth 2.0 authorization-code flow (`/oauth/authorize` → `code` →
