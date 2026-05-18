@@ -601,6 +601,133 @@ async function main(): Promise<void> {
   const spanOk = spans.every(([, sp]) => sp >= 75);
   console.log(`\n  all linking providers span ≥ a quarter — ${spanOk ? "✅ verified" : "❌ too shallow"}`);
 
+  // ── Per-connection independent verification ─────────────────────────────
+  // Cross-links proven; now prove each connection stands on its own. For
+  // every connection, independently: it resolves through the emulator, each
+  // model returns emulator-served records (carrying _nango_metadata, not raw
+  // seed), a fresh live append round-trips back through GET /records, and
+  // every dated model genuinely spans a quarter.
+  heading("Nango sim — per-connection independent verification (resolves + 90 days + read-after-write)");
+
+  const getJSON = async (
+    url: string,
+    headers?: Record<string, string>,
+  ): Promise<{ status: number; rows: Record<string, unknown>[] }> => {
+    const r = await app.request(url, headers ? { headers } : undefined);
+    const body = (await r.json().catch(() => null)) as { records?: Record<string, unknown>[] } | null;
+    return { status: r.status, rows: body?.records ?? [] };
+  };
+
+  const CONNS: {
+    id: string;
+    key: string;
+    dated: { model: string; at: (r: Record<string, unknown>) => number }[];
+    refs: string[];
+  }[] = [
+    {
+      id: "xero-acme",
+      key: "xero",
+      dated: [{ model: "Invoice", at: (r) => Number(String(r.Date).match(/\d+/)?.[0] ?? NaN) }],
+      refs: ["Contact"],
+    },
+    {
+      id: "quickbooks-acme",
+      key: "quickbooks",
+      dated: [{ model: "Invoice", at: (r) => Date.parse(String(r.TxnDate)) }],
+      refs: ["Customer"],
+    },
+    {
+      id: "google-drive-acme",
+      key: "google-drive",
+      dated: [{ model: "DriveFile", at: (r) => Date.parse(String(r.modifiedTime)) }],
+      refs: [],
+    },
+    {
+      id: "onedrive-acme",
+      key: "onedrive",
+      dated: [{ model: "DriveItem", at: (r) => Date.parse(String(r.lastModifiedDateTime)) }],
+      refs: [],
+    },
+    { id: "slack-acme", key: "slack", dated: [{ model: "Message", at: (r) => Date.parse(String(r.date)) }], refs: [] },
+    { id: "gmail-acme", key: "gmail", dated: [{ model: "Email", at: (r) => Date.parse(String(r.date)) }], refs: [] },
+    {
+      id: "github-acme",
+      key: "github",
+      dated: [{ model: "PullRequest", at: (r) => Date.parse(String(r.created_at)) }],
+      refs: [],
+    },
+    { id: "jira-acme", key: "jira", dated: [{ model: "Issue", at: (r) => Date.parse(String(r.created)) }], refs: [] },
+    {
+      id: "salesforce-acme",
+      key: "salesforce",
+      dated: [{ model: "Opportunity", at: (r) => Date.parse(String(r.CreatedDate)) }],
+      refs: [],
+    },
+  ];
+
+  let connOk = 0;
+  for (const cn of CONNS) {
+    const problems: string[] = [];
+
+    // 1. The connection itself resolves through the emulator.
+    const conn = await app.request(`${BASE}/connections/${cn.id}`, { headers: { "Provider-Config-Key": cn.key } });
+    covered.add("GET /connections/:connectionId");
+    if (conn.status !== 200) problems.push(`connection ${conn.status}`);
+    await conn.body?.cancel();
+
+    let span = 0;
+    for (const { model, at } of cn.dated) {
+      const h = { "Connection-Id": cn.id, "Provider-Config-Key": cn.key };
+
+      // 2. Records resolve and are emulator-served (carry _nango_metadata).
+      const before = await getJSON(`${BASE}/records?model=${model}`, h);
+      covered.add("GET /records");
+      if (before.status !== 200 || before.rows.length === 0) problems.push(`${model} empty`);
+      else if (!before.rows.every((r) => r._nango_metadata)) problems.push(`${model} not emulator-served`);
+
+      // 3. The dated model genuinely spans a quarter.
+      const ts = before.rows
+        .map(at)
+        .filter((n) => !Number.isNaN(n))
+        .sort((a, b) => a - b);
+      span = ts.length < 2 ? 0 : Math.round((ts[ts.length - 1]! - ts[0]!) / DAY);
+      if (span < 75) problems.push(`${model} span ${span}d`);
+
+      // 4. A fresh live append round-trips back through GET /records.
+      const liveId = `live-${cn.key}-verify`;
+      const ap = await app.request(
+        `${BASE}/connections/${cn.id}/records/${model}`,
+        J({ records: [{ id: liveId, _liveAt: iso(90) }] }),
+      );
+      covered.add("POST /connections/:connectionId/records/:model");
+      await ap.body?.cancel();
+      const after = await getJSON(`${BASE}/records?model=${model}`, h);
+      if (ap.status !== 200 || !after.rows.some((r) => r.id === liveId)) problems.push(`${model} read-after-write`);
+    }
+
+    // Reference (non-time-series) models must still resolve.
+    for (const model of cn.refs) {
+      const rec = await getJSON(`${BASE}/records?model=${model}`, {
+        "Connection-Id": cn.id,
+        "Provider-Config-Key": cn.key,
+      });
+      if (rec.status !== 200 || rec.rows.length === 0) problems.push(`${model} empty`);
+    }
+
+    const good = problems.length === 0;
+    if (good) connOk++;
+    console.log(
+      `  ${good ? "✅" : "❌"} ${cn.key.padEnd(13)} ${cn.id.padEnd(18)} ` +
+        `conn 200 • ${cn.dated.map((d) => d.model).join("+")} served + read-after-write • spans ${span}d` +
+        (good ? "" : `  ← ${problems.join(", ")}`),
+    );
+  }
+  const connsOk = connOk === CONNS.length;
+  console.log(
+    `\n  ${connOk}/${CONNS.length} connections independently verified ` +
+      `(resolve + emulator-served + read-after-write + ≥75-day span) — ${connsOk ? "✅ all green" : "❌ failures"}`,
+  );
+
   heading("Nango sim — coverage report");
 
   const missing = ROUTES.filter((r) => !covered.has(r));
@@ -609,10 +736,11 @@ async function main(): Promise<void> {
   console.log(`  webhook deliveries captured: ${deliveries.deliveries.length} (sync + forward across 4 providers)`);
   console.log(`  route coverage: ${covered.size}/${ROUTES.length}`);
   console.log(`  cross-provider refs: ${xrefResolved}/${xrefTotal} resolved • provider spans ≥75d: ${spanOk}`);
+  console.log(`  per-connection independent verification: ${connOk}/${CONNS.length}`);
   if (missing.length) console.log(`  ❌ MISSING: ${missing.join(" | ")}`);
-  const ok = missing.length === 0 && failures === 0 && crossRefsOk && spanOk;
+  const ok = missing.length === 0 && failures === 0 && crossRefsOk && spanOk && connsOk;
   console.log(
-    `\n${ok ? "✅" : "❌"} Nango 3-month simulation ${ok ? "complete — full route coverage, 10 connections, all cross-provider references resolved" : "INCOMPLETE"}.\n`,
+    `\n${ok ? "✅" : "❌"} Nango 3-month simulation ${ok ? "complete — every connection independently verified (90 days + read-after-write), all cross-provider references resolved, full route coverage" : "INCOMPLETE"}.\n`,
   );
   if (!ok) process.exit(1);
 }
