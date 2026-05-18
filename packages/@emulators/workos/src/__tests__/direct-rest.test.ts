@@ -62,14 +62,14 @@ describe("WorkOS direct REST — Feature 2: GET /user_management/users (list + ?
   it("lists all users with list_metadata", async () => {
     const res = await app.request(`${base}/user_management/users`);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { data: unknown[]; list_metadata: unknown };
     expect(body.data).toHaveLength(2);
     expect(body.list_metadata).toEqual({ after: null, before: null });
   });
 
   it("filters by email", async () => {
     const res = await app.request(`${base}/user_management/users?email=bob@beta.test`);
-    const body = await res.json();
+    const body = (await res.json()) as { data: Array<{ id: string }> };
     expect(body.data).toHaveLength(1);
     expect(body.data[0].id).toBe("user_2");
   });
@@ -144,9 +144,9 @@ describe("WorkOS direct REST — Feature 6: GET /user_management/organizations (
   it("lists all organizations", async () => {
     const res = await app.request(`${base}/user_management/organizations`);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { data: Array<{ id: string }> };
     expect(body.data).toHaveLength(2);
-    expect(body.data.map((o: { id: string }) => o.id).sort()).toEqual(["org_a", "org_b"]);
+    expect(body.data.map((o) => o.id).sort()).toEqual(["org_a", "org_b"]);
   });
 });
 
@@ -187,7 +187,7 @@ describe("WorkOS direct REST — Feature 8: DELETE /user_management/organization
     const del = await app.request(`${base}/user_management/organization_memberships/${m.id}`, { method: "DELETE" });
     expect(del.status).toBe(204);
     const res = await app.request(`${base}/user_management/organization_memberships?user_id=user_1`);
-    const body = await res.json();
+    const body = (await res.json()) as { data: unknown[] };
     expect(body.data).toHaveLength(0);
   });
 });
