@@ -1,7 +1,7 @@
 # API Emulators Quickstart
 
 Runnable, narrated end-to-end demos for **every** `emulate` emulator — all 16
-direct providers, the Nango provider library, and three comprehensive
+direct providers, the Nango provider library, and four comprehensive
 3-month operational simulations with full endpoint coverage.
 
 Each script mounts one emulator in-process — no ports, no Docker, no network —
@@ -26,7 +26,7 @@ pnpm --filter api-emulators-quickstart direct
 # The Nango provider-library walkthrough (34-provider seed catalogue)
 pnpm --filter api-emulators-quickstart nango-providers
 
-# The three 3-month simulations (full route coverage, assertion-gated)
+# The four 3-month simulations (full route coverage, assertion-gated)
 pnpm --filter api-emulators-quickstart sims
 
 # Realtime streaming — live events from one and many providers
@@ -98,6 +98,7 @@ contract tests.
 | `uptick-sim`          | 12 weekly client onboardings + defect lifecycle across 90 days; **24/24** uptick routes; round-trip verified                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `simpro-sim`          | ~30 dated jobs (+ schedules/invoices/payments) across 90 days; a generic crawler resolves every `:param` transitively and exercises **all 372** (method, path) endpoints (≥97 % 2xx, 0 × 5xx); **29/29** shape + relational-integrity checks (every entity's full shape + every FK resolved to a real linked record)                                                                                                                                                                                                                                                                                           |
 | `nango-providers-sim` | **10 connections**, 90 days of dated records each. Four (xero, quickbooks, google-drive, onedrive) drive every provider-native `/proxy/*` path; the rest form a **cross-provider graph** — Slack/Gmail/Jira/Salesforce records link into Google Drive by file id + share URL, Jira links into GitHub PRs. **Each connection is independently verified** (resolves through the emulator, records are emulator-served, a live append round-trips back through `GET /records`, ≥75-day span), then a cross-provider integrity phase resolves **all 95** references to real linked records; **18/18** Nango routes |
+| `direct-sim`          | **No Nango layer at all** — 5 emulators (GitHub, Slack, Stripe, Resend, Vercel) each spoken to through their _own_ native API. A 90-day DevOps quarter: 12 weekly cycles of incident → deploy notice → invoice payment → customer mail → service ship, then a third of incidents resolved via PATCH. Every created entity is **round-tripped back through that provider's own GET**; **24/24** native route patterns across 5 providers, **11/11** assertion checks, 0 × non-2xx                                                                                                                               |
 
 ## Nango provider library
 
@@ -151,6 +152,7 @@ src/
   simpro-sim.ts             Simpro 3-month sim, 372/372 route coverage
   simpro-routes.generated.ts  Auto-generated simpro route table (driver input)
   nango-providers-sim.ts    Nango 10-connection cross-provider 3-month sim
+  direct-sim.ts             Direct (no-Nango) 5-provider native-API 3-month sim
   realtime-stream.ts        Realtime streaming (one + many providers) via @emulators/simulator
 scenarios/
   single-gmail.yaml         One stream, realtime cadence
