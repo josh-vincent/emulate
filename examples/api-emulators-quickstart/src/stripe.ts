@@ -34,20 +34,30 @@ async function main(): Promise<void> {
 
   heading("Stripe — Checkout Session");
 
-  await call(emu, "Create a Checkout Session", `${BASE}/v1/checkout/sessions`, post({
-    mode: "payment",
-    success_url: "https://acme.example/success",
-    cancel_url: "https://acme.example/cancel",
-    line_items: [{ price: priceId, quantity: 1 }],
-  }));
+  await call(
+    emu,
+    "Create a Checkout Session",
+    `${BASE}/v1/checkout/sessions`,
+    post({
+      mode: "payment",
+      success_url: "https://acme.example/success",
+      cancel_url: "https://acme.example/cancel",
+      line_items: [{ price: priceId, quantity: 1 }],
+    }),
+  );
 
   heading("Stripe — PaymentIntent");
 
-  const pi = (await call(emu, "Create a PaymentIntent", `${BASE}/v1/payment_intents`, post({
-    amount: 2000,
-    currency: "usd",
-    payment_method: "pm_card_visa",
-  }))) as { id: string };
+  const pi = (await call(
+    emu,
+    "Create a PaymentIntent",
+    `${BASE}/v1/payment_intents`,
+    post({
+      amount: 2000,
+      currency: "usd",
+      payment_method: "pm_card_visa",
+    }),
+  )) as { id: string };
 
   await call(emu, "Confirm it", `${BASE}/v1/payment_intents/${pi.id}/confirm`, post({}));
 

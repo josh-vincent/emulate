@@ -41,17 +41,32 @@ async function main(): Promise<void> {
 
   heading("Atlas Data API — documents");
 
-  await call(emu, "insertOne", `${BASE}/app/data-api/v1/action/insertOne`, action("insertOne", {
-    document: { sku: "WIDGET-1", name: "Blue Widget", price: 19.99, stock: 42 },
-  }));
+  await call(
+    emu,
+    "insertOne",
+    `${BASE}/app/data-api/v1/action/insertOne`,
+    action("insertOne", {
+      document: { sku: "WIDGET-1", name: "Blue Widget", price: 19.99, stock: 42 },
+    }),
+  );
 
-  await call(emu, "findOne", `${BASE}/app/data-api/v1/action/findOne`, action("findOne", {
-    filter: { sku: "WIDGET-1" },
-  }));
+  await call(
+    emu,
+    "findOne",
+    `${BASE}/app/data-api/v1/action/findOne`,
+    action("findOne", {
+      filter: { sku: "WIDGET-1" },
+    }),
+  );
 
-  await call(emu, "find (price < 50)", `${BASE}/app/data-api/v1/action/find`, action("find", {
-    filter: { price: { $lt: 50 } },
-  }));
+  await call(
+    emu,
+    "find (price < 50)",
+    `${BASE}/app/data-api/v1/action/find`,
+    action("find", {
+      filter: { price: { $lt: 50 } },
+    }),
+  );
 
   console.log("\n✅ MongoDB Atlas demo complete.\n");
 }

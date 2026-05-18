@@ -56,13 +56,18 @@ async function main(): Promise<void> {
   const code = new URL(cb.headers.get("Location")!).searchParams.get("code")!;
   console.log(`▶ POST /oauth/authorize/callback  →  ${cb.status} (code=${code.slice(0, 10)}…)`);
 
-  const token = (await call(emu, "Exchange code → tokens", `${BASE}/oauth/token`, form({
-    grant_type: "authorization_code",
-    code,
-    client_id: CLIENT,
-    client_secret: SECRET,
-    redirect_uri: REDIRECT,
-  }))) as { access_token: string };
+  const token = (await call(
+    emu,
+    "Exchange code → tokens",
+    `${BASE}/oauth/token`,
+    form({
+      grant_type: "authorization_code",
+      code,
+      client_id: CLIENT,
+      client_secret: SECRET,
+      redirect_uri: REDIRECT,
+    }),
+  )) as { access_token: string };
 
   heading("Clerk — identity & backend management API");
 

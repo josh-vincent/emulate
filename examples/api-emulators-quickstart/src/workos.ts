@@ -38,11 +38,16 @@ async function main(): Promise<void> {
   const code = new URL(authz.headers.get("Location")!).searchParams.get("code")!;
   console.log(`\n▶ GET /user_management/authorize  →  ${authz.status} (code=${code.slice(0, 10)}…)`);
 
-  const authd = (await call(emu, "Authenticate with the code", `${BASE}/user_management/authenticate`, json({
-    grant_type: "authorization_code",
-    client_id: CLIENT,
-    code,
-  }))) as { user: { id: string } };
+  const authd = (await call(
+    emu,
+    "Authenticate with the code",
+    `${BASE}/user_management/authenticate`,
+    json({
+      grant_type: "authorization_code",
+      client_id: CLIENT,
+      code,
+    }),
+  )) as { user: { id: string } };
 
   heading("WorkOS — organization memberships");
 
@@ -54,12 +59,17 @@ async function main(): Promise<void> {
 
   heading("WorkOS — password grant");
 
-  await call(emu, "Authenticate with email + password", `${BASE}/user_management/authenticate`, json({
-    grant_type: "password",
-    client_id: CLIENT,
-    email: "dev@acme.example",
-    password: "DevPassword123!",
-  }));
+  await call(
+    emu,
+    "Authenticate with email + password",
+    `${BASE}/user_management/authenticate`,
+    json({
+      grant_type: "password",
+      client_id: CLIENT,
+      email: "dev@acme.example",
+      password: "DevPassword123!",
+    }),
+  );
 
   console.log("\n✅ WorkOS demo complete.\n");
 }

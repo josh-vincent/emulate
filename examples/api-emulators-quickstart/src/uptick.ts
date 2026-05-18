@@ -20,7 +20,12 @@ import { call, heading, mount } from "./harness.js";
 const BASE = "http://localhost:4020";
 
 interface JsonApiList {
-  data: Array<{ type: string; id: string; attributes: Record<string, unknown>; relationships?: Record<string, unknown> }>;
+  data: Array<{
+    type: string;
+    id: string;
+    attributes: Record<string, unknown>;
+    relationships?: Record<string, unknown>;
+  }>;
 }
 interface JsonApiOne {
   data: { type: string; id: string; attributes: Record<string, unknown>; relationships?: Record<string, unknown> };
@@ -148,7 +153,11 @@ async function main(): Promise<void> {
     await fresh.app.request(`${BASE}/api/oauth2/token/`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "password", username: "tech@demo.com.au", password: "hunter2" }).toString(),
+      body: new URLSearchParams({
+        grant_type: "password",
+        username: "tech@demo.com.au",
+        password: "hunter2",
+      }).toString(),
     })
   ).json()) as { access_token: string };
   const rt = await fresh.app.request(`${BASE}/api/v2/defects/?status=closed`, {

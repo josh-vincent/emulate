@@ -102,9 +102,13 @@ async function main(): Promise<void> {
   await req("GET /api/version/", `${BASE}/api/version/`, { headers: H });
   await req("GET /api/:ver/", `${BASE}/api/${VER}/`, { headers: H });
 
-  const atList = (await (await req("GET /api/:ver/assettypes/", `${BASE}/api/${VER}/assettypes/`, { headers: H })).json()) as JsonApiList;
+  const atList = (await (
+    await req("GET /api/:ver/assettypes/", `${BASE}/api/${VER}/assettypes/`, { headers: H })
+  ).json()) as JsonApiList;
   await req("GET /api/:ver/assettypes/:id", `${BASE}/api/${VER}/assettypes/${atList.data[0]!.id}`, { headers: H });
-  const uList = (await (await req("GET /api/:ver/users/", `${BASE}/api/${VER}/users/`, { headers: H })).json()) as JsonApiList;
+  const uList = (await (
+    await req("GET /api/:ver/users/", `${BASE}/api/${VER}/users/`, { headers: H })
+  ).json()) as JsonApiList;
   await req("GET /api/:ver/users/:id", `${BASE}/api/${VER}/users/${uList.data[0]!.id}`, { headers: H });
 
   heading("Uptick sim — 90 days of onboarding (12 weekly clients)");
@@ -116,40 +120,52 @@ async function main(): Promise<void> {
   for (let week = 0; week < 12; week++) {
     const d = day(week * 7);
     const client = (await (
-      await req("POST /api/:ver/clients/", `${BASE}/api/${VER}/clients/`, jsonapi("Client", {
-        name: `Client ${String.fromCharCode(65 + week)} Pty Ltd`,
-        sector: week % 2 ? "Commercial" : "Industrial",
-        ref: `CL-${1000 + week}`,
-        contact_name: `Manager ${week}`,
-        contact_email: `ops${week}@example.test`,
-      }))
+      await req(
+        "POST /api/:ver/clients/",
+        `${BASE}/api/${VER}/clients/`,
+        jsonapi("Client", {
+          name: `Client ${String.fromCharCode(65 + week)} Pty Ltd`,
+          sector: week % 2 ? "Commercial" : "Industrial",
+          ref: `CL-${1000 + week}`,
+          contact_name: `Manager ${week}`,
+          contact_email: `ops${week}@example.test`,
+        }),
+      )
     ).json()) as JsonApiOne;
     clientIds.push(client.data.id);
 
     const prop = (await (
-      await req("POST /api/:ver/properties/", `${BASE}/api/${VER}/properties/`, jsonapi(
-        "Property",
-        {
-          name: `Site ${week} — onboarded ${d}`,
-          address: { streetline: `${10 + week} Industrial Ave`, city: "Sydney", state: "NSW", postal_code: "2000" },
-        },
-        { client: { data: { type: "Client", id: client.data.id } } },
-      ))
+      await req(
+        "POST /api/:ver/properties/",
+        `${BASE}/api/${VER}/properties/`,
+        jsonapi(
+          "Property",
+          {
+            name: `Site ${week} — onboarded ${d}`,
+            address: { streetline: `${10 + week} Industrial Ave`, city: "Sydney", state: "NSW", postal_code: "2000" },
+          },
+          { client: { data: { type: "Client", id: client.data.id } } },
+        ),
+      )
     ).json()) as JsonApiOne;
     propIds.push(prop.data.id);
 
     // 2 assets per site.
     for (let a = 0; a < 2; a++) {
       const asset = (await (
-        await req("POST /api/:ver/assets/", `${BASE}/api/${VER}/assets/`, jsonapi(
-          "Asset",
-          { name: `Asset W${week}-${a}`, asset_number: `FP-${week}${a}`, standard_maintenance: "AS1851 annual" },
-          {
-            property: { data: { type: "Property", id: prop.data.id } },
-            client: { data: { type: "Client", id: client.data.id } },
-            asset_type: { data: { type: "AssetType", id: atList.data[a % atList.data.length]!.id } },
-          },
-        ))
+        await req(
+          "POST /api/:ver/assets/",
+          `${BASE}/api/${VER}/assets/`,
+          jsonapi(
+            "Asset",
+            { name: `Asset W${week}-${a}`, asset_number: `FP-${week}${a}`, standard_maintenance: "AS1851 annual" },
+            {
+              property: { data: { type: "Property", id: prop.data.id } },
+              client: { data: { type: "Client", id: client.data.id } },
+              asset_type: { data: { type: "AssetType", id: atList.data[a % atList.data.length]!.id } },
+            },
+          ),
+        )
       ).json()) as JsonApiOne;
       assetIds.push(asset.data.id);
     }
@@ -163,11 +179,19 @@ async function main(): Promise<void> {
   for (let i = 0; i < assetIds.length; i++) {
     const raised = day(Math.floor((i / assetIds.length) * 88));
     const def = (await (
-      await req("POST /api/:ver/defects/", `${BASE}/api/${VER}/defects/`, jsonapi(
-        "Defect",
-        { description: `Defect on asset ${i} (raised ${raised})`, severity: i % 3 === 0 ? "high" : "medium", status: "open" },
-        { asset: { data: { type: "Asset", id: assetIds[i]! } } },
-      ))
+      await req(
+        "POST /api/:ver/defects/",
+        `${BASE}/api/${VER}/defects/`,
+        jsonapi(
+          "Defect",
+          {
+            description: `Defect on asset ${i} (raised ${raised})`,
+            severity: i % 3 === 0 ? "high" : "medium",
+            status: "open",
+          },
+          { asset: { data: { type: "Asset", id: assetIds[i]! } } },
+        ),
+      )
     ).json()) as JsonApiOne;
     defectIds.push(def.data.id);
   }
@@ -208,7 +232,9 @@ async function main(): Promise<void> {
   await req("PATCH /api/:ver/assets/:id", `${BASE}/api/${VER}/assets/${assetIds[0]}`, {
     method: "PATCH",
     headers: H,
-    body: JSON.stringify({ data: { type: "Asset", id: assetIds[0], attributes: { standard_maintenance: "AS1851 + quarterly" } } }),
+    body: JSON.stringify({
+      data: { type: "Asset", id: assetIds[0], attributes: { standard_maintenance: "AS1851 + quarterly" } },
+    }),
   });
   await req("GET /api/:ver/defects/:id", `${BASE}/api/${VER}/defects/${defectIds[0]}`, { headers: H });
 
@@ -242,7 +268,9 @@ async function main(): Promise<void> {
   console.log(`  route coverage: ${covered.size}/${ROUTES.length}`);
   if (missing.length) console.log(`  ❌ MISSING: ${missing.join(" | ")}`);
   const ok = missing.length === 0 && failures === 0 && rtOk;
-  console.log(`\n${ok ? "✅" : "❌"} Uptick 3-month simulation ${ok ? "complete — full route coverage" : "INCOMPLETE"}.\n`);
+  console.log(
+    `\n${ok ? "✅" : "❌"} Uptick 3-month simulation ${ok ? "complete — full route coverage" : "INCOMPLETE"}.\n`,
+  );
   if (!ok) process.exit(1);
 }
 
@@ -252,7 +280,9 @@ async function req(pattern: string, url: string, init?: RequestInit): Promise<Re
   covered.add(pattern);
   calls++;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const emu = (globalThis as any).__uptickEmu as { request: (u: string, i?: RequestInit) => Response | Promise<Response> };
+  const emu = (globalThis as any).__uptickEmu as {
+    request: (u: string, i?: RequestInit) => Response | Promise<Response>;
+  };
   const res = await emu.request(url, init);
   const expected = res.status >= 200 && res.status < 300;
   if (!expected) {

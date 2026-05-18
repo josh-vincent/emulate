@@ -52,13 +52,18 @@ async function main(): Promise<void> {
   const code = new URL(cb.headers.get("Location")!).searchParams.get("code")!;
   console.log(`▶ POST /o/oauth2/v2/auth/callback  →  ${cb.status} (code=${code.slice(0, 10)}…)`);
 
-  const token = (await call(emu, "Exchange code → tokens", `${BASE}/oauth2/token`, form({
-    grant_type: "authorization_code",
-    code,
-    redirect_uri: REDIRECT,
-    client_id: CLIENT,
-    client_secret: SECRET,
-  }))) as { access_token: string; refresh_token: string };
+  const token = (await call(
+    emu,
+    "Exchange code → tokens",
+    `${BASE}/oauth2/token`,
+    form({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: REDIRECT,
+      client_id: CLIENT,
+      client_secret: SECRET,
+    }),
+  )) as { access_token: string; refresh_token: string };
 
   heading("Google — authenticated identity");
 
@@ -66,12 +71,17 @@ async function main(): Promise<void> {
     headers: { Authorization: `Bearer ${token.access_token}` },
   });
 
-  await call(emu, "Rotate the access token via refresh_token", `${BASE}/oauth2/token`, form({
-    grant_type: "refresh_token",
-    refresh_token: token.refresh_token,
-    client_id: CLIENT,
-    client_secret: SECRET,
-  }));
+  await call(
+    emu,
+    "Rotate the access token via refresh_token",
+    `${BASE}/oauth2/token`,
+    form({
+      grant_type: "refresh_token",
+      refresh_token: token.refresh_token,
+      client_id: CLIENT,
+      client_secret: SECRET,
+    }),
+  );
 
   console.log("\n✅ Google demo complete.\n");
 }

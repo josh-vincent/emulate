@@ -101,10 +101,9 @@ async function main(): Promise<void> {
 
   const sf = connections.find((c) => c.provider_config_key === "salesforce")!;
   const soql = encodeURIComponent("SELECT Id, Name FROM Account");
-  const proxy = await emu.app.request(
-    `${BASE}/proxy/services/data/v59.0/query?q=${soql}`,
-    { headers: { "Connection-Id": sf.id, "Provider-Config-Key": "salesforce" } },
-  );
+  const proxy = await emu.app.request(`${BASE}/proxy/services/data/v59.0/query?q=${soql}`, {
+    headers: { "Connection-Id": sf.id, "Provider-Config-Key": "salesforce" },
+  });
   const proxyBody = (await proxy.json()) as { records?: unknown[] };
   console.log(
     `\n▶ GET /proxy/services/data/v59.0/query?q=…  →  ${proxy.status} ` +
@@ -117,9 +116,7 @@ async function main(): Promise<void> {
   console.log(`\n  ${pad("CATEGORY", 11)}${pad("PROVIDER", 17)}${pad("CONNECTION", 22)}${pad("MODELS", 34)}ROWS`);
   console.log(`  ${"─".repeat(88)}`);
   for (const s of summary) {
-    console.log(
-      `  ${pad(s.category, 11)}${pad(s.provider, 17)}${pad(s.id, 22)}${pad(s.models, 34)}${s.rows}`,
-    );
+    console.log(`  ${pad(s.category, 11)}${pad(s.provider, 17)}${pad(s.id, 22)}${pad(s.models, 34)}${s.rows}`);
   }
 
   const allHaveRows = summary.length === REPRESENTATIVE.length && summary.every((s) => s.rows > 0);

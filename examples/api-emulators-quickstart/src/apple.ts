@@ -56,15 +56,22 @@ async function main(): Promise<void> {
   );
   const loc = new URL(cb.headers.get("Location")!);
   const code = loc.searchParams.get("code")!;
-  console.log(`▶ POST /auth/authorize/callback  →  ${cb.status} (code=${code.slice(0, 10)}…, user blob=${loc.searchParams.has("user")})`);
+  console.log(
+    `▶ POST /auth/authorize/callback  →  ${cb.status} (code=${code.slice(0, 10)}…, user blob=${loc.searchParams.has("user")})`,
+  );
 
-  const token = (await call(emu, "Exchange code → tokens", `${BASE}/auth/token`, form({
-    grant_type: "authorization_code",
-    code,
-    client_id: CLIENT,
-    client_secret: SECRET,
-    redirect_uri: REDIRECT,
-  }))) as { id_token: string };
+  const token = (await call(
+    emu,
+    "Exchange code → tokens",
+    `${BASE}/auth/token`,
+    form({
+      grant_type: "authorization_code",
+      code,
+      client_id: CLIENT,
+      client_secret: SECRET,
+      redirect_uri: REDIRECT,
+    }),
+  )) as { id_token: string };
 
   console.log("\n▶ Decoded id_token claims");
   console.log(`    ${JSON.stringify(decodeJwt(token.id_token), null, 2).split("\n").join("\n    ")}`);

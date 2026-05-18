@@ -90,18 +90,28 @@ async function main(): Promise<void> {
   const code = new URL(authorize.headers.get("Location")!).searchParams.get("code")!;
   console.log(`\n▶ GET /oauth/authorize  →  302  (code=${code.slice(0, 12)}…)`);
 
-  const token = (await call(emu, "Exchange the code for an access + refresh token", `${BASE}/oauth/token`, json({
-    grant_type: "authorization_code",
-    code,
-    client_id: "taskr_dev",
-  }))) as { access_token: string; refresh_token: string };
+  const token = (await call(
+    emu,
+    "Exchange the code for an access + refresh token",
+    `${BASE}/oauth/token`,
+    json({
+      grant_type: "authorization_code",
+      code,
+      client_id: "taskr_dev",
+    }),
+  )) as { access_token: string; refresh_token: string };
 
   // Refresh tokens are single-use: this rotates the pair and revokes the old.
-  const refreshed = (await call(emu, "Rotate the refresh token (single-use)", `${BASE}/oauth/token`, json({
-    grant_type: "refresh_token",
-    refresh_token: token.refresh_token,
-    client_id: "taskr_dev",
-  }))) as { access_token: string };
+  const refreshed = (await call(
+    emu,
+    "Rotate the refresh token (single-use)",
+    `${BASE}/oauth/token`,
+    json({
+      grant_type: "refresh_token",
+      refresh_token: token.refresh_token,
+      client_id: "taskr_dev",
+    }),
+  )) as { access_token: string };
 
   const auth = { Authorization: `Bearer ${refreshed.access_token}`, "Content-Type": "application/json" };
 
@@ -129,12 +139,9 @@ async function main(): Promise<void> {
     headers: auth,
   });
   await call(emu, "Sections of the job", `${BASE}/api/v1.0/companies/0/jobs/12345/sections/`, { headers: auth });
-  await call(
-    emu,
-    "Cost centers under section 1",
-    `${BASE}/api/v1.0/companies/0/jobs/12345/sections/1/costCenters/`,
-    { headers: auth },
-  );
+  await call(emu, "Cost centers under section 1", `${BASE}/api/v1.0/companies/0/jobs/12345/sections/1/costCenters/`, {
+    headers: auth,
+  });
   await call(
     emu,
     "The seeded cost center by id (deepest route)",
@@ -185,7 +192,12 @@ async function main(): Promise<void> {
     {
       method: "POST",
       headers: auth,
-      body: JSON.stringify({ Name: "Variation — Extra Valves", CostCenter: { ID: 500 }, TaxCode: { ID: 1 }, ExTax: 950 }),
+      body: JSON.stringify({
+        Name: "Variation — Extra Valves",
+        CostCenter: { ID: 500 },
+        TaxCode: { ID: 1 },
+        ExTax: 950,
+      }),
     },
   )) as { ID: number };
 
@@ -205,7 +217,10 @@ async function main(): Promise<void> {
   );
   const fcode = new URL(fauthz.headers.get("Location")!).searchParams.get("code")!;
   const ftoken = (await (
-    await fresh.app.request(`${BASE}/oauth/token`, json({ grant_type: "authorization_code", code: fcode, client_id: "taskr_dev" }))
+    await fresh.app.request(
+      `${BASE}/oauth/token`,
+      json({ grant_type: "authorization_code", code: fcode, client_id: "taskr_dev" }),
+    )
   ).json()) as { access_token: string };
   const roundTrip = await fresh.app.request(
     `${BASE}/api/v1.0/companies/0/jobs/12345/sections/1/costCenters/${created.ID}`,

@@ -201,9 +201,7 @@ async function main(): Promise<void> {
     ],
     quotes: [{ id: 9001, name: "Baseline Quote", customer_id: 201, status_id: 20 }],
     invoices: [{ id: 7001, job_id: 12345, type: "ProgressInvoice", total_ex_tax: 4000, total_inc_tax: 4400 }],
-    schedules: [
-      { id: 301, job_id: 12345, technician_id: 7, date: day(0), start_time: "09:00", duration_minutes: 240 },
-    ],
+    schedules: [{ id: 301, job_id: 12345, technician_id: 7, date: day(0), start_time: "09:00", duration_minutes: 240 }],
     assets: [{ id: 410, customer_id: 200, site_id: 55, name: "Pump A1", asset_type: "Pump" }],
     contacts: [{ id: 600, type: "Customer", customer_id: 200, given_name: "Cara", family_name: "Contact" }],
     stock_items: [{ id: 700, name: "Pipe 50mm", part_no: "P-50" }],
@@ -301,13 +299,18 @@ async function main(): Promise<void> {
   console.log(`\n  ${calls} endpoint calls`);
   console.log(`  status distribution: ${dist}`);
   console.log(`  success (2xx/3xx): ${twoxx}/${calls} (${ratio}%)`);
-  console.log(`  route-pattern coverage: ${covered.size}/${SIMPRO_ROUTES.length} (oauth + inspector included in table)`);
+  console.log(
+    `  route-pattern coverage: ${covered.size}/${SIMPRO_ROUTES.length} (oauth + inspector included in table)`,
+  );
   if (missing.length) console.log(`  ❌ MISSING (${missing.length}): ${missing.map((r) => r.join(" ")).join(" | ")}`);
   if (fiveXX.length) console.log(`  ❌ 5xx (${fiveXX.length}): ${fiveXX.slice(0, 20).join(" | ")}`);
-  if (listFailures.length) console.log(`  ❌ list/inspector not 2xx (${listFailures.length}): ${listFailures.slice(0, 20).join(" | ")}`);
+  if (listFailures.length)
+    console.log(`  ❌ list/inspector not 2xx (${listFailures.length}): ${listFailures.slice(0, 20).join(" | ")}`);
 
   const ok = missing.length === 0 && fiveXX.length === 0 && listFailures.length === 0 && Number(ratio) >= 80;
-  console.log(`\n${ok ? "✅" : "❌"} Simpro 3-month simulation ${ok ? "complete — full route coverage" : "INCOMPLETE"}.\n`);
+  console.log(
+    `\n${ok ? "✅" : "❌"} Simpro 3-month simulation ${ok ? "complete — full route coverage" : "INCOMPLETE"}.\n`,
+  );
   if (!ok) process.exit(1);
 }
 

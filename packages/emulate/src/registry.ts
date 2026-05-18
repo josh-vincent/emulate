@@ -479,8 +479,7 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
       return { plugin: mod.workosPlugin, seedFromConfig: mod.seedFromConfig };
     },
     defaultFallback(cfg) {
-      const firstEmail =
-        (cfg?.users as Array<{ email?: string }> | undefined)?.[0]?.email ?? "test@example.com";
+      const firstEmail = (cfg?.users as Array<{ email?: string }> | undefined)?.[0]?.email ?? "test@example.com";
       return { login: firstEmail, id: 1, scopes: [] };
     },
     initConfig: {
@@ -495,9 +494,7 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
           },
         ],
         organizations: [{ id: "org_dev", name: "My Company", slug: "my-company" }],
-        memberships: [
-          { user_email: "test@example.com", organization_slug: "my-company", role: "owner" },
-        ],
+        memberships: [{ user_email: "test@example.com", organization_slug: "my-company", role: "owner" }],
         oauth_clients: [
           {
             client_id: "client_emulate_01",
@@ -542,9 +539,7 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
                   Contact: { ContactID: "CONTACT-001", Name: "Demo Customer" },
                 },
               ],
-              Contact: [
-                { id: "CONTACT-001", Name: "Demo Customer", EmailAddress: "customer@demo.com" },
-              ],
+              Contact: [{ id: "CONTACT-001", Name: "Demo Customer", EmailAddress: "customer@demo.com" }],
             },
           },
           {
@@ -668,11 +663,7 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
             asset_type_name: "Fire Hose Reel",
           },
         ],
-        asset_types: [
-          { name: "Fire Hose Reel" },
-          { name: "Fire Extinguisher" },
-          { name: "Fire Panel" },
-        ],
+        asset_types: [{ name: "Fire Hose Reel" }, { name: "Fire Extinguisher" }, { name: "Fire Panel" }],
         users: [
           {
             username: "tech1",

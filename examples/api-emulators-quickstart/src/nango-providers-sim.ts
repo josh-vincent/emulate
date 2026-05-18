@@ -49,12 +49,7 @@ let calls = 0;
 let failures = 0;
 let app: { request: (u: string, i?: RequestInit) => Response | Promise<Response> };
 
-async function hit(
-  route: string,
-  url: string,
-  init: RequestInit | undefined,
-  okStatuses: number[],
-): Promise<Response> {
+async function hit(route: string, url: string, init: RequestInit | undefined, okStatuses: number[]): Promise<Response> {
   covered.add(route);
   calls++;
   const res = await app.request(url, init);
@@ -204,7 +199,12 @@ async function main(): Promise<void> {
   for (const p of providers) {
     heading(`Nango sim — ${p.key}`);
 
-    await hit("GET /connections/:connectionId", `${BASE}/connections/${p.id}`, { headers: { "Provider-Config-Key": p.key } }, [200]);
+    await hit(
+      "GET /connections/:connectionId",
+      `${BASE}/connections/${p.id}`,
+      { headers: { "Provider-Config-Key": p.key } },
+      [200],
+    );
 
     for (const model of p.models) {
       await hit(
@@ -227,13 +227,21 @@ async function main(): Promise<void> {
     await hit(
       "PATCH /connection/:connectionId/metadata",
       `${BASE}/connection/${p.id}/metadata`,
-      { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lastSyncedAt: iso(90) }) },
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lastSyncedAt: iso(90) }),
+      },
       [200],
     );
     await hit(
       "PUT /connection/:connectionId/metadata",
       `${BASE}/connection/${p.id}/metadata`,
-      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ organizationId: "org_acme", cursor: "c-90" }) },
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId: "org_acme", cursor: "c-90" }),
+      },
       [200],
     );
 
@@ -248,7 +256,11 @@ async function main(): Promise<void> {
     await hit(
       "POST /webhook/:environmentUuid/:providerConfigKey",
       `${BASE}/webhook/env-1/${p.key}`,
-      { method: "POST", headers: { "Content-Type": "application/json", "Connection-Id": p.id }, body: JSON.stringify({ event: "record.updated", model: p.models[0] }) },
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Connection-Id": p.id },
+        body: JSON.stringify({ event: "record.updated", model: p.models[0] }),
+      },
       [200],
     );
   }
@@ -256,14 +268,24 @@ async function main(): Promise<void> {
   heading("Nango sim — provider-native /proxy calls");
 
   const proxy = async (key: string, id: string, path: string) =>
-    hit("ALL /proxy/*", `${BASE}/proxy/${path}`, { headers: { "Connection-Id": id, "Provider-Config-Key": key } }, [200]);
+    hit(
+      "ALL /proxy/*",
+      `${BASE}/proxy/${path}`,
+      { headers: { "Connection-Id": id, "Provider-Config-Key": key } },
+      [200],
+    );
 
   // Xero pluralises the response key (Invoice → Invoices).
-  const xr = (await (await proxy("xero", "xero-acme", "api.xro/2.0/Invoices")).json()) as { Invoices?: unknown[]; Status?: string };
+  const xr = (await (await proxy("xero", "xero-acme", "api.xro/2.0/Invoices")).json()) as {
+    Invoices?: unknown[];
+    Status?: string;
+  };
   console.log(`    ↳ Xero envelope: Status=${xr.Status}, Invoices rows=${xr.Invoices?.length ?? 0}`);
 
   const qq = encodeURIComponent("SELECT * FROM Invoice STARTPOSITION 1 MAXRESULTS 100");
-  const qbr = (await (await proxy("quickbooks", "quickbooks-acme", `v3/company/9341453644728342/query?query=${qq}`)).json()) as {
+  const qbr = (await (
+    await proxy("quickbooks", "quickbooks-acme", `v3/company/9341453644728342/query?query=${qq}`)
+  ).json()) as {
     QueryResponse?: { Invoice?: unknown[] };
   };
   console.log(`    ↳ QBO QueryResponse.Invoice rows=${qbr.QueryResponse?.Invoice?.length ?? 0}`);
@@ -282,9 +304,19 @@ async function main(): Promise<void> {
   heading("Nango sim — connect-session handshake + reconnect");
 
   const sess = (await (
-    await hit("POST /connect/sessions", `${BASE}/connect/sessions`, J({ end_user: { id: "user_42", tags: { organizationId: "org_acme" } }, allowed_integrations: ["xero"] }), [200, 201])
+    await hit(
+      "POST /connect/sessions",
+      `${BASE}/connect/sessions`,
+      J({ end_user: { id: "user_42", tags: { organizationId: "org_acme" } }, allowed_integrations: ["xero"] }),
+      [200, 201],
+    )
   ).json()) as { data: { token: string } };
-  await hit("POST /connect/sessions/reconnect", `${BASE}/connect/sessions/reconnect`, J({ connection_id: "xero-acme" }), [200, 201]);
+  await hit(
+    "POST /connect/sessions/reconnect",
+    `${BASE}/connect/sessions/reconnect`,
+    J({ connection_id: "xero-acme" }),
+    [200, 201],
+  );
   await hit("POST /connect/complete", `${BASE}/connect/complete`, J({ token: sess.data.token }), [200, 201]);
 
   await hit("GET /webhook-deliveries", `${BASE}/webhook-deliveries`, undefined, [200]);
@@ -298,7 +330,9 @@ async function main(): Promise<void> {
   console.log(`  route coverage: ${covered.size}/${ROUTES.length}`);
   if (missing.length) console.log(`  ❌ MISSING: ${missing.join(" | ")}`);
   const ok = missing.length === 0 && failures === 0;
-  console.log(`\n${ok ? "✅" : "❌"} Nango 4-provider 3-month simulation ${ok ? "complete — full route coverage" : "INCOMPLETE"}.\n`);
+  console.log(
+    `\n${ok ? "✅" : "❌"} Nango 4-provider 3-month simulation ${ok ? "complete — full route coverage" : "INCOMPLETE"}.\n`,
+  );
   if (!ok) process.exit(1);
 }
 

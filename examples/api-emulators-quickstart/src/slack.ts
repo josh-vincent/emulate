@@ -35,14 +35,24 @@ async function main(): Promise<void> {
 
   heading("Slack — post & read a message");
 
-  await call(emu, "chat.postMessage (#deploys)", `${BASE}/api/chat.postMessage`, post({
-    channel: "deploys",
-    text: ":rocket: marketing-site deployed to production",
-  }));
+  await call(
+    emu,
+    "chat.postMessage (#deploys)",
+    `${BASE}/api/chat.postMessage`,
+    post({
+      channel: "deploys",
+      text: ":rocket: marketing-site deployed to production",
+    }),
+  );
 
-  await call(emu, "conversations.history (#deploys)", `${BASE}/api/conversations.history`, post({
-    channel: "deploys",
-  }));
+  await call(
+    emu,
+    "conversations.history (#deploys)",
+    `${BASE}/api/conversations.history`,
+    post({
+      channel: "deploys",
+    }),
+  );
 
   console.log("\n✅ Slack demo complete.\n");
 }

@@ -44,23 +44,38 @@ async function main(): Promise<void> {
 
   heading("AWS SQS — queue messaging");
 
-  const urlXml = (await call(emu, "GetQueueUrl", `${BASE}/sqs/`, sqs({
-    Action: "GetQueueUrl",
-    QueueName: "acme-events",
-  }))) as string;
+  const urlXml = (await call(
+    emu,
+    "GetQueueUrl",
+    `${BASE}/sqs/`,
+    sqs({
+      Action: "GetQueueUrl",
+      QueueName: "acme-events",
+    }),
+  )) as string;
   const queueUrl = /<QueueUrl>(.*?)<\/QueueUrl>/.exec(urlXml)?.[1] ?? "";
 
-  await call(emu, "SendMessage", `${BASE}/sqs/`, sqs({
-    Action: "SendMessage",
-    QueueUrl: queueUrl,
-    MessageBody: JSON.stringify({ type: "order.created", id: "ord_123" }),
-  }));
+  await call(
+    emu,
+    "SendMessage",
+    `${BASE}/sqs/`,
+    sqs({
+      Action: "SendMessage",
+      QueueUrl: queueUrl,
+      MessageBody: JSON.stringify({ type: "order.created", id: "ord_123" }),
+    }),
+  );
 
-  await call(emu, "ReceiveMessage", `${BASE}/sqs/`, sqs({
-    Action: "ReceiveMessage",
-    QueueUrl: queueUrl,
-    MaxNumberOfMessages: "1",
-  }));
+  await call(
+    emu,
+    "ReceiveMessage",
+    `${BASE}/sqs/`,
+    sqs({
+      Action: "ReceiveMessage",
+      QueueUrl: queueUrl,
+      MaxNumberOfMessages: "1",
+    }),
+  );
 
   console.log("\n✅ AWS demo complete.\n");
 }
