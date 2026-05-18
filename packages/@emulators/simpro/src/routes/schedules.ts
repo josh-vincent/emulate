@@ -89,6 +89,31 @@ export function scheduleRoutes({ app, store }: RouteContext): void {
     return c.json(formatSchedule(s), 201);
   });
 
+  app.patch("/api/v1.0/companies/:cid/schedules/:id", async (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const s = ss.schedules.findOneBy("external_id", Number(c.req.param("id")));
+    if (!s) return simproNotFound(c);
+    let body: Record<string, unknown>;
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
+    ss.schedules.update(s.id, {
+      ...(body.Job !== undefined && { job_id: (body.Job as { ID?: number }).ID ?? s.job_id }),
+      ...(body.Technician !== undefined && {
+        technician_id: (body.Technician as { ID?: number }).ID ?? s.technician_id,
+      }),
+      ...(body.Section !== undefined && { section_id: (body.Section as { ID?: number }).ID ?? null }),
+      ...(body.CostCenter !== undefined && { cost_center_id: (body.CostCenter as { ID?: number }).ID ?? null }),
+      ...(body.Date !== undefined && { date: body.Date as string }),
+      ...(body.StartTime !== undefined && { start_time: body.StartTime as string }),
+      ...(body.DurationMinutes !== undefined && { duration_minutes: body.DurationMinutes as number }),
+    });
+    return c.body(null, 204);
+  });
+
   app.delete("/api/v1.0/companies/:cid/schedules/:id", (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
