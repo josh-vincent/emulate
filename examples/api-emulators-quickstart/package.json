@@ -26,7 +26,8 @@
     "mongoatlas": "tsx src/mongoatlas.ts",
     "clerk": "tsx src/clerk.ts",
     "workos": "tsx src/workos.ts",
-    "direct": "tsx src/vercel.ts && tsx src/github.ts && tsx src/google.ts && tsx src/slack.ts && tsx src/apple.ts && tsx src/microsoft.ts && tsx src/okta.ts && tsx src/aws.ts && tsx src/resend.ts && tsx src/stripe.ts && tsx src/mongoatlas.ts && tsx src/clerk.ts && tsx src/workos.ts && tsx src/simpro.ts && tsx src/uptick.ts",
+    "crm": "tsx src/crm.ts",
+    "direct": "tsx src/vercel.ts && tsx src/github.ts && tsx src/google.ts && tsx src/slack.ts && tsx src/apple.ts && tsx src/microsoft.ts && tsx src/okta.ts && tsx src/aws.ts && tsx src/resend.ts && tsx src/stripe.ts && tsx src/mongoatlas.ts && tsx src/clerk.ts && tsx src/workos.ts && tsx src/simpro.ts && tsx src/uptick.ts && tsx src/crm.ts",
     "sims": "tsx src/uptick-sim.ts && tsx src/simpro-sim.ts && tsx src/nango-providers-sim.ts",
     "all": "pnpm direct && tsx src/nango.ts && tsx src/nango-providers.ts && pnpm sims && tsx src/realtime-stream.ts"
   },
