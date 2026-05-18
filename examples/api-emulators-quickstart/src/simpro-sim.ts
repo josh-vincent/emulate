@@ -26,7 +26,13 @@
 //
 //   pnpm --filter api-emulators-quickstart simpro-sim
 import { writeFileSync } from "node:fs";
-import { simproPlugin, seedFromConfig, getSimproStore, storeToSeedConfig } from "@emulators/simpro";
+import {
+  simproPlugin,
+  seedFromConfig,
+  getSimproStore,
+  storeToSeedConfig,
+  type SimproSeedConfig,
+} from "@emulators/simpro";
 import { heading, mount } from "./harness.js";
 import { SIMPRO_ROUTES } from "./simpro-routes.generated.js";
 
@@ -37,6 +43,19 @@ const WEEKS = 13; // ≈ 91 days = one quarter
 const PASSES = 2; // crawl every endpoint this many times
 const START = new Date(Date.now() - WEEKS * 7 * DAY);
 const day = (n: number): string => new Date(START.getTime() + n * DAY).toISOString().slice(0, 10);
+
+// LIVE mode: instead of an isolated in-process store, drive a *running*
+// `emulate` server over real HTTP so the quarter populates the dashboard you
+// are watching. Set SIMPRO_SIM_TARGET=http://localhost:4016 (a server with
+// simpro mounted). Every BASE url is rewritten to `${TARGET}/simpro` and the
+// Phase-A roots are pushed via the server's own `/_admin/seed?mode=merge`
+// upsert endpoint. Default (unset) keeps the fast in-process behaviour.
+const TARGET = process.env.SIMPRO_SIM_TARGET?.replace(/\/+$/, "");
+const LIVE = Boolean(TARGET);
+const liveApp = {
+  request: (u: string, init?: RequestInit): Promise<Response> =>
+    fetch(u.startsWith(BASE) ? `${TARGET}/simpro${u.slice(BASE.length)}` : u, init),
+};
 
 let auth: Record<string, string>;
 const covered = new Set<string>();
@@ -228,10 +247,12 @@ const SETUP = [
 
 async function main(): Promise<void> {
   const emu = mount(simproPlugin, BASE);
-  app = emu.app;
+  app = LIVE ? liveApp : emu.app;
+  if (LIVE)
+    console.log(`\n  🔴 LIVE mode — streaming into ${TARGET}/simpro (watch the dashboard /_inspector/simpro)\n`);
 
   // ── Phase A: seed dependency roots, then simulate a quarter ──────────────
-  seedFromConfig(emu.store, BASE, {
+  const roots: SimproSeedConfig = {
     oauth: { client_id: "taskr_dev", client_secret: "taskr_dev_secret" },
     companies: [{ id: 0, name: "Taskr Test Co" }],
     tax_codes: [{ id: 1, name: "GST", rate: 10 }],
@@ -268,7 +289,20 @@ async function main(): Promise<void> {
     assets: [{ id: 410, customer_id: 200, site_id: 55, name: "Pump A1", asset_type: "Pump" }],
     contacts: [{ id: 600, type: "Customer", customer_id: 200, given_name: "Cara", family_name: "Contact" }],
     stock_items: [{ id: 700, name: "Pipe 50mm", part_no: "P-50" }],
-  });
+  };
+  if (LIVE) {
+    // Push roots into the running server's store via its own upsert endpoint
+    // (no reset — exact ids 200/55/12345/… are preserved so ctx links hold).
+    const r = await fetch(`${TARGET}/_admin/seed?mode=merge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ simpro: roots }),
+    });
+    if (!r.ok) throw new Error(`/_admin/seed failed: ${r.status} ${await r.text()}`);
+    await r.body?.cancel();
+  } else {
+    seedFromConfig(emu.store, BASE, roots);
+  }
 
   await oauth();
 
@@ -438,24 +472,29 @@ async function main(): Promise<void> {
   // Job-scoped tasks: the public tasks POST hardcodes parent_type "global", so
   // a job→task link can only exist via the store (as the emulator's own seed
   // does). Insert one dated task per job so /jobs/:jid/tasks/ returns real data.
-  const ss = getSimproStore(emu.store);
-  jobIds.forEach((jid, i) => {
-    const d = day(Math.min(i, WEEKS - 1) * 7);
-    ss.tasks.insert({
-      company_id: 0,
-      external_id: 90_000 + i,
-      parent_type: "job",
-      parent_id: jid,
-      name: `Job ${jid} task`,
-      description: "linked job task",
-      due_date: d,
-      assigned_to_id: ctx.staff,
-      completed: i % 3 === 0,
-      date_created: `${d}T09:00:00Z`,
-      date_modified: `${d}T09:00:00Z`,
+  // No remote-store hook exists, so LIVE mode drops this one chain (of 25).
+  if (LIVE) {
+    console.log("  ⓘ live mode: job→task chain skipped (no public job-task POST)");
+  } else {
+    const ss = getSimproStore(emu.store);
+    jobIds.forEach((jid, i) => {
+      const d = day(Math.min(i, WEEKS - 1) * 7);
+      ss.tasks.insert({
+        company_id: 0,
+        external_id: 90_000 + i,
+        parent_type: "job",
+        parent_id: jid,
+        name: `Job ${jid} task`,
+        description: "linked job task",
+        due_date: d,
+        assigned_to_id: ctx.staff,
+        completed: i % 3 === 0,
+        date_created: `${d}T09:00:00Z`,
+        date_modified: `${d}T09:00:00Z`,
+      });
     });
-  });
-  n["job.tasks"] = jobIds.length;
+    n["job.tasks"] = jobIds.length;
+  }
 
   const totalCreated = Object.values(n).reduce((a, b) => a + b, 0);
   const weeklyKeys = [
@@ -474,7 +513,7 @@ async function main(): Promise<void> {
     "leads",
     "lead.notes",
     ...FLAT,
-  ];
+  ].filter((k) => !LIVE || k !== "job.tasks");
   const dense = weeklyKeys.filter((k) => (n[k] ?? 0) >= WEEKS).length;
   console.log(
     `\n  created ${totalCreated} linked rows • ${dense}/${weeklyKeys.length} weekly chains carry ≥${WEEKS} weeks` +
@@ -532,16 +571,18 @@ async function main(): Promise<void> {
     ["customer → contacts", `${C}/customers/${lastCust}/contacts/`],
     ["lead → notes", `${C}/leads/${lastLead}/notes/`],
   ];
+  // LIVE has no public job-task POST, so its job→tasks chain is skipped above.
+  const linkChecks = links.filter(([label]) => !LIVE || label !== "job → tasks");
   let linkedOk = 0;
   console.log("");
-  for (const [label, p] of links) {
+  for (const [label, p] of linkChecks) {
     const c = await len(p);
     if (c > 0) linkedOk++;
     console.log(`  ${c > 0 ? "✅" : "❌"} ${label.padEnd(30)} ${c >= 0 ? `${c} related rows` : "not reachable"}`);
   }
-  const linksOk = linkedOk === links.length;
+  const linksOk = linkedOk === linkChecks.length;
   console.log(
-    `\n  ${linkedOk}/${links.length} nested relationships return related data — ${linksOk ? "✅ fully linked" : "❌ gaps"}`,
+    `\n  ${linkedOk}/${linkChecks.length} nested relationships return related data — ${linksOk ? "✅ fully linked" : "❌ gaps"}`,
   );
 
   // ── Shape + relational-integrity assertion ──────────────────────────────
@@ -708,7 +749,11 @@ async function main(): Promise<void> {
   // the round-trippable seed config; boot the server with
   // `EMULATE_CONFIG_PATH=<path>` and the dashboard at /simpro shows this data.
   const exportPath = process.env.SIMPRO_SIM_EXPORT;
-  if (exportPath) {
+  if (exportPath && LIVE) {
+    console.log(
+      `\n  ⓘ export skipped in LIVE mode — the quarter is already in ${TARGET}; use GET ${TARGET}/_admin/export?service=simpro`,
+    );
+  } else if (exportPath) {
     const seed = storeToSeedConfig(emu.store, BASE);
     writeFileSync(exportPath, JSON.stringify({ simpro: seed }, null, 2));
     console.log(`\n  📦 exported linked quarter → ${exportPath} (boot: EMULATE_CONFIG_PATH=${exportPath})`);
