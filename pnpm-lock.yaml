@@ -256,6 +256,9 @@ importers:
       '@emulators/simpro':
         specifier: workspace:*
         version: link:../../packages/@emulators/simpro
+      '@emulators/simulator':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/simulator
       '@emulators/slack':
         specifier: workspace:*
         version: link:../../packages/@emulators/slack
