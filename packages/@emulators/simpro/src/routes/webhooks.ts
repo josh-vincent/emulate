@@ -105,6 +105,25 @@ export function webhookRoutes({ app, store, baseUrl }: RouteContext): void {
     );
   });
 
+  app.patch("/api/v1.0/companies/:cid/setup/webhooks/:id", async (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const w = ss.webhookSubscriptions.findOneBy("external_id", Number(c.req.param("id")));
+    if (!w) return simproNotFound(c);
+    let body: Record<string, unknown>;
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
+    ss.webhookSubscriptions.update(w.id, {
+      ...(body.URL !== undefined && { url: body.URL as string }),
+      ...(body.Events !== undefined && { events: body.Events as string[] }),
+      ...(body.Active !== undefined && { active: Boolean(body.Active) }),
+    });
+    return c.body(null, 204);
+  });
+
   app.delete("/api/v1.0/companies/:cid/setup/webhooks/:id", (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;

@@ -1,8 +1,18 @@
 import type { Context } from "hono";
 import type { RouteContext } from "@emulators/core";
 import { getSimproStore } from "../store.js";
-import { paginate, parsePagination, rateLimit, requireAuth, simproNotFound } from "../helpers.js";
+import {
+  paginate,
+  parseJson,
+  parsePagination,
+  rateLimit,
+  requireAuth,
+  simproError,
+  simproNotFound,
+  simproValidation,
+} from "../helpers.js";
 import { formatLabourRate, formatStatus, formatStockItem, formatTaxCode } from "../formatters.js";
+import { nextExternalId } from "./jobs.js";
 
 /**
  * Reference-data endpoints: tax codes, labour rates, statuses, stock items,
@@ -67,6 +77,42 @@ export function referenceRoutes({ app, store }: RouteContext): void {
     return c.json(page.map(formatStockItem));
   });
 
+  app.post("/api/v1.0/companies/:cid/catalogs/", async (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    let body: Record<string, unknown>;
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
+    if (!body.Name) return simproValidation(c, "Name", "Name is required.");
+    const companyId = Number(c.req.param("cid")) || 0;
+    const externalId = nextExternalId(ss, "stockItems", companyId);
+    const tradeEx = (body.TradePrice as { ExTax?: number } | undefined)?.ExTax ?? 0;
+    const tradeInc = (body.TradePrice as { IncTax?: number } | undefined)?.IncTax ?? tradeEx;
+    const item = ss.stockItems.insert({
+      company_id: companyId,
+      external_id: externalId,
+      name: body.Name as string,
+      part_no: (body.PartNo as string) ?? "",
+      description: (body.Description as string | null) ?? null,
+      group_name: (body.Group as { Name?: string } | undefined)?.Name ?? null,
+      subgroup_name: (body.SubGroup as { Name?: string } | undefined)?.Name ?? null,
+      trade_price_ex_tax: tradeEx,
+      trade_price_inc_tax: tradeInc,
+      unit_price: (body.UnitPrice as number) ?? 0,
+      unit_of_measure: (body.UnitOfMeasure as string | null) ?? null,
+      tax_code_id: (body.TaxCode as { ID?: number } | undefined)?.ID ?? null,
+      supplier_id: (body.Supplier as { ID?: number } | undefined)?.ID ?? null,
+      supplier_name: (body.Supplier as { Name?: string } | undefined)?.Name ?? null,
+      supplier_part_no: (body.SupplierPartNo as string | null) ?? null,
+      taxable: (body.Taxable as boolean) ?? true,
+      archived: false,
+    });
+    return c.json(formatStockItem(item), 201);
+  });
+
   app.get("/api/v1.0/companies/:cid/setup/zones/", (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
@@ -109,6 +155,38 @@ export function referenceRoutes({ app, store }: RouteContext): void {
     const item = ss.stockItems.findOneBy("external_id", Number(c.req.param("id")));
     if (!item) return simproNotFound(c);
     return c.json(formatStockItem(item));
+  });
+
+  app.patch("/api/v1.0/companies/:cid/catalogs/:id", async (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const item = ss.stockItems.findOneBy("external_id", Number(c.req.param("id")));
+    if (!item) return simproNotFound(c);
+    let body: Record<string, unknown>;
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
+    ss.stockItems.update(item.id, {
+      ...(body.Name !== undefined && { name: body.Name as string }),
+      ...(body.PartNo !== undefined && { part_no: body.PartNo as string }),
+      ...(body.Description !== undefined && { description: body.Description as string | null }),
+      ...(body.UnitPrice !== undefined && { unit_price: body.UnitPrice as number }),
+      ...(body.UnitOfMeasure !== undefined && { unit_of_measure: body.UnitOfMeasure as string | null }),
+      ...(body.Taxable !== undefined && { taxable: Boolean(body.Taxable) }),
+      ...(body.Archived !== undefined && { archived: Boolean(body.Archived) }),
+    });
+    return c.body(null, 204);
+  });
+
+  app.delete("/api/v1.0/companies/:cid/catalogs/:id", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const item = ss.stockItems.findOneBy("external_id", Number(c.req.param("id")));
+    if (!item) return simproNotFound(c);
+    ss.stockItems.delete(item.id);
+    return c.body(null, 204);
   });
 
   app.get("/api/v1.0/companies/:cid/setup/zones/:id", (c) => {

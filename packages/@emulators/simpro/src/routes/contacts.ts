@@ -69,6 +69,51 @@ export function contactRoutes({ app, store }: RouteContext): void {
     return c.json(page.map(formatContact));
   });
 
+  app.get("/api/v1.0/companies/:cid/sites/:siteId/contacts/:id", (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    const siteId = Number(c.req.param("siteId"));
+    const contact = ss.contacts.findOneBy("external_id", Number(c.req.param("id")));
+    if (!contact || contact.site_id !== siteId) return simproNotFound(c);
+    return c.json(formatContact(contact));
+  });
+
+  app.post("/api/v1.0/companies/:cid/sites/:siteId/contacts/", async (c) => {
+    const blocked = guard(c);
+    if (blocked) return blocked;
+    let body: Record<string, unknown>;
+    try {
+      body = await parseJson(c);
+    } catch {
+      return simproError(c, 400, "Problems parsing JSON.");
+    }
+    if (!body.GivenName) return simproValidation(c, "GivenName", "GivenName is required.");
+    if (!body.FamilyName) return simproValidation(c, "FamilyName", "FamilyName is required.");
+    const companyId = Number(c.req.param("cid")) || 0;
+    const siteId = Number(c.req.param("siteId"));
+    const externalId = nextExternalId(ss, "contacts", companyId);
+    const contact = ss.contacts.insert({
+      company_id: companyId,
+      external_id: externalId,
+      type: "Site",
+      customer_id: null,
+      site_id: siteId,
+      salutation: (body.Salutation as string | null) ?? null,
+      given_name: body.GivenName as string,
+      family_name: body.FamilyName as string,
+      position: (body.Position as string | null) ?? null,
+      department: (body.Department as string | null) ?? null,
+      email: (body.Email as string | null) ?? null,
+      alt_email: (body.AltEmail as string | null) ?? null,
+      phone: (body.Phone as string | null) ?? null,
+      cell_phone: (body.CellPhone as string | null) ?? null,
+      fax: (body.Fax as string | null) ?? null,
+      primary_contact: (body.PrimaryContact as boolean) ?? false,
+      archived: false,
+    });
+    return c.json(formatContact(contact), 201);
+  });
+
   app.post("/api/v1.0/companies/:cid/contacts/", async (c) => {
     const blocked = guard(c);
     if (blocked) return blocked;
