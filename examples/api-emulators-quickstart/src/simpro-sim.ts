@@ -25,7 +25,8 @@
 //      every pass must stay 100 % covered with zero 5xx and all lists 2xx.
 //
 //   pnpm --filter api-emulators-quickstart simpro-sim
-import { simproPlugin, seedFromConfig, getSimproStore } from "@emulators/simpro";
+import { writeFileSync } from "node:fs";
+import { simproPlugin, seedFromConfig, getSimproStore, storeToSeedConfig } from "@emulators/simpro";
 import { heading, mount } from "./harness.js";
 import { SIMPRO_ROUTES } from "./simpro-routes.generated.js";
 
@@ -700,6 +701,18 @@ async function main(): Promise<void> {
   console.log(
     `\n  ${passedShapes}/${checks.length} shape + relational-integrity checks — ${shapesOk ? "✅ all shapes accounted for, FKs resolved" : "❌ gaps"}`,
   );
+
+  // ── Optional: export the clean linked quarter as a bootable seed config ──
+  // This sim runs entirely in-process (its own Store), so the quarter never
+  // reaches a running `emulate` server. Set SIMPRO_SIM_EXPORT=<path> to dump
+  // the round-trippable seed config; boot the server with
+  // `EMULATE_CONFIG_PATH=<path>` and the dashboard at /simpro shows this data.
+  const exportPath = process.env.SIMPRO_SIM_EXPORT;
+  if (exportPath) {
+    const seed = storeToSeedConfig(emu.store, BASE);
+    writeFileSync(exportPath, JSON.stringify({ simpro: seed }, null, 2));
+    console.log(`\n  📦 exported linked quarter → ${exportPath} (boot: EMULATE_CONFIG_PATH=${exportPath})`);
+  }
 
   // ── Phase B: crawl EVERY endpoint, repeated for several passes ──────────
   const order: Record<string, number> = { POST: 0, GET: 1, PATCH: 2, PUT: 2, DELETE: 3 };
