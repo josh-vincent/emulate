@@ -1,17 +1,22 @@
 // Simpro — 3-month operational simulation with FULL endpoint coverage.
 //
-// `simpro.ts` is the readable walkthrough. This script drives EVERY one of the
-// 372 (method, path) endpoints the emulator registers, after simulating a
-// quarter of field-service operations (≈30 jobs dated across 90 days, each
-// with schedules, invoices and payments).
+// `simpro.ts` is the readable walkthrough. This script:
 //
-// Engine: a generic crawler. It resolves every `:param` by walking the path
-// and reading the parent collection (so deep routes like
-// /jobs/:jid/sections/:sid/costCenters/:ccid resolve transitively), sends a
-// superset JSON body for writes (handlers read only the fields they need),
-// and runs POST → GET-list → GET-by-id → PATCH/PUT → DELETE so data exists
-// before it is read and is only removed last. It asserts 100 % route-pattern
-// coverage and that every list endpoint is 2xx.
+//   1. Phase A — simulates a *real quarter* of field-service operations:
+//      13 weekly cycles that create dated rows for EVERY creatable Simpro
+//      collection (jobs, schedules, invoices, payments, quotes, leads, assets,
+//      contacts, contractors, staff, sites, tasks, activity schedules, vendor
+//      orders, prebuilds, recurring jobs/invoices, credit notes, stock takes/
+//      transfers/allocations, …). Each row is stamped with that week's date so
+//      the data genuinely spans 90 days — asserted afterwards.
+//
+//   2. Phase B — a generic crawler then drives EVERY one of the 372
+//      (method, path) endpoints the emulator registers. It resolves every
+//      `:param` transitively (reading parent collections, so deep routes like
+//      /jobs/:jid/sections/:sid/costCenters/:ccid resolve), sends a superset
+//      JSON body for writes, and runs POST → GET → PATCH/PUT → DELETE. The
+//      whole crawl is repeated for several passes ("review in a loop") and
+//      every pass must stay 100 % covered with zero 5xx and all lists 2xx.
 //
 //   pnpm --filter api-emulators-quickstart simpro-sim
 import { simproPlugin, seedFromConfig } from "@emulators/simpro";
@@ -21,36 +26,48 @@ import { SIMPRO_ROUTES } from "./simpro-routes.generated.js";
 const BASE = "http://localhost:4010";
 const CID = "0";
 const DAY = 86_400_000;
-const START = new Date(Date.now() - 90 * DAY);
+const WEEKS = 13; // ≈ 91 days = one quarter
+const PASSES = 2; // crawl every endpoint this many times
+const START = new Date(Date.now() - WEEKS * 7 * DAY);
 const day = (n: number): string => new Date(START.getTime() + n * DAY).toISOString().slice(0, 10);
 
 let auth: Record<string, string>;
 const covered = new Set<string>();
 const status: Record<string, number> = {};
 let calls = 0;
-const fiveXX: string[] = [];
-const listFailures: string[] = [];
+let fiveXX: string[] = [];
+let listFailures: string[] = [];
 // id cache keyed by collection URL → first row id (or null when empty).
-const idCache = new Map<string, string | null>();
+let idCache = new Map<string, string | null>();
 let app: { request: (u: string, i?: RequestInit) => Response | Promise<Response> };
-
-// A superset write body: every required field any POST/PATCH handler checks.
-// Ref ids are filled in once Phase A has created the dependency roots.
 const ctx: Record<string, number> = {};
-function bodyFor(): string {
+
+// A superset write body. `date` stamps *every* date field any handler reads,
+// so a single body works for jobs, schedules, assets, stock takes, recurring
+// jobs, credit notes, etc. — each handler picks the field(s) it needs.
+function bodyFor(date = day(45)): string {
   return JSON.stringify({
     Name: `Sim ${Date.now()}`,
     GivenName: "Sim",
     FamilyName: "Tester",
     CompanyName: "Sim Co Pty Ltd",
     Text: "simulation note",
-    Date: day(45),
-    StartTime: "09:00",
-    EndTime: "11:00",
     ActivityType: "Call",
     Type: "Project",
     URL: "https://example.test/hook",
     Events: ["job.created"],
+    StartTime: "09:00",
+    EndTime: "11:00",
+    Date: date,
+    DateIssued: date,
+    DueDate: date,
+    StartDate: date,
+    EndDate: date,
+    DateInstalled: date,
+    DateNextService: date,
+    DateTaken: date,
+    DateTransferred: date,
+    DateAllocated: date,
     Customer: { ID: ctx.customer },
     Site: { ID: ctx.site },
     Job: { ID: ctx.job },
@@ -105,7 +122,6 @@ async function resolve(path: string): Promise<string> {
     else if (name === "ignore") out.push("v1.0");
     else if (name === "entity" || name === "entityType") out.push("customers");
     else {
-      // The collection is everything resolved so far + a trailing slash.
       const collection = `${out.join("/")}/`;
       const id = await firstId(collection);
       out.push(id ?? "999999"); // sentinel → handler 404s (expected for empties)
@@ -160,14 +176,47 @@ async function post(path: string, body: unknown): Promise<number> {
     body: JSON.stringify(body),
   });
   const j = res.ok ? ((await res.json()) as { ID?: number }) : null;
+  if (!res.ok) await res.body?.cancel();
   return j?.ID ?? 0;
 }
+
+// Every creatable top-level collection. Phase A posts a dated row to each one
+// once per week, so all 27 collections carry 13 weeks of data — not just jobs.
+const COLLECTIONS = [
+  "jobs",
+  "quotes",
+  "leads",
+  "invoices",
+  "creditNotes",
+  "customerPayments",
+  "schedules",
+  "activitySchedules",
+  "assets",
+  "contacts",
+  "contractors",
+  "staff",
+  "employees",
+  "sites",
+  "tasks",
+  "vendors",
+  "vendorOrders",
+  "contractorInvoices",
+  "prebuilds",
+  "prebuildGroups",
+  "recurringJobs",
+  "recurringInvoices",
+  "plantTypes",
+  "stockTakes",
+  "stockTransfer",
+  "stockAllocations",
+  "storageDevices",
+] as const;
 
 async function main(): Promise<void> {
   const emu = mount(simproPlugin, BASE);
   app = emu.app;
 
-  // ── Phase A: seed a baseline + simulate a quarter of operations ──────────
+  // ── Phase A: seed dependency roots, then simulate a quarter ──────────────
   seedFromConfig(emu.store, BASE, {
     oauth: { client_id: "taskr_dev", client_secret: "taskr_dev_secret" },
     companies: [{ id: 0, name: "Taskr Test Co" }],
@@ -209,7 +258,6 @@ async function main(): Promise<void> {
 
   await oauth();
 
-  // Dependency roots used by the superset write body.
   ctx.customer = 200;
   ctx.site = 55;
   ctx.staff = 7;
@@ -218,70 +266,95 @@ async function main(): Promise<void> {
   ctx.taxCode = 1;
   ctx.job = 12345;
   ctx.invoice = 7001;
-  ctx.vendor = await post(`/api/v1.0/companies/${CID}/vendors/`, { Name: "Acme Supply Co" });
+  ctx.vendor = await post(`/api/v1.0/companies/${CID}/vendors/`, { Name: "Acme Supply Co", DateIssued: day(0) });
 
-  heading("Simpro sim — simulating 90 days of jobs / schedules / invoices / payments");
+  heading(`Simpro sim — simulating ${WEEKS} weekly cycles (≈90 days) across ${COLLECTIONS.length} collections`);
 
-  let created = 0;
-  for (let d = 0; d < 90; d += 3) {
-    const jid = await post(`/api/v1.0/companies/${CID}/jobs/`, {
-      Type: "Service",
-      Name: `Service Call ${d}`,
-      Customer: { ID: 200 },
-      Site: { ID: 55 },
-      DateIssued: day(d),
-      OrderNo: `PO-${4000 + d}`,
-    });
-    if (!jid) continue;
-    created++;
-    await post(`/api/v1.0/companies/${CID}/schedules/`, {
-      Job: { ID: jid },
-      Technician: { ID: 7 },
-      Date: day(d),
-      StartTime: "08:00",
-      EndTime: "12:00",
-    });
-    const inv = await post(`/api/v1.0/companies/${CID}/invoices/`, {
-      Job: { ID: jid },
-      Type: "ProgressInvoice",
-      Total: { ExTax: 1500, IncTax: 1650 },
-    });
-    if (inv) {
-      await post(`/api/v1.0/companies/${CID}/customerPayments/`, {
-        Payment: { Amount: 1650, PaymentMethod: "EFT" },
-        Invoices: [{ ID: inv }],
-      });
+  const createdPer: Record<string, number> = {};
+  for (let w = 0; w < WEEKS; w++) {
+    const date = day(w * 7);
+    for (const coll of COLLECTIONS) {
+      const id = await post(`/api/v1.0/companies/${CID}/${coll}/`, JSON.parse(bodyFor(date)));
+      if (id || coll === "customerPayments") createdPer[coll] = (createdPer[coll] ?? 0) + 1;
     }
-    if (d % 9 === 0) {
-      await post(`/api/v1.0/companies/${CID}/quotes/`, { Name: `Quote ${d}`, Customer: { ID: 201 } });
-      await post(`/api/v1.0/companies/${CID}/leads/`, { Name: `Lead ${d}` });
+    // Onboard a fresh customer (+ site) every other week so the customer base
+    // also grows over the quarter, not just transactional data.
+    if (w % 2 === 0) {
+      const cust = await post(`/api/v1.0/companies/${CID}/customers/`, {
+        CompanyName: `Onboarded Co ${w} Pty Ltd`,
+        Type: "company",
+      });
+      if (cust) await post(`/api/v1.0/companies/${CID}/sites/`, { Name: `Site W${w}`, Customer: { ID: cust } });
     }
   }
-  console.log(`\n  simulated ${created} jobs across the 90-day window (+ schedules, invoices, payments)`);
 
-  // ── Phase B: drive every endpoint, POST → GET → PATCH/PUT → DELETE ───────
+  const totalCreated = Object.values(createdPer).reduce((a, b) => a + b, 0);
+  const dense = COLLECTIONS.filter((c) => (createdPer[c] ?? 0) >= WEEKS).length;
+  console.log(
+    `\n  created ${totalCreated} dated rows • ${dense}/${COLLECTIONS.length} collections carry ≥${WEEKS} weeks`,
+  );
+  for (let i = 0; i < COLLECTIONS.length; i += 3) {
+    console.log(
+      "  " +
+        COLLECTIONS.slice(i, i + 3)
+          .map((c) => `${c}=${createdPer[c] ?? 0}`.padEnd(26))
+          .join(""),
+    );
+  }
+
+  // ── Span assertion: prove the data really covers ~3 months ──────────────
+  const jobsList = (await (
+    await app.request(`${BASE}/api/v1.0/companies/${CID}/jobs/?columns=ID,DateIssued&pageSize=250`, {
+      headers: auth,
+    })
+  ).json()) as Array<{ DateIssued?: string }>;
+  const dates = jobsList
+    .map((j) => j.DateIssued)
+    .filter((d): d is string => !!d)
+    .sort();
+  const spanDays =
+    dates.length >= 2 ? Math.round((Date.parse(dates[dates.length - 1]!) - Date.parse(dates[0]!)) / DAY) : 0;
+  const spanOk = spanDays >= 75;
+  console.log(
+    `\n  job date span: ${dates[0] ?? "—"} → ${dates[dates.length - 1] ?? "—"} ` +
+      `= ${spanDays} days across ${jobsList.length} jobs — ${spanOk ? "✅ ≥75d (real quarter)" : "❌ too narrow"}`,
+  );
+
+  // ── Phase B: crawl EVERY endpoint, repeated for several passes ──────────
   const order: Record<string, number> = { POST: 0, GET: 1, PATCH: 2, PUT: 2, DELETE: 3 };
   const routes = [...SIMPRO_ROUTES].sort((a, b) => {
     const o = (order[a[0]] ?? 9) - (order[b[0]] ?? 9);
     if (o !== 0) return o;
-    // Within a method, shallower paths first (parents before children).
     return a[1].split("/").length - b[1].split("/").length;
   });
 
-  heading(`Simpro sim — exercising all ${SIMPRO_ROUTES.length} endpoints`);
+  const passReports: string[] = [];
+  let anyPassFailed = false;
+  for (let pass = 1; pass <= PASSES; pass++) {
+    heading(`Simpro sim — crawl pass ${pass}/${PASSES}: exercising all ${SIMPRO_ROUTES.length} endpoints`);
+    fiveXX = [];
+    listFailures = [];
+    idCache = new Map();
+    const before = calls;
 
-  for (const [method, path] of routes) {
-    // OAuth + inspector are handled / counted separately below.
-    await call(method, path);
-  }
+    for (const [method, path] of routes) await call(method, path);
+    for (const p of ["jobs", "customers", "sections", "cost-centers", "invoices", "webhooks"]) {
+      const r = await app.request(`${BASE}/inspector/${p}`);
+      covered.add(`GET /inspector/${p}`);
+      status[r.status] = (status[r.status] ?? 0) + 1;
+      if (r.status !== 200) listFailures.push(`GET /inspector/${p} → ${r.status}`);
+      await r.body?.cancel();
+    }
 
-  // Inspector + misc non-API routes.
-  for (const p of ["jobs", "customers", "sections", "cost-centers", "invoices", "webhooks"]) {
-    const r = await app.request(`${BASE}/inspector/${p}`);
-    covered.add(`GET /inspector/${p}`);
-    status[r.status] = (status[r.status] ?? 0) + 1;
-    if (r.status !== 200) listFailures.push(`GET /inspector/${p} → ${r.status}`);
-    await r.body?.cancel();
+    const missing = SIMPRO_ROUTES.filter(([m, p]) => !covered.has(`${m} ${p}`));
+    const passOk = missing.length === 0 && fiveXX.length === 0 && listFailures.length === 0;
+    anyPassFailed = anyPassFailed || !passOk;
+    passReports.push(
+      `  pass ${pass}: ${calls - before} calls • coverage ${covered.size}/${SIMPRO_ROUTES.length} • ` +
+        `5xx=${fiveXX.length} • listFail=${listFailures.length} — ${passOk ? "✅" : "❌"}`,
+    );
+    if (fiveXX.length) passReports.push(`    5xx: ${fiveXX.slice(0, 10).join(" | ")}`);
+    if (listFailures.length) passReports.push(`    listFail: ${listFailures.slice(0, 10).join(" | ")}`);
   }
 
   heading("Simpro sim — coverage report");
@@ -296,20 +369,16 @@ async function main(): Promise<void> {
     .reduce((a, [, n]) => a + n, 0);
   const ratio = ((twoxx / calls) * 100).toFixed(1);
 
-  console.log(`\n  ${calls} endpoint calls`);
+  console.log(`\n  ${calls} endpoint calls across ${PASSES} passes`);
   console.log(`  status distribution: ${dist}`);
   console.log(`  success (2xx/3xx): ${twoxx}/${calls} (${ratio}%)`);
-  console.log(
-    `  route-pattern coverage: ${covered.size}/${SIMPRO_ROUTES.length} (oauth + inspector included in table)`,
-  );
+  console.log(`  route-pattern coverage: ${covered.size}/${SIMPRO_ROUTES.length} (oauth + inspector included)`);
+  for (const line of passReports) console.log(line);
   if (missing.length) console.log(`  ❌ MISSING (${missing.length}): ${missing.map((r) => r.join(" ")).join(" | ")}`);
-  if (fiveXX.length) console.log(`  ❌ 5xx (${fiveXX.length}): ${fiveXX.slice(0, 20).join(" | ")}`);
-  if (listFailures.length)
-    console.log(`  ❌ list/inspector not 2xx (${listFailures.length}): ${listFailures.slice(0, 20).join(" | ")}`);
 
-  const ok = missing.length === 0 && fiveXX.length === 0 && listFailures.length === 0 && Number(ratio) >= 80;
+  const ok = missing.length === 0 && !anyPassFailed && spanOk && dense === COLLECTIONS.length && Number(ratio) >= 80;
   console.log(
-    `\n${ok ? "✅" : "❌"} Simpro 3-month simulation ${ok ? "complete — full route coverage" : "INCOMPLETE"}.\n`,
+    `\n${ok ? "✅" : "❌"} Simpro 3-month simulation ${ok ? "complete — full route coverage, every collection has a quarter of data" : "INCOMPLETE"}.\n`,
   );
   if (!ok) process.exit(1);
 }
