@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { escapeHtml, escapeAttr, renderInspectorPage, type AppEnv, type InspectorTab } from "@emulators/core";
+import { getNangoStore } from "@emulators/nango";
 import type { ServiceApp, ServiceName } from "./dispatcher.js";
 
 export interface InspectorState {
@@ -52,6 +53,52 @@ function snapshotRows(sa: ServiceApp): { name: string; count: number }[] {
     .filter((c) => c.count > 0);
 }
 
+interface NangoRow {
+  connectionId: string;
+  provider: string;
+  providerConfigKey: string;
+  model: string;
+  count: number;
+}
+
+/**
+ * Nango is a proxy: connections + per-model records live in its own store
+ * facade, not the generic `collections` snapshot. Read them directly so the
+ * provider browser reflects live sync/forward activity.
+ */
+function nangoView(sa: ServiceApp): { connections: number; records: number; rows: NangoRow[] } {
+  const ns = getNangoStore(sa.store);
+  const conns = ns.listConnections();
+  const rows: NangoRow[] = [];
+  let records = 0;
+  for (const conn of conns) {
+    const byModel = ns.allRecordsForConnection(conn.id);
+    const models = Object.entries(byModel);
+    if (models.length === 0) {
+      rows.push({
+        connectionId: conn.id,
+        provider: conn.provider,
+        providerConfigKey: conn.provider_config_key,
+        model: "—",
+        count: 0,
+      });
+      continue;
+    }
+    for (const [model, items] of models) {
+      const n = Array.isArray(items) ? items.length : 0;
+      records += n;
+      rows.push({
+        connectionId: conn.id,
+        provider: conn.provider,
+        providerConfigKey: conn.provider_config_key,
+        model,
+        count: n,
+      });
+    }
+  }
+  return { connections: conns.length, records, rows };
+}
+
 export function createInspectorRouter(state: InspectorState): Hono<AppEnv> {
   const r = new Hono<AppEnv>();
   const origin = new URL(state.baseUrl).origin;
@@ -61,13 +108,22 @@ export function createInspectorRouter(state: InspectorState): Hono<AppEnv> {
     const rows: string[][] = [];
     for (const name of names) {
       const sa = state.apps.get(name)!;
-      const models = await fetchModels(sa, origin);
-      const collections = models
-        ? { count: models.length, rows: models.reduce((n, m) => n + m.count, 0) }
-        : (() => {
-            const s = snapshotRows(sa);
-            return { count: s.length, rows: s.reduce((n, x) => n + x.count, 0) };
-          })();
+      const isNango = name === "nango";
+      const models = isNango ? null : await fetchModels(sa, origin);
+      let collections: { count: number; rows: number };
+      let mode: string;
+      if (isNango) {
+        const nv = nangoView(sa);
+        collections = { count: nv.connections, rows: nv.records };
+        mode = "proxy (nango)";
+      } else if (models) {
+        collections = { count: models.length, rows: models.reduce((n, m) => n + m.count, 0) };
+        mode = "direct (native-kit)";
+      } else {
+        const s = snapshotRows(sa);
+        collections = { count: s.length, rows: s.reduce((n, x) => n + x.count, 0) };
+        mode = "direct";
+      }
       const native = NATIVE_INSPECTOR[name];
       const links = [
         `<a href="/_inspector/${escapeAttr(name)}">browse</a>`,
@@ -79,7 +135,7 @@ export function createInspectorRouter(state: InspectorState): Hono<AppEnv> {
         `<strong>${escapeHtml(name)}</strong>`,
         String(collections.count),
         String(collections.rows),
-        models ? "direct (native-kit)" : "direct",
+        mode,
         links,
       ]);
     }
@@ -100,9 +156,22 @@ export function createInspectorRouter(state: InspectorState): Hono<AppEnv> {
       return c.html(renderInspectorPage("Provider Browser", TABS, "services", body, "emulate"), 404);
     }
 
-    const models = await fetchModels(sa, origin);
+    const isNango = name === "nango";
+    const models = isNango ? null : await fetchModels(sa, origin);
     let inner: string;
-    if (models) {
+    if (isNango) {
+      const nv = nangoView(sa);
+      const rows = nv.rows.map((rw) => [
+        `<strong>${escapeHtml(rw.connectionId)}</strong>`,
+        escapeHtml(rw.provider),
+        `<code>${escapeHtml(rw.providerConfigKey)}</code>`,
+        escapeHtml(rw.model),
+        String(rw.count),
+      ]);
+      inner =
+        `<p class="inspector-empty">${nv.connections} connection(s), ${nv.records} live record(s). Records stream in via sync/forward webhooks.</p>` +
+        table(["Connection", "Provider", "Provider Config Key", "Model", "Records"], rows);
+    } else if (models) {
       const rows = models.map((m) => [
         `<strong>${escapeHtml(m.model)}</strong>`,
         `<code>/${escapeHtml(name)}${escapeHtml(m.collectionPath)}</code>`,
