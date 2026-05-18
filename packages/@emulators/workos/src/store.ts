@@ -89,6 +89,22 @@ export function getWorkOSStore(store: Store) {
     allUsers(): WorkOSUser[] {
       return [...users.values()];
     },
+    updateUser(id: string, patch: Partial<WorkOSUser>): WorkOSUser | undefined {
+      const user = users.get(id);
+      if (!user) return undefined;
+      const next: WorkOSUser = {
+        ...user,
+        ...patch,
+        id: user.id,
+        created_at: user.created_at,
+        updated_at: now(),
+      };
+      users.set(id, next);
+      return next;
+    },
+    deleteUser(id: string): boolean {
+      return users.delete(id);
+    },
 
     // --- Organizations ---
     insertOrganization(data: Partial<WorkOSOrganization> & { name: string }): WorkOSOrganization {
@@ -112,6 +128,9 @@ export function getWorkOSStore(store: Store) {
     getOrg(id: string): WorkOSOrganization | undefined {
       return orgs.get(id);
     },
+    allOrgs(): WorkOSOrganization[] {
+      return [...orgs.values()];
+    },
 
     // --- Memberships ---
     insertMembership(userId: string, organizationId: string, role = "member"): WorkOSMembership {
@@ -130,6 +149,19 @@ export function getWorkOSStore(store: Store) {
     },
     getUserMemberships(userId: string): WorkOSMembership[] {
       return [...memberships.values()].filter((m) => m.user_id === userId && m.status === "active");
+    },
+    allMemberships(): WorkOSMembership[] {
+      return [...memberships.values()];
+    },
+    getMembership(id: string): WorkOSMembership | undefined {
+      return memberships.get(id);
+    },
+    deactivateMembership(id: string): boolean {
+      const m = memberships.get(id);
+      if (!m) return false;
+      m.status = "inactive";
+      m.updated_at = now();
+      return true;
     },
 
     // --- Auth Codes ---
@@ -184,6 +216,11 @@ export function getWorkOSStore(store: Store) {
         revoked: false,
       };
       sessions.set(id, s);
+      return s;
+    },
+    getSession(sessionId: string): Session | undefined {
+      const s = sessions.get(sessionId);
+      if (!s || s.revoked) return undefined;
       return s;
     },
     revokeSession(sessionId: string): boolean {
@@ -241,6 +278,9 @@ export function getWorkOSStore(store: Store) {
     },
     getOAuthClient(clientId: string): WorkOSOAuthClient | undefined {
       return oauthClients.get(clientId);
+    },
+    allOAuthClients(): WorkOSOAuthClient[] {
+      return [...oauthClients.values()];
     },
   };
 }
