@@ -80,15 +80,18 @@ contract tests.
 | Script | What it proves |
 | --- | --- |
 | `uptick-sim` | 12 weekly client onboardings + defect lifecycle across 90 days; **24/24** uptick routes; round-trip verified |
-| `simpro-sim` | ~30 dated jobs (+ schedules/invoices/payments) across 90 days; a generic crawler resolves every `:param` transitively and exercises **all 372** (method, path) endpoints (≥97 % 2xx, 0 × 5xx) |
-| `nango-providers-sim` | 90 days of dated records for **xero, quickbooks, google-drive, onedrive**; every generic Nango route + each provider-native `/proxy/*` path (Xero envelope, QBO query, Drive `fileList`, Graph `driveItems`); **18/18** routes |
+| `simpro-sim` | ~30 dated jobs (+ schedules/invoices/payments) across 90 days; a generic crawler resolves every `:param` transitively and exercises **all 372** (method, path) endpoints (≥97 % 2xx, 0 × 5xx); **29/29** shape + relational-integrity checks (every entity's full shape + every FK resolved to a real linked record) |
+| `nango-providers-sim` | **10 connections**, 90 days of dated records each. Four (xero, quickbooks, google-drive, onedrive) drive every provider-native `/proxy/*` path; the rest form a **cross-provider graph** — Slack/Gmail/Jira/Salesforce records link into Google Drive by file id + share URL, Jira links into GitHub PRs. A cross-provider integrity phase resolves **all 95** references to real linked records; every linking provider spans ≥75 days; **18/18** Nango routes |
 
 ## Nango provider library
 
 `../nango-seeds.yaml` is a 34-provider, SDK-aligned seed catalogue (Salesforce,
 HubSpot, Jira, GitHub, Shopify, Zendesk, Slack, …). `nango-providers` loads it
 whole and walks a representative provider per category; `nango-providers-sim`
-drives four of them through a full 3-month simulation.
+drives a 10-connection cross-provider graph through a full 3-month simulation,
+where Slack/Gmail/Jira/Salesforce records link into Google Drive files (images
+and proposal/report docs) and Jira issues into resolving GitHub PRs — every
+cross-reference is resolved against the target provider's real records.
 
 For **live activity streaming** (gmail / teams / drive / calendar / whatsapp
 arriving in real time) see `emulate-sim` and `inbox-stream.yaml` in

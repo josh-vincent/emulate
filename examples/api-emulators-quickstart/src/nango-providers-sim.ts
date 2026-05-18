@@ -1,10 +1,25 @@
-// Nango providers — 3-month simulation for xero, quickbooks, google-drive,
-// onedrive, with FULL nango-endpoint coverage.
+// Nango providers — 3-month cross-provider simulation with FULL endpoint
+// coverage.
 //
-// Seeds four connections each carrying ~90 days of dated records across two
-// models, then drives every generic Nango route (connections, records,
-// metadata, sync trigger, inbound + outbound webhooks, connect sessions) plus
-// the provider-native `/proxy/*` path for each provider:
+// Seeds 10 connections, each carrying ~90 days of dated records. Four
+// (xero, quickbooks, google-drive, onedrive) drive the provider-native
+// `/proxy/*` paths; the rest form a *cross-provider graph* where records
+// reference each other by real id + share URL:
+//
+//   google-drive  ── canonical asset store (images + proposal/report docs)
+//     ▲   ▲   ▲   ▲
+//     │   │   │   └── salesforce Opportunity.Proposal_Drive_File__c
+//     │   │   └────── jira Issue.description / driveDesignDocId
+//     │   └────────── gmail Email.attachments[].driveFileId
+//     └────────────── slack Message.files[].drive_file_id (images)
+//   github ◀───────── jira Issue.remoteLinks[] (resolving PR)
+//
+// A cross-provider integrity phase then pulls every linking provider and
+// resolves each reference against the target provider's real records
+// (the cross-provider analogue of the simpro shape-integrity phase),
+// alongside every generic Nango route (connections, records, metadata,
+// sync trigger, inbound + outbound webhooks, connect sessions) plus the
+// provider-native `/proxy/*` path for each proxy provider:
 //
 //   xero        GET /proxy/api.xro/2.0/Invoices         → Xero envelope
 //   quickbooks  GET /proxy/v3/company/<realm>/query     → QBO query
@@ -103,15 +118,133 @@ function quickbooksRecords() {
   }));
   return { Invoice, Customer };
 }
+// Google Drive is the org's canonical asset store. Even ids are images,
+// odd ids are PDFs/docs — other providers (Slack, Gmail, Jira, Salesforce)
+// link back to these files by id + webViewLink, so the Drive set is the
+// single source of truth the cross-provider integrity phase resolves against.
+const driveLink = (id: string): string => `https://drive.google.com/file/d/${id}/view`;
+const DRIVE_ID_RE = /\/d\/([^/]+)\//;
 function driveRecords() {
-  const DriveFile = Array.from({ length: 40 }, (_, i) => ({
-    id: `gdrive-${i}`,
-    name: `Report-${date(Math.floor(i * 2.25))}.pdf`,
-    mimeType: "application/pdf",
-    modifiedTime: iso(Math.floor(i * 2.25)),
-    size: String(10_000 + i * 512),
-  }));
+  const DriveFile = Array.from({ length: 40 }, (_, i) => {
+    const isImage = i % 2 === 0;
+    const id = `gdrive-${i}`;
+    const d = Math.floor(i * 2.25);
+    return {
+      id,
+      name: isImage ? `site-photo-${date(d)}.png` : `Report-${date(d)}.pdf`,
+      mimeType: isImage ? "image/png" : "application/pdf",
+      modifiedTime: iso(d),
+      size: String(10_000 + i * 512),
+      webViewLink: driveLink(id),
+      webContentLink: `https://drive.google.com/uc?id=${id}&export=download`,
+      thumbnailLink: isImage ? `https://drive.google.com/thumbnail?id=${id}` : undefined,
+    };
+  });
   return { DriveFile };
+}
+const driveImageId = (n: number): string => `gdrive-${(n * 2) % 40}`; // even → image
+const driveDocId = (n: number): string => `gdrive-${((n * 2) % 40) + 1}`; // odd → doc
+
+// ── Cross-provider records: each links back to real Drive files / GitHub PRs ─
+function slackMessages() {
+  // Every message that shares an asset embeds the Drive image id + share URL.
+  const Message = Array.from({ length: 30 }, (_, i) => {
+    const shares = i % 3 === 0;
+    const imgId = driveImageId(i);
+    return {
+      ts: `${(START + i * 3 * DAY) / 1000}`,
+      channel: "C-FIELD-OPS",
+      user: `U${(i % 4) + 1}`,
+      date: iso(i * 3),
+      text: shares ? `Site photo for job ${1000 + i} — ${driveLink(imgId)}` : `Status update on job ${1000 + i}`,
+      files: shares
+        ? [{ id: `F${i}`, name: `site-photo.png`, drive_file_id: imgId, url_private: driveLink(imgId) }]
+        : [],
+    };
+  });
+  return { Message };
+}
+function gmailEmails() {
+  const Email = Array.from({ length: 30 }, (_, i) => {
+    const hasAttach = i % 2 === 0;
+    const docId = driveDocId(i);
+    return {
+      id: `gmail-${i}`,
+      threadId: `thr-${Math.floor(i / 3)}`,
+      date: iso(i * 3),
+      from: `ops@acme.example`,
+      to: `customer${i % 5}@example.test`,
+      subject: `Report for job ${1000 + i}`,
+      snippet: hasAttach ? `Please find the attached report.` : `Quick update on your job.`,
+      attachments: hasAttach
+        ? [
+            {
+              filename: `Report-${date(i * 3)}.pdf`,
+              mimeType: "application/pdf",
+              driveFileId: docId,
+              driveLink: driveLink(docId),
+            },
+          ]
+        : [],
+    };
+  });
+  return { Email };
+}
+function githubPRs() {
+  const PullRequest = Array.from({ length: 25 }, (_, i) => ({
+    id: 50_000 + i,
+    number: 100 + i,
+    title: `Fix scheduling defect ${i}`,
+    state: i % 4 === 0 ? "closed" : "open",
+    html_url: `https://github.com/acme/field-ops/pull/${100 + i}`,
+    created_at: iso(i * 3.5),
+    merged_at: i % 4 === 0 ? iso(i * 3.5 + 1) : null,
+    user: { login: `dev${(i % 3) + 1}` },
+  }));
+  return { PullRequest };
+}
+function jiraIssues() {
+  // Each issue links a Drive design doc + the GitHub PR that resolves it.
+  const Issue = Array.from({ length: 25 }, (_, i) => {
+    const docId = driveDocId(i + 1);
+    const prNumber = 100 + (i % 25);
+    return {
+      id: `jira-${i}`,
+      key: `FIELD-${200 + i}`,
+      created: iso(i * 3.6),
+      fields: {
+        summary: `Defect on job ${1000 + i}`,
+        status: { name: i % 3 === 0 ? "Done" : "In Progress" },
+        description: `Design doc: ${driveLink(docId)}`,
+      },
+      driveDesignDocId: docId,
+      remoteLinks: [
+        {
+          application: "github",
+          pull_request_id: 50_000 + (i % 25),
+          url: `https://github.com/acme/field-ops/pull/${prNumber}`,
+        },
+      ],
+    };
+  });
+  return { Issue };
+}
+function salesforceOpps() {
+  // CRM opportunities attach the Drive proposal doc by id + share URL.
+  const Opportunity = Array.from({ length: 20 }, (_, i) => {
+    const docId = driveDocId(i + 2);
+    return {
+      Id: `006${String(i).padStart(15, "0")}`,
+      Name: `Acme Expansion ${i}`,
+      StageName: i % 3 === 0 ? "Closed Won" : "Proposal",
+      Amount: 25_000 + i * 1_500,
+      CloseDate: date(i * 4),
+      CreatedDate: iso(i * 4),
+      Proposal_Drive_File__c: docId,
+      Proposal_URL__c: driveLink(docId),
+    };
+  });
+  return { Opportunity };
 }
 function onedriveRecords() {
   const DriveItem = Array.from({ length: 40 }, (_, i) => ({
@@ -159,6 +292,42 @@ async function main(): Promise<void> {
         provider_config_key: "onedrive",
         metadata: { organizationId: "org_acme" },
         records: onedriveRecords(),
+      },
+      // Cross-provider graph — all link back into google-drive-acme / github-acme.
+      {
+        id: "slack-acme",
+        provider: "slack",
+        provider_config_key: "slack",
+        metadata: { organizationId: "org_acme" },
+        records: slackMessages(),
+      },
+      {
+        id: "gmail-acme",
+        provider: "gmail",
+        provider_config_key: "gmail",
+        metadata: { organizationId: "org_acme" },
+        records: gmailEmails(),
+      },
+      {
+        id: "github-acme",
+        provider: "github",
+        provider_config_key: "github",
+        metadata: { organizationId: "org_acme" },
+        records: githubPRs(),
+      },
+      {
+        id: "jira-acme",
+        provider: "jira",
+        provider_config_key: "jira",
+        metadata: { organizationId: "org_acme" },
+        records: jiraIssues(),
+      },
+      {
+        id: "salesforce-acme",
+        provider: "salesforce",
+        provider_config_key: "salesforce",
+        metadata: { organizationId: "org_acme" },
+        records: salesforceOpps(),
       },
     ],
   });
@@ -321,6 +490,117 @@ async function main(): Promise<void> {
 
   await hit("GET /webhook-deliveries", `${BASE}/webhook-deliveries`, undefined, [200]);
 
+  // ── Cross-provider relationships ────────────────────────────────────────
+  // Slack / Gmail / Jira / Salesforce records all carry references *into*
+  // google-drive-acme (and Jira into github-acme). We pull each linking
+  // provider's records, then resolve every reference against the target
+  // provider's real records — the cross-provider analogue of the simpro
+  // shape-integrity phase.
+  heading("Nango sim — cross-provider relationships (Drive links, PR links)");
+
+  const recs = async (id: string, key: string, model: string): Promise<Record<string, unknown>[]> => {
+    const r = await hit(
+      "GET /records",
+      `${BASE}/records?model=${model}`,
+      { headers: { "Connection-Id": id, "Provider-Config-Key": key } },
+      [200],
+    );
+    return ((await r.json()) as { records: Record<string, unknown>[] }).records;
+  };
+
+  const driveFiles = await recs("google-drive-acme", "google-drive", "DriveFile");
+  const driveIds = new Set(driveFiles.map((f) => String(f.id)));
+  const driveImageIds = new Set(driveFiles.filter((f) => f.mimeType === "image/png").map((f) => String(f.id)));
+  const driveByLink = new Map(driveFiles.map((f) => [String(f.webViewLink), String(f.id)]));
+  const prs = await recs("github-acme", "github", "PullRequest");
+  const prIds = new Set(prs.map((p) => Number(p.id)));
+  const prByUrl = new Map(prs.map((p) => [String(p.html_url), Number(p.id)]));
+
+  const slackMsgs = await recs("slack-acme", "slack", "Message");
+  const gmail = await recs("gmail-acme", "gmail", "Email");
+  const jira = await recs("jira-acme", "jira", "Issue");
+  const opps = await recs("salesforce-acme", "salesforce", "Opportunity");
+
+  const xref: { label: string; total: number; resolved: number; detail: string }[] = [];
+  const linkId = (url: unknown): string | null =>
+    typeof url === "string" ? (url.match(DRIVE_ID_RE)?.[1] ?? null) : null;
+  const tally = (label: string, rows: { ok: boolean }[], detail: (n: number) => string) => {
+    const resolved = rows.filter((r) => r.ok).length;
+    xref.push({ label, total: rows.length, resolved, detail: detail(resolved) });
+  };
+
+  // Slack file shares → real Drive *images* (both the field id and the URL).
+  const slackShares = slackMsgs
+    .filter((m) => Array.isArray(m.files) && (m.files as unknown[]).length > 0)
+    .map((m) => {
+      const f = (m.files as { drive_file_id: string; url_private: string }[])[0]!;
+      return { ok: driveImageIds.has(f.drive_file_id) && linkId(f.url_private) === f.drive_file_id };
+    });
+  tally("slack message.files → Drive image", slackShares, (n) => `${n} share(s) → real image`);
+
+  // Gmail attachments → real Drive docs.
+  const gmailAttach = gmail
+    .filter((e) => Array.isArray(e.attachments) && (e.attachments as unknown[]).length > 0)
+    .map((e) => {
+      const a = (e.attachments as { driveFileId: string; driveLink: string }[])[0]!;
+      return { ok: driveIds.has(a.driveFileId) && linkId(a.driveLink) === a.driveFileId };
+    });
+  tally("gmail attachment → Drive doc", gmailAttach, (n) => `${n} attachment(s) → real file`);
+
+  // Jira issues → Drive design doc *and* the GitHub PR that resolves them.
+  const jiraDrive = jira.map((j) => {
+    const inDesc = linkId((j.fields as { description: string }).description);
+    return { ok: driveIds.has(String(j.driveDesignDocId)) && inDesc === j.driveDesignDocId };
+  });
+  tally("jira issue → Drive design doc", jiraDrive, (n) => `${n} issue(s) → real doc`);
+  const jiraGithub = jira.map((j) => {
+    const rl = (j.remoteLinks as { pull_request_id: number; url: string }[])[0]!;
+    return { ok: prIds.has(rl.pull_request_id) && prByUrl.get(rl.url) === rl.pull_request_id };
+  });
+  tally("jira issue → GitHub PR", jiraGithub, (n) => `${n} issue(s) → real PR`);
+
+  // Salesforce opportunities → Drive proposal doc.
+  const sfDrive = opps.map((o) => ({
+    ok:
+      driveIds.has(String(o.Proposal_Drive_File__c)) &&
+      driveByLink.get(String(o.Proposal_URL__c)) === o.Proposal_Drive_File__c,
+  }));
+  tally("salesforce opp → Drive proposal", sfDrive, (n) => `${n} opp(s) → real doc`);
+
+  let xrefTotal = 0;
+  let xrefResolved = 0;
+  for (const x of xref) {
+    xrefTotal += x.total;
+    xrefResolved += x.resolved;
+    const good = x.resolved === x.total && x.total > 0;
+    console.log(`  ${good ? "✅" : "❌"} ${x.label.padEnd(34)} ${x.resolved}/${x.total}  ${x.detail}`);
+  }
+  const crossRefsOk = xrefTotal > 0 && xrefResolved === xrefTotal;
+  console.log(
+    `\n  ${xrefResolved}/${xrefTotal} cross-provider references resolve to real linked records — ${crossRefsOk ? "✅ fully linked" : "❌ dangling refs"}`,
+  );
+
+  // Every linking provider must also genuinely span the quarter.
+  const spanOf = (rows: Record<string, unknown>[], field: string): number => {
+    const ts = rows
+      .map((r) => Date.parse(String(r[field] ?? "")))
+      .filter((n) => !Number.isNaN(n))
+      .sort((a, b) => a - b);
+    return ts.length < 2 ? 0 : Math.round((ts[ts.length - 1]! - ts[0]!) / DAY);
+  };
+  const spans = [
+    ["google-drive", spanOf(driveFiles, "modifiedTime")],
+    ["slack", spanOf(slackMsgs, "date")],
+    ["gmail", spanOf(gmail, "date")],
+    ["github", spanOf(prs, "created_at")],
+    ["jira", spanOf(jira, "created")],
+    ["salesforce", spanOf(opps, "CreatedDate")],
+  ] as const;
+  console.log("");
+  for (const [name, sp] of spans) console.log(`  ${name.padEnd(14)} spans ${sp} days`);
+  const spanOk = spans.every(([, sp]) => sp >= 75);
+  console.log(`\n  all linking providers span ≥ a quarter — ${spanOk ? "✅ verified" : "❌ too shallow"}`);
+
   heading("Nango sim — coverage report");
 
   const missing = ROUTES.filter((r) => !covered.has(r));
@@ -328,10 +608,11 @@ async function main(): Promise<void> {
   console.log(`\n  ${calls} calls • ${failures} unexpected failures`);
   console.log(`  webhook deliveries captured: ${deliveries.deliveries.length} (sync + forward across 4 providers)`);
   console.log(`  route coverage: ${covered.size}/${ROUTES.length}`);
+  console.log(`  cross-provider refs: ${xrefResolved}/${xrefTotal} resolved • provider spans ≥75d: ${spanOk}`);
   if (missing.length) console.log(`  ❌ MISSING: ${missing.join(" | ")}`);
-  const ok = missing.length === 0 && failures === 0;
+  const ok = missing.length === 0 && failures === 0 && crossRefsOk && spanOk;
   console.log(
-    `\n${ok ? "✅" : "❌"} Nango 4-provider 3-month simulation ${ok ? "complete — full route coverage" : "INCOMPLETE"}.\n`,
+    `\n${ok ? "✅" : "❌"} Nango 3-month simulation ${ok ? "complete — full route coverage, 10 connections, all cross-provider references resolved" : "INCOMPLETE"}.\n`,
   );
   if (!ok) process.exit(1);
 }
