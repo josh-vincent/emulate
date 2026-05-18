@@ -2,7 +2,7 @@ import { makeNativePlugin } from "@emulators/native-kit";
 import { spec } from "./spec.js";
 
 // Standalone direct-to-source pipedrive emulator. Mount it and clients hit
-// pipedrive's real native paths (/persons, /deals) behind a bearer token — no Nango envelope. The Nango
+// pipedrive's real native paths (/v1/persons, /v1/deals) behind a bearer token — no Nango envelope. The Nango
 // emulator remains the alternative; this is the "go direct" option.
 
 const built = makeNativePlugin(spec);

@@ -13,7 +13,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "Record",
-      collectionPath: "/records",
+      collectionPath: "/v0/BASE/Records",
       idField: "id",
       rows: [
         {

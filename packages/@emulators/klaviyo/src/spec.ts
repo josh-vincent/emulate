@@ -11,7 +11,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "Profile",
-      collectionPath: "/profiles",
+      collectionPath: "/api/profiles",
       idField: "id",
       rows: [
         {

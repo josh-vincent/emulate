@@ -14,7 +14,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "Leads",
-      collectionPath: "/leadss",
+      collectionPath: "/crm/v3/Leads",
       idField: "id",
       rows: [
         {

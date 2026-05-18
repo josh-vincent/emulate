@@ -13,7 +13,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "Member",
-      collectionPath: "/members",
+      collectionPath: "/3.0/lists/LIST/members",
       idField: "id",
       rows: [
         {
@@ -62,7 +62,7 @@ export const spec: NativeSpec = {
     },
     {
       model: "Campaign",
-      collectionPath: "/acme",
+      collectionPath: "/3.0/campaigns",
       idField: "id",
       rows: [
         {

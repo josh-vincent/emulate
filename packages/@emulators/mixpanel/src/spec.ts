@@ -13,7 +13,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "Event",
-      collectionPath: "/events",
+      collectionPath: "/api/2.0/events",
       idField: "id",
       rows: [
         {

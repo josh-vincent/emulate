@@ -13,7 +13,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "Channel",
-      collectionPath: "/channels",
+      collectionPath: "/api/v10/channels",
       idField: "id",
       rows: [
         {
@@ -34,7 +34,7 @@ export const spec: NativeSpec = {
     },
     {
       model: "Message",
-      collectionPath: "/messages",
+      collectionPath: "/api/v10/channels/CHANNEL/messages",
       idField: "id",
       rows: [
         {

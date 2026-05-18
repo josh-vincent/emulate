@@ -27,7 +27,7 @@ export const spec: NativeSpec = {
     },
     {
       model: "Response",
-      collectionPath: "/responses",
+      collectionPath: "/forms/FORM/responses",
       idField: "id",
       rows: [
         {

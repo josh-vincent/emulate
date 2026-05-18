@@ -385,7 +385,50 @@ const TOKEN_PATH = {
   "zoho-crm": "/oauth/v2/token",
 };
 
-// Strip a trailing /<id> off a seed row's native URL to get the collection.
+// Authoritative native REST collection paths, per provider/model, from each
+// vendor's public API docs. This is the source of truth for path fidelity —
+// it wins over any heuristic. Providers/models absent here fall back to a
+// row's *API self-link* (not its human-facing URL) and finally to a clean
+// pluralised path. GraphQL-only products (linear, monday, wave) have no REST
+// collection; the clean fallback is used and is fine for an emulator.
+const PATH_OVERRIDES = {
+  pipedrive: { Person: "/v1/persons", Deal: "/v1/deals" },
+  "zoho-crm": { Leads: "/crm/v3/Leads" },
+  freshbooks: { Invoice: "/accounting/account/ACME/invoices/invoices" },
+  discord: { Channel: "/api/v10/channels", Message: "/api/v10/channels/CHANNEL/messages" },
+  mailchimp: { Member: "/3.0/lists/LIST/members", Campaign: "/3.0/campaigns" },
+  sendgrid: { Contact: "/v3/marketing/contacts" },
+  klaviyo: { Profile: "/api/profiles" },
+  dropbox: { File: "/2/files" },
+  box: { File: "/2.0/files" },
+  jira: { Issue: "/rest/api/3/issue", Project: "/rest/api/3/project" },
+  asana: { Task: "/api/1.0/tasks" },
+  notion: { Page: "/v1/pages", Database: "/v1/databases" },
+  clickup: { Task: "/api/v2/task" },
+  trello: { Card: "/1/cards", Board: "/1/boards" },
+  gitlab: { Project: "/api/v4/projects", Issue: "/api/v4/issues" },
+  zendesk: { Ticket: "/api/v2/tickets", User: "/api/v2/users" },
+  intercom: { Contact: "/contacts", Conversation: "/conversations" },
+  bamboohr: { Employee: "/api/v1/employees" },
+  greenhouse: { Candidate: "/v1/candidates", Job: "/v1/jobs" },
+  lever: { Opportunity: "/v1/opportunities" },
+  shopify: { Product: "/admin/api/2024-01/products", Order: "/admin/api/2024-01/orders" },
+  mixpanel: { Event: "/api/2.0/events" },
+  typeform: { Form: "/forms", Response: "/forms/FORM/responses" },
+  airtable: { Record: "/v0/BASE/Records" },
+  calendly: { ScheduledEvent: "/scheduled_events" },
+};
+
+// Pluralise a model name for the clean fallback collection path. Handles the
+// cases the old `${model}s` got wrong (Leads→leadss, Opportunity→opportunitys).
+function pluralize(model) {
+  const s = model.toLowerCase();
+  if (/(s|x|z|ch|sh)$/.test(s)) return /s$/.test(s) ? s : `${s}es`;
+  if (/[^aeiou]y$/.test(s)) return `${s.slice(0, -1)}ies`;
+  return `${s}s`;
+}
+
+// Strip a trailing /<id> off a seed row's API self-link to get the collection.
 function collectionFromUrl(u) {
   try {
     const path = u.startsWith("http") ? new URL(u).pathname : u;
@@ -404,13 +447,11 @@ function pickIdField(row) {
   return "id";
 }
 
-function nativeUrlOf(row) {
-  const fields = ["url", "self", "html_url", "web_url", "permalink", "archive_url", "public_url"];
-  for (const f of fields) {
-    const v = row?.[f];
-    if (typeof v === "string" && v.length > 0) return v;
-  }
-  // Some SDK shapes carry the self-link only under `_metadata` (e.g. SendGrid).
+// Only true *API self-links* are usable as a collection path. `url`,
+// `html_url`, `web_url`, `permalink`, `archive_url`, `public_url` are
+// human-facing browser URLs (trello.com/c/…, mailchi.mp/acme/…) and must
+// never drive an API path — they produced the /acme, /c/… garbage.
+function apiSelfLinkOf(row) {
   const meta = row?._metadata;
   if (meta && typeof meta === "object") {
     for (const f of ["self", "url"]) {
@@ -418,7 +459,17 @@ function nativeUrlOf(row) {
       if (typeof v === "string" && v.length > 0) return v;
     }
   }
-  return null;
+  const v = row?.self;
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+// Resolve the native collection path: explicit override → API self-link →
+// clean pluralised fallback.
+function collectionPathFor(provider, model, firstRow) {
+  const ov = PATH_OVERRIDES[provider]?.[model];
+  if (ov) return ov;
+  const link = apiSelfLinkOf(firstRow);
+  return (link && collectionFromUrl(link)) || `/${pluralize(model)}`;
 }
 
 function genPhase2() {
@@ -433,8 +484,7 @@ function genPhase2() {
       const arr = Array.isArray(rows) ? rows : [];
       if (arr.length === 0) continue;
       const idField = pickIdField(arr[0]);
-      const nu = nativeUrlOf(arr[0]);
-      const collectionPath = (nu && collectionFromUrl(nu)) || `/${model.toLowerCase()}s`;
+      const collectionPath = collectionPathFor(provider, model, arr[0]);
       models.push({ model, collectionPath, idField, rows: arr });
     }
     if (models.length === 0) continue;

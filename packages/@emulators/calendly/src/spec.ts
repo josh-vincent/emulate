@@ -13,7 +13,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "ScheduledEvent",
-      collectionPath: "/scheduledevents",
+      collectionPath: "/scheduled_events",
       idField: "id",
       rows: [
         {

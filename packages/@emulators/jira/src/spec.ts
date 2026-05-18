@@ -14,7 +14,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "Issue",
-      collectionPath: "/issues",
+      collectionPath: "/rest/api/3/issue",
       idField: "id",
       rows: [
         {
@@ -60,7 +60,7 @@ export const spec: NativeSpec = {
     },
     {
       model: "Project",
-      collectionPath: "/projects",
+      collectionPath: "/rest/api/3/project",
       idField: "id",
       rows: [
         {

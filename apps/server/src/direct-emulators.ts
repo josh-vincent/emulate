@@ -60,7 +60,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   pipedrive: {
     label: "pipedrive direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Person /persons, Deal /deals",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Person /v1/persons, Deal /v1/deals",
     async load() {
       const m = await import("@emulators/pipedrive");
       return { plugin: m.pipedrivePlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -72,7 +72,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   "zoho-crm": {
     label: "zoho-crm direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/v2/token) + native collections: Leads /leadss",
+    endpoints: "OAuth2 token (/oauth/v2/token) + native collections: Leads /crm/v3/Leads",
     async load() {
       const m = await import("@emulators/zoho-crm");
       return { plugin: m.zohoCrmPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -84,7 +84,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   freshbooks: {
     label: "freshbooks direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Invoice /invoices",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Invoice /accounting/account/ACME/invoices/invoices",
     async load() {
       const m = await import("@emulators/freshbooks");
       return { plugin: m.freshbooksPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -112,7 +112,8 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   discord: {
     label: "discord direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Channel /channels, Message /messages",
+    endpoints:
+      "OAuth2 token (/oauth/token) + native collections: Channel /api/v10/channels, Message /api/v10/channels/CHANNEL/messages",
     async load() {
       const m = await import("@emulators/discord");
       return { plugin: m.discordPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -124,7 +125,8 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   mailchimp: {
     label: "mailchimp direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Member /members, Campaign /acme",
+    endpoints:
+      "OAuth2 token (/oauth/token) + native collections: Member /3.0/lists/LIST/members, Campaign /3.0/campaigns",
     async load() {
       const m = await import("@emulators/mailchimp");
       return { plugin: m.mailchimpPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -148,7 +150,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   klaviyo: {
     label: "klaviyo direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Profile /profiles",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Profile /api/profiles",
     async load() {
       const m = await import("@emulators/klaviyo");
       return { plugin: m.klaviyoPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -160,7 +162,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   dropbox: {
     label: "dropbox direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: File /files",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: File /2/files",
     async load() {
       const m = await import("@emulators/dropbox");
       return { plugin: m.dropboxPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -172,7 +174,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   box: {
     label: "box direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: File /files",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: File /2.0/files",
     async load() {
       const m = await import("@emulators/box");
       return { plugin: m.boxPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -184,7 +186,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   jira: {
     label: "jira direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Issue /issues, Project /projects",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Issue /rest/api/3/issue, Project /rest/api/3/project",
     async load() {
       const m = await import("@emulators/jira");
       return { plugin: m.jiraPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -208,7 +210,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   asana: {
     label: "asana direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Task /tasks",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Task /api/1.0/tasks",
     async load() {
       const m = await import("@emulators/asana");
       return { plugin: m.asanaPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -220,7 +222,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   notion: {
     label: "notion direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Page /acme, Database /databases",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Page /v1/pages, Database /v1/databases",
     async load() {
       const m = await import("@emulators/notion");
       return { plugin: m.notionPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -232,7 +234,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   clickup: {
     label: "clickup direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Task /t",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Task /api/v2/task",
     async load() {
       const m = await import("@emulators/clickup");
       return { plugin: m.clickupPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -256,7 +258,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   trello: {
     label: "trello direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Card /c/H0TZyzbK, Board /b/abc123",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Card /1/cards, Board /1/boards",
     async load() {
       const m = await import("@emulators/trello");
       return { plugin: m.trelloPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -268,7 +270,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   gitlab: {
     label: "gitlab direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Project /acme, Issue /acme/api/-/issues",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Project /api/v4/projects, Issue /api/v4/issues",
     async load() {
       const m = await import("@emulators/gitlab");
       return { plugin: m.gitlabPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -280,7 +282,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   zendesk: {
     label: "zendesk direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Ticket /tickets, User /users",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Ticket /api/v2/tickets, User /api/v2/users",
     async load() {
       const m = await import("@emulators/zendesk");
       return { plugin: m.zendeskPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -304,7 +306,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   bamboohr: {
     label: "bamboohr direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Employee /employees",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Employee /api/v1/employees",
     async load() {
       const m = await import("@emulators/bamboohr");
       return { plugin: m.bamboohrPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -316,7 +318,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   greenhouse: {
     label: "greenhouse direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Candidate /candidates, Job /jobs",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Candidate /v1/candidates, Job /v1/jobs",
     async load() {
       const m = await import("@emulators/greenhouse");
       return { plugin: m.greenhousePlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -328,7 +330,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   lever: {
     label: "lever direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Opportunity /opportunitys",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Opportunity /v1/opportunities",
     async load() {
       const m = await import("@emulators/lever");
       return { plugin: m.leverPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -340,7 +342,8 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   shopify: {
     label: "shopify direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/admin/oauth/access_token) + native collections: Product /products, Order /orders",
+    endpoints:
+      "OAuth2 token (/admin/oauth/access_token) + native collections: Product /admin/api/2024-01/products, Order /admin/api/2024-01/orders",
     async load() {
       const m = await import("@emulators/shopify");
       return { plugin: m.shopifyPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -352,7 +355,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   mixpanel: {
     label: "mixpanel direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Event /events",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Event /api/2.0/events",
     async load() {
       const m = await import("@emulators/mixpanel");
       return { plugin: m.mixpanelPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -364,7 +367,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   typeform: {
     label: "typeform direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Form /forms, Response /responses",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Form /forms, Response /forms/FORM/responses",
     async load() {
       const m = await import("@emulators/typeform");
       return { plugin: m.typeformPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -376,7 +379,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   airtable: {
     label: "airtable direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: Record /records",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: Record /v0/BASE/Records",
     async load() {
       const m = await import("@emulators/airtable");
       return { plugin: m.airtablePlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };
@@ -388,7 +391,7 @@ export const DIRECT_REGISTRY: Record<string, ServiceEntry> = {
   },
   calendly: {
     label: "calendly direct-to-source emulator (native REST, no proxy)",
-    endpoints: "OAuth2 token (/oauth/token) + native collections: ScheduledEvent /scheduledevents",
+    endpoints: "OAuth2 token (/oauth/token) + native collections: ScheduledEvent /scheduled_events",
     async load() {
       const m = await import("@emulators/calendly");
       return { plugin: m.calendlyPlugin, seedFromConfig: m.seedFromConfig, storeToSeedConfig: m.storeToSeedConfig };

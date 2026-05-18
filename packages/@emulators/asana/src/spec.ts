@@ -13,7 +13,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "Task",
-      collectionPath: "/tasks",
+      collectionPath: "/api/1.0/tasks",
       idField: "gid",
       rows: [
         {
