@@ -11,6 +11,7 @@ export interface GoogleDriveItemInput {
   mime_type: string;
   parent_google_ids?: string[];
   web_view_link?: string | null;
+  web_content_link?: string | null;
   size?: number | null;
   trashed?: boolean;
   data?: string | null;
@@ -45,6 +46,7 @@ export function createDriveItemRecord(gs: GoogleStore, input: GoogleDriveItemInp
     mime_type: input.mime_type,
     parent_google_ids: normalizeParentIds(input.parent_google_ids),
     web_view_link: input.web_view_link ?? buildDriveWebViewLink(itemId, input.mime_type),
+    web_content_link: input.web_content_link ?? buildDriveWebContentLink(itemId, input.mime_type),
     size: input.size ?? null,
     trashed: input.trashed ?? false,
     data: input.data ?? null,
@@ -132,6 +134,7 @@ export function formatDriveItemResource(item: GoogleDriveItem) {
     mimeType: item.mime_type,
     parents: item.parent_google_ids,
     webViewLink: item.web_view_link ?? undefined,
+    webContentLink: item.web_content_link ?? undefined,
     createdTime: item.created_at,
     modifiedTime: item.updated_at,
     size: item.size != null ? String(item.size) : undefined,
@@ -239,6 +242,17 @@ function buildDriveWebViewLink(itemId: string, mimeType: string): string {
   }
 
   return `https://drive.google.com/file/d/${itemId}/view`;
+}
+
+/**
+ * Direct-download URL. Real Drive omits it for folders and native Google-Apps
+ * docs (those must be exported), so we return null for those mime types.
+ */
+function buildDriveWebContentLink(itemId: string, mimeType: string): string | null {
+  if (mimeType === GOOGLE_DRIVE_FOLDER_MIME_TYPE || mimeType.startsWith("application/vnd.google-apps.")) {
+    return null;
+  }
+  return `https://drive.google.com/uc?id=${itemId}&export=download`;
 }
 
 function normalizeParentIds(parentIds: string[] | undefined): string[] {

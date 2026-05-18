@@ -156,7 +156,17 @@ export interface GoogleDriveItem extends Entity {
   mime_type: string;
   parent_google_ids: string[];
   web_view_link: string | null;
+  web_content_link: string | null;
   size: number | null;
   trashed: boolean;
   data: string | null;
+}
+
+export interface GoogleDrivePermission extends Entity {
+  google_id: string;
+  file_google_id: string;
+  user_email: string;
+  type: string;
+  role: string;
+  email_address: string | null;
 }
