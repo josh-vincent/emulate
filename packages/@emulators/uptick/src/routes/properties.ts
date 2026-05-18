@@ -83,4 +83,13 @@ export function propertyRoutes({ app, store }: RouteContext): void {
     });
     return c.json({ data: formatProperty(updated!, s) });
   });
+
+  app.delete("/api/:ver/properties/:id", (c) => {
+    const s = us();
+    const id = parseId(c.req.param("id"));
+    if (!id) return uptickError(c, 400, "Invalid ID");
+    if (!s.properties.get(id)) return uptickError(c, 404, "Not Found");
+    s.properties.delete(id);
+    return c.body(null, 204);
+  });
 }

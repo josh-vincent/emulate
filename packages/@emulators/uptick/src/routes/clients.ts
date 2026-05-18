@@ -70,4 +70,13 @@ export function clientRoutes({ app, store }: RouteContext): void {
     });
     return c.json({ data: formatClient(updated!) });
   });
+
+  // Delete client
+  app.delete("/api/:ver/clients/:id", (c) => {
+    const id = parseId(c.req.param("id"));
+    if (!id) return uptickError(c, 400, "Invalid ID");
+    if (!us().clients.get(id)) return uptickError(c, 404, "Not Found");
+    us().clients.delete(id);
+    return c.body(null, 204);
+  });
 }

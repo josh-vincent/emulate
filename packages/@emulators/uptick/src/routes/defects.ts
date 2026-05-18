@@ -1,6 +1,6 @@
 import type { RouteContext } from "@emulators/core";
-import { formatDefect } from "../formatters.js";
-import { parseId, parseJsonApiBody, relId, uptickError, uptickPaginate } from "../helpers.js";
+import { formatAsset, formatDefect } from "../formatters.js";
+import { paginateItems, parseId, parseJsonApiBody, relId, uptickError, uptickPaginate } from "../helpers.js";
 import { getUptickStore } from "../store.js";
 
 export function defectRoutes({ app, store }: RouteContext): void {
@@ -28,12 +28,37 @@ export function defectRoutes({ app, store }: RouteContext): void {
       if (!isNaN(cid)) defects = defects.filter((d) => d.client_id === cid);
     }
 
-    const statusFilter = c.req.query("status");
+    // Accept both the bare `status` filter and JSON:API `filter[status]`.
+    const statusFilter = c.req.query("status") ?? c.req.query("filter[status]");
     if (statusFilter) {
       defects = defects.filter((d) => d.status === statusFilter);
     }
 
-    return uptickPaginate(c, defects, (d) => formatDefect(d, s), `/api/${c.req.param("ver")}/defects/`);
+    const severityFilter = c.req.query("severity") ?? c.req.query("filter[severity]");
+    if (severityFilter) {
+      defects = defects.filter((d) => d.severity === severityFilter);
+    }
+
+    const resourcePath = `/api/${c.req.param("ver")}/defects/`;
+
+    // Compound document: ?include=asset attaches the related assets in a
+    // top-level `included` array (JSON:API spec).
+    const include = (c.req.query("include") ?? "").split(",").map((s) => s.trim());
+    if (include.includes("asset")) {
+      const { items, nextUrl, prevUrl } = paginateItems(c, defects, resourcePath);
+      const assetIds = [...new Set(items.map((d) => d.asset_id).filter((id): id is number => id != null))];
+      const included = assetIds
+        .map((id) => s.assets.get(id))
+        .filter((a) => a != null)
+        .map((a) => formatAsset(a!, s));
+      return c.json({
+        data: items.map((d) => formatDefect(d, s)),
+        included,
+        links: { next: nextUrl, prev: prevUrl },
+      });
+    }
+
+    return uptickPaginate(c, defects, (d) => formatDefect(d, s), resourcePath);
   });
 
   app.post("/api/:ver/defects/", async (c) => {
@@ -97,5 +122,14 @@ export function defectRoutes({ app, store }: RouteContext): void {
       client_id: clientId ?? existing.client_id,
     });
     return c.json({ data: formatDefect(updated!, s) });
+  });
+
+  app.delete("/api/:ver/defects/:id", (c) => {
+    const s = us();
+    const id = parseId(c.req.param("id"));
+    if (!id) return uptickError(c, 400, "Invalid ID");
+    if (!s.defects.get(id)) return uptickError(c, 404, "Not Found");
+    s.defects.delete(id);
+    return c.body(null, 204);
   });
 }

@@ -1,5 +1,5 @@
 import type { RouteContext } from "@emulators/core";
-import { formatAsset } from "../formatters.js";
+import { formatAsset, formatDefect } from "../formatters.js";
 import { parseId, parseJsonApiBody, relId, uptickError, uptickPaginate } from "../helpers.js";
 import { getUptickStore } from "../store.js";
 
@@ -61,6 +61,16 @@ export function assetRoutes({ app, store }: RouteContext): void {
     return c.json({ data: formatAsset(asset, s) }, 201);
   });
 
+  // Nested sub-resource: defects belonging to an asset
+  app.get("/api/:ver/assets/:id/defects/", (c) => {
+    const s = us();
+    const id = parseId(c.req.param("id"));
+    if (!id) return uptickError(c, 400, "Invalid ID");
+    if (!s.assets.get(id)) return uptickError(c, 404, "Not Found");
+    const defects = s.defects.all().filter((d) => d.asset_id === id);
+    return uptickPaginate(c, defects, (d) => formatDefect(d, s), `/api/${c.req.param("ver")}/assets/${id}/defects/`);
+  });
+
   app.get("/api/:ver/assets/:id", (c) => {
     const s = us();
     const id = parseId(c.req.param("id"));
@@ -94,5 +104,14 @@ export function assetRoutes({ app, store }: RouteContext): void {
       asset_type_name: assetType?.name ?? (attributes.asset_type_name as string) ?? existing.asset_type_name,
     });
     return c.json({ data: formatAsset(updated!, s) });
+  });
+
+  app.delete("/api/:ver/assets/:id", (c) => {
+    const s = us();
+    const id = parseId(c.req.param("id"));
+    if (!id) return uptickError(c, 400, "Invalid ID");
+    if (!s.assets.get(id)) return uptickError(c, 404, "Not Found");
+    s.assets.delete(id);
+    return c.body(null, 204);
   });
 }
