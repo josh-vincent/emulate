@@ -220,21 +220,63 @@ importers:
 
   examples/api-emulators-quickstart:
     dependencies:
+      '@emulators/apple':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/apple
+      '@emulators/aws':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/aws
+      '@emulators/clerk':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/clerk
       '@emulators/core':
         specifier: workspace:*
         version: link:../../packages/@emulators/core
+      '@emulators/github':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/github
+      '@emulators/google':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/google
+      '@emulators/microsoft':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/microsoft
+      '@emulators/mongoatlas':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/mongoatlas
       '@emulators/nango':
         specifier: workspace:*
         version: link:../../packages/@emulators/nango
+      '@emulators/okta':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/okta
+      '@emulators/resend':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/resend
       '@emulators/simpro':
         specifier: workspace:*
         version: link:../../packages/@emulators/simpro
+      '@emulators/slack':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/slack
+      '@emulators/stripe':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/stripe
       '@emulators/uptick':
         specifier: workspace:*
         version: link:../../packages/@emulators/uptick
+      '@emulators/vercel':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/vercel
+      '@emulators/workos':
+        specifier: workspace:*
+        version: link:../../packages/@emulators/workos
       hono:
         specifier: ^4
         version: 4.12.12
+      yaml:
+        specifier: ^2
+        version: 2.8.3
     devDependencies:
       '@types/node':
         specifier: ^22
@@ -911,21 +953,33 @@ importers:
       '@emulators/mongoatlas':
         specifier: workspace:*
         version: link:../@emulators/mongoatlas
+      '@emulators/nango':
+        specifier: workspace:*
+        version: link:../@emulators/nango
       '@emulators/okta':
         specifier: workspace:*
         version: link:../@emulators/okta
       '@emulators/resend':
         specifier: workspace:*
         version: link:../@emulators/resend
+      '@emulators/simpro':
+        specifier: workspace:*
+        version: link:../@emulators/simpro
       '@emulators/slack':
         specifier: workspace:*
         version: link:../@emulators/slack
       '@emulators/stripe':
         specifier: workspace:*
         version: link:../@emulators/stripe
+      '@emulators/uptick':
+        specifier: workspace:*
+        version: link:../@emulators/uptick
       '@emulators/vercel':
         specifier: workspace:*
         version: link:../@emulators/vercel
+      '@emulators/workos':
+        specifier: workspace:*
+        version: link:../@emulators/workos
       tsup:
         specifier: ^8
         version: 8.5.1(jiti@2.6.1)(postcss@8.5.8)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -10937,7 +10991,7 @@ snapshots:
       eslint: 9.39.4(jiti@2.6.1)
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.58.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1))
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.58.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.6.1))
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.58.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.58.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1))
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.39.4(jiti@2.6.1))
       eslint-plugin-react: 7.37.5(eslint@9.39.4(jiti@2.6.1))
       eslint-plugin-react-hooks: 7.0.1(eslint@9.39.4(jiti@2.6.1))
@@ -10974,7 +11028,7 @@ snapshots:
       tinyglobby: 0.2.15
       unrs-resolver: 1.11.1
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.58.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.6.1))
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.58.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.58.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1))
     transitivePeerDependencies:
       - supports-color
 
@@ -10989,7 +11043,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.58.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.6.1)):
+  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.58.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.58.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9
