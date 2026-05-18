@@ -40,23 +40,24 @@ pnpm --filter api-emulators-quickstart all
 
 Concise (~4–6 narrated steps) demos representative of each provider.
 
-| Script | Provider | Flow exercised |
-| --- | --- | --- |
-| `vercel` | Vercel | token auth → projects / deployments |
-| `github` | GitHub | token auth → repos / issues |
-| `google` | Google | OIDC authorize → token → userinfo + JWKS |
-| `slack` | Slack | token auth → `chat.postMessage` / history |
-| `apple` | Apple | authorize → token → decode signed `id_token` (JWKS) |
-| `microsoft` | Microsoft Entra | OIDC authorize → token → Graph `/me` |
-| `okta` | Okta | OIDC (custom auth server) → token → SSWS mgmt API |
-| `aws` | AWS | S3 put/get (XML) + SQS send/receive (form) |
-| `resend` | Resend | API key → send email → inbox capture |
-| `stripe` | Stripe | products/prices → checkout session → payment intent |
-| `mongoatlas` | MongoDB Atlas | API key → clusters / database users |
-| `clerk` | Clerk | OIDC sign-in → userinfo → Backend API (secret key) |
-| `workos` | WorkOS | authorize → authenticate → memberships → password grant |
-| `nango` | Nango | connections → records → proxy → connect-session handshake |
-| `nango-providers` | Nango ×34 | loads `../nango-seeds.yaml`, one provider per category |
+| Script            | Provider             | Flow exercised                                                        |
+| ----------------- | -------------------- | --------------------------------------------------------------------- |
+| `vercel`          | Vercel               | token auth → projects / deployments                                   |
+| `github`          | GitHub               | token auth → repos / issues                                           |
+| `google`          | Google               | OIDC authorize → token → userinfo + JWKS                              |
+| `slack`           | Slack                | token auth → `chat.postMessage` / history                             |
+| `apple`           | Apple                | authorize → token → decode signed `id_token` (JWKS)                   |
+| `microsoft`       | Microsoft Entra      | OIDC authorize → token → Graph `/me`                                  |
+| `okta`            | Okta                 | OIDC (custom auth server) → token → SSWS mgmt API                     |
+| `aws`             | AWS                  | S3 put/get (XML) + SQS send/receive (form)                            |
+| `resend`          | Resend               | API key → send email → inbox capture                                  |
+| `stripe`          | Stripe               | products/prices → checkout session → payment intent                   |
+| `mongoatlas`      | MongoDB Atlas        | API key → clusters / database users                                   |
+| `clerk`           | Clerk                | OIDC sign-in → userinfo → Backend API (secret key)                    |
+| `workos`          | WorkOS               | authorize → authenticate → memberships → password grant               |
+| `nango`           | Nango                | connections → records → proxy → connect-session handshake             |
+| `nango-providers` | Nango ×34            | loads `../nango-seeds.yaml`, one provider per category                |
+| `crm`             | HubSpot + Salesforce | OAuth → object CRUD → associations / SOQL → search / describe → batch |
 
 ## Deep walkthroughs
 
@@ -73,6 +74,18 @@ round-trip that is asserted in-script:
   version-path + `page[size]` behaviour, PATCH status transitions, inspector
   tabs, then a closed-defect round-trip.
 
+## CRM end-to-end (`crm`)
+
+`crm` drives the two CRMs a real backend integrates first, both served by the
+Nango plugin's **direct** routes (no proxy / connection layer — point a
+HubSpot/Salesforce client straight at the emulator base URL):
+
+- **HubSpot** — OAuth 2.0 authorization-code flow → create contact + company →
+  v4 association → PATCH → CRM Search (`filterGroups`) → batch-create.
+- **Salesforce** — OAuth 2.0 username-password grant → sObject CRUD (with the
+  `attributes` envelope) → `composite/sobjects` collection-create → SOQL
+  (`SELECT … FROM … WHERE …`) → sObject `describe`.
+
 ## 3-month simulations (full endpoint coverage)
 
 These simulate a quarter of operations and then drive **every** route the
@@ -80,10 +93,10 @@ emulator registers, asserting 100 % route-pattern coverage. They exit non-zero
 on any coverage gap, 5xx, or list-endpoint failure — so they double as
 contract tests.
 
-| Script | What it proves |
-| --- | --- |
-| `uptick-sim` | 12 weekly client onboardings + defect lifecycle across 90 days; **24/24** uptick routes; round-trip verified |
-| `simpro-sim` | ~30 dated jobs (+ schedules/invoices/payments) across 90 days; a generic crawler resolves every `:param` transitively and exercises **all 372** (method, path) endpoints (≥97 % 2xx, 0 × 5xx); **29/29** shape + relational-integrity checks (every entity's full shape + every FK resolved to a real linked record) |
+| Script                | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `uptick-sim`          | 12 weekly client onboardings + defect lifecycle across 90 days; **24/24** uptick routes; round-trip verified                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `simpro-sim`          | ~30 dated jobs (+ schedules/invoices/payments) across 90 days; a generic crawler resolves every `:param` transitively and exercises **all 372** (method, path) endpoints (≥97 % 2xx, 0 × 5xx); **29/29** shape + relational-integrity checks (every entity's full shape + every FK resolved to a real linked record)                                                                                                                                                                                                                                                                                           |
 | `nango-providers-sim` | **10 connections**, 90 days of dated records each. Four (xero, quickbooks, google-drive, onedrive) drive every provider-native `/proxy/*` path; the rest form a **cross-provider graph** — Slack/Gmail/Jira/Salesforce records link into Google Drive by file id + share URL, Jira links into GitHub PRs. **Each connection is independently verified** (resolves through the emulator, records are emulator-served, a live append round-trips back through `GET /records`, ≥75-day span), then a cross-provider integrity phase resolves **all 95** references to real linked records; **18/18** Nango routes |
 
 ## Nango provider library
@@ -100,14 +113,14 @@ cross-reference is resolved against the target provider's real records.
 
 `realtime-stream` drives the published [`@emulators/simulator`](../../packages/@emulators/simulator/)
 `Simulator` against an in-process Nango emulator (injected `fetch` →
-`emu.app.request`, zero network), proving the *moving* picture — new records
+`emu.app.request`, zero network), proving the _moving_ picture — new records
 arriving over time exactly as a real connector feeds them. It is fully
 config-driven by the scenario YAML in [`scenarios/`](./scenarios):
 
-| Segment | Scenario | Proves |
-| --- | --- | --- |
-| **A — one, realtime** | `single-gmail.yaml` | One Gmail inbox dripping under the **real wall clock**; each message printed as it lands, then `GET /records` confirms it's queryable |
-| **B — many, one run** | `all-streams.yaml` | All **6 providers at once** (5 `sync` + WhatsApp `forward`) under a virtual clock; every stream asserted to deliver exactly its cap and every record/webhook to resolve |
+| Segment                      | Scenario            | Proves                                                                                                                                                                       |
+| ---------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A — one, realtime**        | `single-gmail.yaml` | One Gmail inbox dripping under the **real wall clock**; each message printed as it lands, then `GET /records` confirms it's queryable                                        |
+| **B — many, one run**        | `all-streams.yaml`  | All **6 providers at once** (5 `sync` + WhatsApp `forward`) under a virtual clock; every stream asserted to deliver exactly its cap and every record/webhook to resolve      |
 | **C — different time frame** | `quarter-drip.yaml` | A slow drip whose injected clock advances **~a quarter**; the streamed records' own timestamps are asserted to span ≥ 60 days — the time window is configurable per scenario |
 
 Each scenario also runs unchanged against a real deployment via the published
@@ -132,6 +145,7 @@ src/
   harness.ts                Shared in-process mount + request/print helpers
   <provider>.ts             One quickstart per direct provider (16)
   nango-providers.ts        Nango 34-provider seed-library walkthrough
+  crm.ts                    HubSpot CRM + Salesforce REST/SOQL end-to-end
   simpro.ts / uptick.ts     Deep narrated walkthroughs (+ round-trip)
   uptick-sim.ts             Uptick 3-month sim, 24/24 route coverage
   simpro-sim.ts             Simpro 3-month sim, 372/372 route coverage
