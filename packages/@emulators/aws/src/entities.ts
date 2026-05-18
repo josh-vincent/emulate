@@ -20,6 +20,20 @@ export interface S3Object extends Entity {
   version_id?: string;
 }
 
+export interface S3MultipartUpload extends Entity {
+  upload_id: string;
+  bucket_name: string;
+  key: string;
+  content_type: string;
+  parts: Array<{ part_number: number; etag: string; body: string }>;
+}
+
+export interface S3ObjectTagging extends Entity {
+  bucket_name: string;
+  key: string;
+  tags: Array<{ key: string; value: string }>;
+}
+
 export interface SqsQueue extends Entity {
   queue_name: string;
   queue_url: string;
