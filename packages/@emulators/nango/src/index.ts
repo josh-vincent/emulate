@@ -3,6 +3,7 @@ import type { Hono } from "hono";
 import { connectionRoutes } from "./routes/connections.js";
 import { directHubspotRoutes } from "./routes/direct-hubspot.js";
 import { directHubspotCrmRoutes } from "./routes/direct-hubspot-crm.js";
+import { directSalesforceRoutes } from "./routes/direct-salesforce.js";
 import { proxyRoutes } from "./routes/proxy.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { inspectorRoutes } from "./routes/inspector.js";
@@ -132,6 +133,7 @@ export const nangoPlugin: ServicePlugin = {
     webhookRoutes(app, ns, store);
     directHubspotRoutes(app, store);
     directHubspotCrmRoutes(app, store);
+    directSalesforceRoutes(app, store);
   },
 
   seed(_store: Store, _baseUrl: string): void {
