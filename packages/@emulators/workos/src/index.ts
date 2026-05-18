@@ -3,6 +3,7 @@ import type { Hono } from "hono";
 import { discoveryRoutes } from "./routes/discovery.js";
 import { invitationRoutes } from "./routes/invitations.js";
 import { oauthRoutes } from "./routes/oauth.js";
+import { organizationRoutes } from "./routes/organizations.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { userRoutes } from "./routes/users.js";
 import { webhookRoutes } from "./routes/webhooks.js";
@@ -82,6 +83,45 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: WorkOSSee
   }
 }
 
+/**
+ * Inverse of {@link seedFromConfig}: snapshot the live WorkOS store back into a
+ * seed config so a fresh store can be re-seeded to an identical state. Used by
+ * the export round-trip (mirrors simpro/uptick `storeToSeedConfig`).
+ */
+export function storeToSeedConfig(store: Store, _baseUrl: string): WorkOSSeedConfig {
+  const ws = getWorkOSStore(store);
+  const orgsById = new Map(ws.allOrgs().map((o) => [o.id, o]));
+  const usersById = new Map(ws.allUsers().map((u) => [u.id, u]));
+
+  return {
+    oauth_clients: ws.allOAuthClients().map((c) => ({
+      client_id: c.client_id,
+      client_secret: c.client_secret,
+      name: c.name,
+      redirect_uris: c.redirect_uris,
+    })),
+    organizations: ws.allOrgs().map((o) => ({ id: o.id, name: o.name, slug: o.slug })),
+    users: ws.allUsers().map((u) => ({
+      id: u.id,
+      email: u.email,
+      first_name: u.first_name ?? undefined,
+      last_name: u.last_name ?? undefined,
+      password: u.password,
+      profile_picture_url: u.profile_picture_url ?? undefined,
+      email_verified: u.email_verified,
+    })),
+    memberships: ws
+      .allMemberships()
+      .filter((m) => m.status === "active")
+      .flatMap((m) => {
+        const user = usersById.get(m.user_id);
+        const org = orgsById.get(m.organization_id);
+        if (!user || !org) return [];
+        return [{ user_email: user.email, organization_slug: org.slug, role: m.role.slug }];
+      }),
+  };
+}
+
 export const workosPlugin: ServicePlugin = {
   name: "workos",
 
@@ -94,6 +134,7 @@ export const workosPlugin: ServicePlugin = {
     discoveryRoutes(app, baseUrl);
     oauthRoutes(app, ws, baseUrl);
     userRoutes(app, ws);
+    organizationRoutes(app, ws);
     sessionRoutes(app, ws);
     invitationRoutes(app, ws, webhooks);
     webhookRoutes(app);
