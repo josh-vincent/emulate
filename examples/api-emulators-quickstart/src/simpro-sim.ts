@@ -2,13 +2,19 @@
 //
 // `simpro.ts` is the readable walkthrough. This script:
 //
-//   1. Phase A — simulates a *real quarter* of field-service operations:
-//      13 weekly cycles that create dated rows for EVERY creatable Simpro
-//      collection (jobs, schedules, invoices, payments, quotes, leads, assets,
-//      contacts, contractors, staff, sites, tasks, activity schedules, vendor
-//      orders, prebuilds, recurring jobs/invoices, credit notes, stock takes/
-//      transfers/allocations, …). Each row is stamped with that week's date so
-//      the data genuinely spans 90 days — asserted afterwards.
+//   1. Phase A — builds a *real, inter-linked quarter* of field-service
+//      operations. One-time org config (18 setup collections + custom field
+//      defs) and stable registers (vendor branches/contacts, plant type +
+//      plants, prebuild + catalog), then 13 weekly cycles that each build a
+//      coherent graph where children point at real parents:
+//        customer → site → contact
+//        job → section → cost center; job → task / schedule / invoice → payment
+//        quote → section → cost center
+//        recurring job / recurring invoice → section → cost center
+//        vendor order → receipt + catalog
+//        lead → note
+//      Every row is dated to its week, so the data genuinely spans 90 days —
+//      asserted, along with 12 nested relationships returning related rows.
 //
 //   2. Phase B — a generic crawler then drives EVERY one of the 372
 //      (method, path) endpoints the emulator registers. It resolves every
@@ -19,7 +25,7 @@
 //      every pass must stay 100 % covered with zero 5xx and all lists 2xx.
 //
 //   pnpm --filter api-emulators-quickstart simpro-sim
-import { simproPlugin, seedFromConfig } from "@emulators/simpro";
+import { simproPlugin, seedFromConfig, getSimproStore } from "@emulators/simpro";
 import { heading, mount } from "./harness.js";
 import { SIMPRO_ROUTES } from "./simpro-routes.generated.js";
 
@@ -180,36 +186,43 @@ async function post(path: string, body: unknown): Promise<number> {
   return j?.ID ?? 0;
 }
 
-// Every creatable top-level collection. Phase A posts a dated row to each one
-// once per week, so all 27 collections carry 13 weeks of data — not just jobs.
-const COLLECTIONS = [
-  "jobs",
-  "quotes",
-  "leads",
-  "invoices",
-  "creditNotes",
-  "customerPayments",
-  "schedules",
-  "activitySchedules",
+// Flat dated entities: no parent chain, just a dated row every week so each
+// carries a full quarter. (The relational entities — jobs, quotes, recurring*,
+// vendorOrders, leads, customers — are built as linked graphs below.)
+const FLAT = [
   "assets",
   "contacts",
   "contractors",
   "staff",
   "employees",
-  "sites",
-  "tasks",
-  "vendors",
-  "vendorOrders",
+  "activitySchedules",
   "contractorInvoices",
-  "prebuilds",
-  "prebuildGroups",
-  "recurringJobs",
-  "recurringInvoices",
-  "plantTypes",
   "stockTakes",
   "stockTransfer",
   "stockAllocations",
   "storageDevices",
+] as const;
+
+// One-time configuration collections (created once, like real org setup).
+const SETUP = [
+  "setup/accounts/chartOfAccounts",
+  "setup/accounts/paymentMethods",
+  "setup/accounts/paymentTerms",
+  "setup/activities",
+  "setup/archiveReasons/jobs",
+  "setup/archiveReasons/leads",
+  "setup/archiveReasons/quotes",
+  "setup/customerGroups",
+  "setup/memberships",
+  "setup/responseTimes",
+  "setup/securityGroups",
+  "setup/statusCodes/customerInvoices",
+  "setup/statusCodes/projects",
+  "setup/statusCodes/vendorOrders",
+  "setup/tags/customers",
+  "setup/tags/projects",
+  "setup/teams",
+  "setup/webhooks",
 ] as const;
 
 async function main(): Promise<void> {
@@ -268,39 +281,213 @@ async function main(): Promise<void> {
   ctx.invoice = 7001;
   ctx.vendor = await post(`/api/v1.0/companies/${CID}/vendors/`, { Name: "Acme Supply Co", DateIssued: day(0) });
 
-  heading(`Simpro sim — simulating ${WEEKS} weekly cycles (≈90 days) across ${COLLECTIONS.length} collections`);
+  const C = `/api/v1.0/companies/${CID}`;
+  const n: Record<string, number> = {};
+  const bump = (k: string, ok: unknown): void => {
+    if (ok) n[k] = (n[k] ?? 0) + 1;
+  };
+  // POST the superset body merged with explicit links, return the new id.
+  const mk = (path: string, date: string, link: Record<string, unknown> = {}): Promise<number> =>
+    post(path, { ...JSON.parse(bodyFor(date)), ...link });
 
-  const createdPer: Record<string, number> = {};
+  heading(`Simpro sim — building a linked operational graph over ${WEEKS} weeks (≈90 days)`);
+
+  // ── One-time org configuration (created once, like a real tenant) ────────
+  for (const s of SETUP) bump(s, await mk(`${C}/${s}/`, day(0)));
+  for (const ent of ["customers", "jobs", "quotes", "assets"])
+    bump("setup/customFieldDefs", await mk(`${C}/setup/customFieldDefs/${ent}/`, day(0)));
+
+  // ── Stable register entities + their children (the relational depth) ─────
+  const vBranch = await mk(`${C}/vendors/${ctx.vendor}/branches/`, day(0));
+  const vContact = await mk(`${C}/vendors/${ctx.vendor}/contacts/`, day(0));
+  bump("vendor.branches", vBranch);
+  bump("vendor.contacts", vContact);
+  const pType = await mk(`${C}/plantTypes/`, day(0), { Name: "Excavator" });
+  if (pType)
+    bump("plantType.plants", await mk(`${C}/plantTypes/${pType}/plants/`, day(0), { PlantType: { ID: pType } }));
+  const preb = await mk(`${C}/prebuilds/`, day(0), { Name: "AC Service Kit" });
+  if (preb) bump("prebuild.catalogs", await mk(`${C}/prebuilds/${preb}/catalogs/`, day(0)));
+  bump("prebuildGroups", await mk(`${C}/prebuildGroups/`, day(0), { Name: "HVAC" }));
+
+  // ── 13 weekly cycles: each builds a coherent, inter-linked graph ─────────
+  const customers = [200];
+  const jobIds: number[] = [ctx.job];
+  let lastJob = ctx.job;
+  let lastJobSec = 1;
+  let lastQuote = 9001;
+  let lastVO = 0;
+  let lastLead = 0;
+  let lastRJob = 0;
+  let lastCust = 200;
   for (let w = 0; w < WEEKS; w++) {
-    const date = day(w * 7);
-    for (const coll of COLLECTIONS) {
-      const id = await post(`/api/v1.0/companies/${CID}/${coll}/`, JSON.parse(bodyFor(date)));
-      if (id || coll === "customerPayments") createdPer[coll] = (createdPer[coll] ?? 0) + 1;
-    }
-    // Onboard a fresh customer (+ site) every other week so the customer base
-    // also grows over the quarter, not just transactional data.
+    const d = day(w * 7);
+
+    // Grow the customer base every other week: customer → site → contact.
+    let cust = customers[customers.length - 1]!;
+    let site = ctx.site;
     if (w % 2 === 0) {
-      const cust = await post(`/api/v1.0/companies/${CID}/customers/`, {
-        CompanyName: `Onboarded Co ${w} Pty Ltd`,
-        Type: "company",
-      });
-      if (cust) await post(`/api/v1.0/companies/${CID}/sites/`, { Name: `Site W${w}`, Customer: { ID: cust } });
+      const nc = await post(`${C}/customers/`, { CompanyName: `Onboarded Co ${w} Pty Ltd`, Type: "company" });
+      if (nc) {
+        cust = lastCust = nc;
+        customers.push(nc);
+        bump("customers", nc);
+        const ns = await mk(`${C}/sites/`, d, { Name: `Site W${w}`, Customer: { ID: nc } });
+        if (ns) {
+          site = ns;
+          bump("sites", ns);
+        }
+        bump("customer.contacts", await mk(`${C}/customers/${nc}/contacts/`, d, { Customer: { ID: nc } }));
+      }
     }
+
+    // Job → section → cost center; job → task / schedule / invoice → payment.
+    const job = await mk(`${C}/jobs/`, d, {
+      Type: "Service",
+      Name: `Service Call W${w}`,
+      Customer: { ID: cust },
+      Site: { ID: site },
+      DateIssued: d,
+      OrderNo: `PO-${4000 + w}`,
+    });
+    if (job) {
+      bump("jobs", job);
+      lastJob = job;
+      jobIds.push(job);
+      const sec = await mk(`${C}/jobs/${job}/sections/`, d, { Name: "Stage 1" });
+      if (sec) {
+        bump("job.sections", sec);
+        lastJobSec = sec;
+        bump(
+          "job.costCenters",
+          await mk(`${C}/jobs/${job}/sections/${sec}/costCenters/`, d, {
+            Name: "Labour",
+            CostCenter: { ID: ctx.masterCC },
+            TaxCode: { ID: ctx.taxCode },
+          }),
+        );
+      }
+      bump("tasks", await mk(`${C}/tasks/`, d, { Name: `Task W${w}`, Job: { ID: job }, DueDate: d }));
+      bump("schedules", await mk(`${C}/schedules/`, d, { Job: { ID: job }, Technician: { ID: ctx.staff }, Date: d }));
+      const inv = await mk(`${C}/invoices/`, d, { Job: { ID: job }, Type: "ProgressInvoice", DateIssued: d });
+      if (inv) {
+        bump("invoices", inv);
+        bump(
+          "payments",
+          await mk(`${C}/customerPayments/`, d, {
+            Payment: { Amount: 1650, PaymentMethod: "EFT" },
+            Invoices: [{ ID: inv }],
+          }),
+        );
+      }
+    }
+    bump("creditNotes", await mk(`${C}/creditNotes/`, d, { Customer: { ID: cust }, DateIssued: d }));
+
+    // Quote → section → cost center (sales pipeline, links same customer).
+    const q = await mk(`${C}/quotes/`, d, { Name: `Quote W${w}`, Customer: { ID: cust }, DateIssued: d });
+    if (q) {
+      bump("quotes", q);
+      lastQuote = q;
+      const qs = await mk(`${C}/quotes/${q}/sections/`, d, { Name: "Scope" });
+      if (qs)
+        bump(
+          "quote.costCenters",
+          await mk(`${C}/quotes/${q}/sections/${qs}/costCenters/`, d, {
+            Name: "Materials",
+            CostCenter: { ID: ctx.masterCC },
+          }),
+        );
+    }
+
+    // Recurring job & recurring invoice, each with section → cost center.
+    const rj = await mk(`${C}/recurringJobs/`, d, { Name: `Maint W${w}`, Customer: { ID: cust } });
+    if (rj) {
+      bump("recurringJobs", rj);
+      lastRJob = rj;
+      const rjs = await mk(`${C}/recurringJobs/${rj}/sections/`, d, { Name: "Recurring" });
+      if (rjs) bump("rJob.costCenters", await mk(`${C}/recurringJobs/${rj}/sections/${rjs}/costCenters/`, d));
+    }
+    const ri = await mk(`${C}/recurringInvoices/`, d, { Name: `RInv W${w}`, Customer: { ID: cust } });
+    if (ri) {
+      bump("recurringInvoices", ri);
+      const ris = await mk(`${C}/recurringInvoices/${ri}/sections/`, d, { Name: "Recurring" });
+      if (ris) bump("rInv.costCenters", await mk(`${C}/recurringInvoices/${ri}/sections/${ris}/costCenters/`, d));
+    }
+
+    // Vendor order → receipt + catalog (procurement, links the vendor).
+    const vo = await mk(`${C}/vendorOrders/`, d, { Vendor: { ID: ctx.vendor }, DateIssued: d });
+    if (vo) {
+      bump("vendorOrders", vo);
+      lastVO = vo;
+      bump("vo.receipts", await mk(`${C}/vendorOrders/${vo}/receipts/`, d));
+      bump("vo.catalogs", await mk(`${C}/vendorOrders/${vo}/catalogs/`, d));
+    }
+
+    // Lead → note.
+    const lead = await mk(`${C}/leads/`, d, { Name: `Lead W${w}`, Text: `Enquiry W${w}` });
+    if (lead) {
+      bump("leads", lead);
+      lastLead = lead;
+      bump("lead.notes", await mk(`${C}/leads/${lead}/notes/`, d, { Text: `Follow-up W${w}` }));
+    }
+
+    // Flat dated entities — one dated row each, every week.
+    for (const f of FLAT) bump(f, await mk(`${C}/${f}/`, d));
   }
 
-  const totalCreated = Object.values(createdPer).reduce((a, b) => a + b, 0);
-  const dense = COLLECTIONS.filter((c) => (createdPer[c] ?? 0) >= WEEKS).length;
+  // Job-scoped tasks: the public tasks POST hardcodes parent_type "global", so
+  // a job→task link can only exist via the store (as the emulator's own seed
+  // does). Insert one dated task per job so /jobs/:jid/tasks/ returns real data.
+  const ss = getSimproStore(emu.store);
+  jobIds.forEach((jid, i) => {
+    const d = day(Math.min(i, WEEKS - 1) * 7);
+    ss.tasks.insert({
+      company_id: 0,
+      external_id: 90_000 + i,
+      parent_type: "job",
+      parent_id: jid,
+      name: `Job ${jid} task`,
+      description: "linked job task",
+      due_date: d,
+      assigned_to_id: ctx.staff,
+      completed: i % 3 === 0,
+      date_created: `${d}T09:00:00Z`,
+      date_modified: `${d}T09:00:00Z`,
+    });
+  });
+  n["job.tasks"] = jobIds.length;
+
+  const totalCreated = Object.values(n).reduce((a, b) => a + b, 0);
+  const weeklyKeys = [
+    "jobs",
+    "job.sections",
+    "job.costCenters",
+    "invoices",
+    "payments",
+    "quotes",
+    "quote.costCenters",
+    "recurringJobs",
+    "rJob.costCenters",
+    "recurringInvoices",
+    "vendorOrders",
+    "vo.receipts",
+    "leads",
+    "lead.notes",
+    ...FLAT,
+  ];
+  const dense = weeklyKeys.filter((k) => (n[k] ?? 0) >= WEEKS).length;
   console.log(
-    `\n  created ${totalCreated} dated rows • ${dense}/${COLLECTIONS.length} collections carry ≥${WEEKS} weeks`,
+    `\n  created ${totalCreated} linked rows • ${dense}/${weeklyKeys.length} weekly chains carry ≥${WEEKS} weeks` +
+      ` • ${SETUP.length} setup collections + ${5} stable registers seeded`,
   );
-  for (let i = 0; i < COLLECTIONS.length; i += 3) {
+  const showKeys = Object.keys(n).sort();
+  for (let i = 0; i < showKeys.length; i += 3)
     console.log(
       "  " +
-        COLLECTIONS.slice(i, i + 3)
-          .map((c) => `${c}=${createdPer[c] ?? 0}`.padEnd(26))
+        showKeys
+          .slice(i, i + 3)
+          .map((k) => `${k}=${n[k]}`.padEnd(28))
           .join(""),
     );
-  }
 
   // ── Span assertion: prove the data really covers ~3 months ──────────────
   const jobsList = (await (
@@ -318,6 +505,42 @@ async function main(): Promise<void> {
   console.log(
     `\n  job date span: ${dates[0] ?? "—"} → ${dates[dates.length - 1] ?? "—"} ` +
       `= ${spanDays} days across ${jobsList.length} jobs — ${spanOk ? "✅ ≥75d (real quarter)" : "❌ too narrow"}`,
+  );
+
+  // ── Deep-link assertion: nested routes return real *related* data ───────
+  const len = async (p: string): Promise<number> => {
+    const r = await app.request(`${BASE}${p}`, { headers: auth });
+    if (!r.ok) {
+      await r.body?.cancel();
+      return -1;
+    }
+    const j = (await r.json()) as unknown;
+    return Array.isArray(j) ? j.length : Object.keys(j as object).length;
+  };
+  const links: Array<[string, string]> = [
+    ["job → sections", `${C}/jobs/${lastJob}/sections/`],
+    ["job section → cost centers", `${C}/jobs/${lastJob}/sections/${lastJobSec}/costCenters/`],
+    ["job → tasks", `${C}/jobs/${lastJob}/tasks/`],
+    ["job → invoices", `${C}/jobs/${lastJob}/invoices/`],
+    ["quote → sections", `${C}/quotes/${lastQuote}/sections/`],
+    ["recurringJob → sections", `${C}/recurringJobs/${lastRJob}/sections/`],
+    ["vendorOrder → receipts", `${C}/vendorOrders/${lastVO}/receipts/`],
+    ["vendor → branches", `${C}/vendors/${ctx.vendor}/branches/`],
+    ["vendor → contacts", `${C}/vendors/${ctx.vendor}/contacts/`],
+    ["plantType → plants", `${C}/plantTypes/${pType}/plants/`],
+    ["customer → contacts", `${C}/customers/${lastCust}/contacts/`],
+    ["lead → notes", `${C}/leads/${lastLead}/notes/`],
+  ];
+  let linkedOk = 0;
+  console.log("");
+  for (const [label, p] of links) {
+    const c = await len(p);
+    if (c > 0) linkedOk++;
+    console.log(`  ${c > 0 ? "✅" : "❌"} ${label.padEnd(30)} ${c >= 0 ? `${c} related rows` : "not reachable"}`);
+  }
+  const linksOk = linkedOk === links.length;
+  console.log(
+    `\n  ${linkedOk}/${links.length} nested relationships return related data — ${linksOk ? "✅ fully linked" : "❌ gaps"}`,
   );
 
   // ── Phase B: crawl EVERY endpoint, repeated for several passes ──────────
@@ -376,9 +599,10 @@ async function main(): Promise<void> {
   for (const line of passReports) console.log(line);
   if (missing.length) console.log(`  ❌ MISSING (${missing.length}): ${missing.map((r) => r.join(" ")).join(" | ")}`);
 
-  const ok = missing.length === 0 && !anyPassFailed && spanOk && dense === COLLECTIONS.length && Number(ratio) >= 80;
+  const ok =
+    missing.length === 0 && !anyPassFailed && spanOk && linksOk && dense === weeklyKeys.length && Number(ratio) >= 80;
   console.log(
-    `\n${ok ? "✅" : "❌"} Simpro 3-month simulation ${ok ? "complete — full route coverage, every collection has a quarter of data" : "INCOMPLETE"}.\n`,
+    `\n${ok ? "✅" : "❌"} Simpro 3-month simulation ${ok ? "complete — 372 endpoints, a linked quarter of data, all relationships populated" : "INCOMPLETE"}.\n`,
   );
   if (!ok) process.exit(1);
 }
