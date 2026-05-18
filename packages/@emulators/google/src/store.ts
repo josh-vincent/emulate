@@ -13,6 +13,7 @@ import type {
   GoogleCalendar,
   GoogleCalendarEvent,
   GoogleDriveItem,
+  GoogleDrivePermission,
 } from "./entities.js";
 
 export interface GoogleStore {
@@ -29,6 +30,7 @@ export interface GoogleStore {
   calendars: Collection<GoogleCalendar>;
   calendarEvents: Collection<GoogleCalendarEvent>;
   driveItems: Collection<GoogleDriveItem>;
+  drivePermissions: Collection<GoogleDrivePermission>;
 }
 
 export function getGoogleStore(store: Store): GoogleStore {
@@ -57,5 +59,10 @@ export function getGoogleStore(store: Store): GoogleStore {
       "user_email",
     ]),
     driveItems: store.collection<GoogleDriveItem>("google.drive_items", ["google_id", "user_email", "mime_type"]),
+    drivePermissions: store.collection<GoogleDrivePermission>("google.drive_permissions", [
+      "google_id",
+      "file_google_id",
+      "user_email",
+    ]),
   };
 }
