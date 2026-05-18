@@ -71,6 +71,10 @@
     "@emulators/resend": "workspace:*",
     "@emulators/stripe": "workspace:*",
     "@emulators/clerk": "workspace:*",
+    "@emulators/workos": "workspace:*",
+    "@emulators/nango": "workspace:*",
+    "@emulators/simpro": "workspace:*",
+    "@emulators/uptick": "workspace:*",
     "tsup": "^8",
     "typescript": "^5.7"
   }

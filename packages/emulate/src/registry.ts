@@ -34,6 +34,10 @@ const SERVICE_NAME_LIST = [
   "stripe",
   "mongoatlas",
   "clerk",
+  "workos",
+  "nango",
+  "simpro",
+  "uptick",
 ] as const;
 export type ServiceName = (typeof SERVICE_NAME_LIST)[number];
 export const SERVICE_NAMES: readonly ServiceName[] = SERVICE_NAME_LIST;
@@ -460,6 +464,212 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
             client_secret: "clerk_emulate_secret",
             name: "Emulate App",
             redirect_uris: ["http://localhost:3000/api/auth/callback/clerk"],
+          },
+        ],
+      },
+    },
+  },
+
+  workos: {
+    label: "WorkOS User Management emulator",
+    endpoints:
+      "OAuth 2.0/OIDC authorize, token exchange (code/password/org-selection/refresh), JWKS, organization memberships, session revocation, invitations, webhook simulation",
+    async load() {
+      const mod = await import("@emulators/workos");
+      return { plugin: mod.workosPlugin, seedFromConfig: mod.seedFromConfig };
+    },
+    defaultFallback(cfg) {
+      const firstEmail = (cfg?.users as Array<{ email?: string }> | undefined)?.[0]?.email ?? "test@example.com";
+      return { login: firstEmail, id: 1, scopes: [] };
+    },
+    initConfig: {
+      workos: {
+        users: [
+          {
+            id: "user_dev",
+            email: "test@example.com",
+            first_name: "Test",
+            last_name: "User",
+            password: "TestPassword123!",
+          },
+        ],
+        organizations: [{ id: "org_dev", name: "My Company", slug: "my-company" }],
+        memberships: [{ user_email: "test@example.com", organization_slug: "my-company", role: "owner" }],
+        oauth_clients: [
+          {
+            client_id: "client_emulate_01",
+            client_secret: "sk_emulate_secret",
+            name: "Emulate App",
+            redirect_uris: ["http://localhost:3000/callback"],
+          },
+        ],
+      },
+    },
+  },
+
+  nango: {
+    label: "Nango integration platform emulator",
+    endpoints:
+      "connections (get/list/create/metadata), connect sessions (create/reconnect), proxy (QuickBooks /v3/company/:id/query, Xero /api.xro/2.0/*, MYOB, generic)",
+    async load() {
+      const mod = await import("@emulators/nango");
+      return { plugin: mod.nangoPlugin, seedFromConfig: mod.seedFromConfig };
+    },
+    defaultFallback() {
+      return { login: "nango-emulator", id: 1, scopes: [] };
+    },
+    initConfig: {
+      nango: {
+        connections: [
+          {
+            id: "xero-demo",
+            provider: "xero",
+            provider_config_key: "xero",
+            metadata: { activeTenantId: "demo-tenant-xero-001" },
+            records: {
+              Invoice: [
+                {
+                  id: "INV-001",
+                  InvoiceNumber: "INV-001",
+                  Total: 1100.0,
+                  AmountDue: 1100.0,
+                  Status: "AUTHORISED",
+                  DateString: "2024-01-15",
+                  DueDateString: "2024-02-15",
+                  Contact: { ContactID: "CONTACT-001", Name: "Demo Customer" },
+                },
+              ],
+              Contact: [{ id: "CONTACT-001", Name: "Demo Customer", EmailAddress: "customer@demo.com" }],
+            },
+          },
+          {
+            id: "quickbooks-demo",
+            provider: "quickbooks",
+            provider_config_key: "quickbooks-sandbox",
+            connection_config: { realmId: "sandbox-realm-001" },
+            records: {
+              Invoice: [
+                {
+                  Id: "1",
+                  DocNumber: "1001",
+                  TotalAmt: 550.0,
+                  Balance: 550.0,
+                  TxnDate: "2024-01-10",
+                  DueDate: "2024-02-10",
+                  CustomerRef: { value: "1", name: "Test Customer" },
+                },
+              ],
+              Customer: [
+                {
+                  Id: "1",
+                  DisplayName: "Test Customer",
+                  PrimaryEmailAddr: { Address: "customer@example.com" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  },
+
+  simpro: {
+    label: "SimPRO field service management API emulator",
+    endpoints:
+      "customers, sites, jobs (sections/cost centres), quotes (convert to job), invoices, " +
+      "staff, contractors, schedules, assets, cost centres, labour rates, " +
+      "tax codes, catalogue, statuses, zones, custom fields, webhooks",
+    async load() {
+      const mod = await import("@emulators/simpro");
+      return { plugin: mod.simproPlugin, seedFromConfig: mod.seedFromConfig };
+    },
+    defaultFallback() {
+      return { login: "sk_test_simpro", id: 1, scopes: [] };
+    },
+    initConfig: {
+      simpro: {
+        customers: [
+          {
+            type: "Company",
+            company_name: "Demo Building Services",
+            email: "accounts@demobuild.example.com",
+            mail_suburb: "Melbourne",
+            mail_state: "VIC",
+          },
+        ],
+        staff: [
+          {
+            given_name: "Demo",
+            family_name: "Tech",
+            email: "tech@demobuild.example.com",
+            role_name: "Technician",
+          },
+        ],
+        jobs: [
+          {
+            order_no: "J-2025-001",
+            description: "Annual Fire Inspection",
+            customer_name: "Demo Building Services",
+            stage: "Progress",
+            total_ex_tax: 500,
+            total_inc_tax: 550,
+          },
+        ],
+        cost_centers: [{ name: "General" }, { name: "Fire Safety" }],
+        tax_codes: [
+          { name: "GST", rate: 10, description: "Goods and Services Tax" },
+          { name: "GST Free", rate: 0, description: "GST exempt" },
+        ],
+        labor_rates: [
+          { name: "Standard", rate: 95 },
+          { name: "After Hours", rate: 142.5 },
+        ],
+      },
+    },
+  },
+
+  uptick: {
+    label: "Uptick fire protection field service API emulator",
+    endpoints: "clients, properties, assets, defects, asset types, users, oauth2 token",
+    async load() {
+      const mod = await import("@emulators/uptick");
+      return { plugin: mod.uptickPlugin, seedFromConfig: mod.seedFromConfig };
+    },
+    defaultFallback() {
+      return { login: "sk_test_uptick", id: 1, scopes: [] };
+    },
+    initConfig: {
+      uptick: {
+        clients: [
+          {
+            name: "Demo Property Group",
+            contact_email: "admin@demopropertygroup.example.com",
+            contact_name: "Demo Admin",
+          },
+        ],
+        properties: [
+          {
+            name: "Demo Building A",
+            client_name: "Demo Property Group",
+            address_city: "Melbourne",
+            address_state: "VIC",
+          },
+        ],
+        assets: [
+          {
+            name: "Fire Hose Reel 01",
+            property_name: "Demo Building A",
+            client_name: "Demo Property Group",
+            asset_type_name: "Fire Hose Reel",
+          },
+        ],
+        asset_types: [{ name: "Fire Hose Reel" }, { name: "Fire Extinguisher" }, { name: "Fire Panel" }],
+        users: [
+          {
+            username: "tech1",
+            email: "tech@demo.example.com",
+            first_name: "Demo",
+            last_name: "Tech",
           },
         ],
       },
