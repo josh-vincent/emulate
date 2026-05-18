@@ -4,6 +4,8 @@ import { connectionRoutes } from "./routes/connections.js";
 import { directHubspotRoutes } from "./routes/direct-hubspot.js";
 import { directHubspotCrmRoutes } from "./routes/direct-hubspot-crm.js";
 import { directSalesforceRoutes } from "./routes/direct-salesforce.js";
+import { directXeroRoutes } from "./routes/direct-xero.js";
+import { directQuickbooksRoutes } from "./routes/direct-quickbooks.js";
 import { proxyRoutes } from "./routes/proxy.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { inspectorRoutes } from "./routes/inspector.js";
@@ -15,7 +17,14 @@ import type { NangoConnection, NangoConnectionSeed } from "./types.js";
 export type { NangoStoreFacade } from "./store.js";
 export { getNangoStore } from "./store.js";
 export type { NangoConnection, NangoConnectionSeed } from "./types.js";
-export { buildSyncWebhook, buildForwardWebhook, signBody, dispatchNangoWebhook } from "./webhooks.js";
+export {
+  buildSyncWebhook,
+  buildForwardWebhook,
+  signBody,
+  signBodyBase64,
+  dispatchNangoWebhook,
+  dispatchProviderWebhook,
+} from "./webhooks.js";
 
 export interface NangoSeedConfig {
   connections?: NangoConnectionSeed[];
@@ -134,6 +143,8 @@ export const nangoPlugin: ServicePlugin = {
     directHubspotRoutes(app, store);
     directHubspotCrmRoutes(app, store);
     directSalesforceRoutes(app, store);
+    directXeroRoutes(app, store);
+    directQuickbooksRoutes(app, store);
   },
 
   seed(_store: Store, _baseUrl: string): void {

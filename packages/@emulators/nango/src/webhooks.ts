@@ -30,7 +30,7 @@ export interface WebhookSettings {
 
 export interface NangoWebhookDelivery {
   id: number;
-  event: "sync" | "forward" | "auth";
+  event: "sync" | "forward" | "auth" | "provider";
   url: string;
   status_code: number | null;
   success: boolean;
@@ -42,6 +42,15 @@ export interface NangoWebhookDelivery {
 /** Hex HMAC-SHA256 of `body` keyed by `secret` — Nango's signature scheme. */
 export function signBody(secret: string, body: string): string {
   return createHmac("sha256", secret).update(body).digest("hex");
+}
+
+/**
+ * Base64 HMAC-SHA256 of `body` keyed by `secret` — the scheme both Xero
+ * (`x-xero-signature`) and QuickBooks (`intuit-signature`) use to sign the
+ * webhooks they POST to your destination.
+ */
+export function signBodyBase64(secret: string, body: string): string {
+  return createHmac("sha256", secret).update(body).digest("base64");
 }
 
 export function getWebhookSettings(store: Store): WebhookSettings {
@@ -149,6 +158,57 @@ export async function dispatchNangoWebhook(
         "Content-Type": "application/json",
         "X-Nango-Webhook-Type": event,
         ...(signature ? { "X-Nango-Signature": signature } : {}),
+      },
+      body,
+      signal: AbortSignal.timeout(10000),
+    });
+    delivery.status_code = res.status;
+    delivery.success = res.ok;
+  } catch {
+    delivery.success = false;
+  }
+
+  recordDelivery(store, delivery);
+}
+
+/**
+ * Deliver a *provider-native* webhook to the configured destination — the
+ * exact payload + signature scheme the real provider (Xero, QuickBooks) puts
+ * on the wire, not the Nango envelope. This is what makes the
+ * "create invoice → provider → webhook to our destination" chain testable
+ * end-to-end against the same `/webhook-settings` URL and delivery log.
+ *
+ * Signature is base64 HMAC-SHA256 of the exact body keyed by the registered
+ * webhook secret, sent under the provider's own header name. Awaited
+ * (deterministic for tests); no-op + no recorded delivery when no URL is set.
+ */
+export async function dispatchProviderWebhook(
+  store: Store,
+  opts: { signatureHeader: string; payload: unknown },
+): Promise<void> {
+  const settings = getWebhookSettings(store);
+  if (!settings.url) return;
+
+  const body = JSON.stringify(opts.payload);
+  const signature = settings.secret ? signBodyBase64(settings.secret, body) : null;
+
+  const delivery: NangoWebhookDelivery = {
+    id: getDeliveries(store).length + 1,
+    event: "provider",
+    url: settings.url,
+    status_code: null,
+    success: false,
+    signature,
+    payload: opts.payload,
+    delivered_at: new Date().toISOString(),
+  };
+
+  try {
+    const res = await fetch(settings.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(signature ? { [opts.signatureHeader]: signature } : {}),
       },
       body,
       signal: AbortSignal.timeout(10000),
