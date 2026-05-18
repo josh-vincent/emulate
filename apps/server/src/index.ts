@@ -8,6 +8,7 @@ import { loadConfig } from "./config.js";
 import { expandUnifiedUsers } from "./seed/users.js";
 import { buildServiceApps, mountDispatcher, type ServiceName } from "./dispatcher.js";
 import { createAdminRouter } from "./admin.js";
+import { createInspectorRouter } from "./inspector.js";
 
 async function main() {
   const port = Number.parseInt(process.env.PORT ?? "4000", 10);
@@ -44,10 +45,12 @@ async function main() {
       service: "emulate-server",
       services: [...apps.keys()],
       users: tokens.length,
+      inspector: `${baseUrl}/_inspector`,
       docs: "https://emulate.dev",
     }),
   );
 
+  parent.route("/", createInspectorRouter({ apps, baseUrl }));
   parent.route("/", createAdminRouter({ apps, config, tokens, baseUrl }));
   mountDispatcher(parent, apps);
 

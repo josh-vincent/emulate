@@ -13,7 +13,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "Invoice",
-      collectionPath: "/invoices",
+      collectionPath: "/accounting/account/ACME/invoices/invoices",
       idField: "id",
       rows: [
         {

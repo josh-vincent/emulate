@@ -11,7 +11,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "Card",
-      collectionPath: "/c/H0TZyzbK",
+      collectionPath: "/1/cards",
       idField: "id",
       rows: [
         {
@@ -41,7 +41,7 @@ export const spec: NativeSpec = {
     },
     {
       model: "Board",
-      collectionPath: "/b/abc123",
+      collectionPath: "/1/boards",
       idField: "id",
       rows: [
         {

@@ -11,7 +11,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "Opportunity",
-      collectionPath: "/opportunitys",
+      collectionPath: "/v1/opportunities",
       idField: "id",
       rows: [
         {

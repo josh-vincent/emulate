@@ -130,6 +130,21 @@ export function makeNativePlugin(spec: NativeSpec): {
     register(app: Hono<AppEnv>, store: Store, _webhooks: WebhookDispatcher, _baseUrl: string, _tokenMap?: TokenMap) {
       app.get("/health", (c) => c.json({ ok: true, provider: spec.name, native: true }));
 
+      // Discovery: model → native collection path + live row count. Powers the
+      // server's provider-browser inspector; harmless for direct consumers.
+      app.get("/_models", (c) =>
+        c.json({
+          provider: spec.name,
+          tokenPath,
+          models: spec.models.map((m) => ({
+            model: m.model,
+            collectionPath: m.collectionPath,
+            idField: m.idField,
+            count: bucket(store, spec.name, m.model).size,
+          })),
+        }),
+      );
+
       // OAuth2 token endpoint — every grant succeeds, returns a bearer token.
       app.post(tokenPath, async (c) => {
         const params = new URLSearchParams(await c.req.text().catch(() => ""));

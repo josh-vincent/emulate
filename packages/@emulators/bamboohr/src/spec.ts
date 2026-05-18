@@ -13,7 +13,7 @@ export const spec: NativeSpec = {
   models: [
     {
       model: "Employee",
-      collectionPath: "/employees",
+      collectionPath: "/api/v1/employees",
       idField: "id",
       rows: [
         {
