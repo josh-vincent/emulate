@@ -1,0 +1,99 @@
+import { describe, it, expect } from "vitest";
+import { generate } from "../generators.js";
+
+// Generators must emit records shaped like each provider's real API record so
+// the same code paths an SDK consumer runs against production also run here.
+// Deterministic in `seq` so tests + replays are reproducible.
+
+const NOW = new Date("2026-05-16T09:00:00.000Z");
+
+describe("generate — sync record providers", () => {
+  it("gmail: INBOX message with Subject/From headers + numeric internalDate", () => {
+    const t = generate("gmail", 7, NOW);
+    expect(t.kind).toBe("sync");
+    if (t.kind !== "sync") throw new Error("unreachable");
+    expect(t.model).toBe("messages");
+    const r = t.record as Record<string, any>;
+    expect(typeof r.id).toBe("string");
+    expect(r.id).toContain("7");
+    expect(r.labelIds).toContain("INBOX");
+    expect(String(Number(r.internalDate))).toBe(r.internalDate); // string of epoch ms
+    const headers = r.payload.headers as { name: string; value: string }[];
+    expect(headers.find((h) => h.name === "Subject")).toBeTruthy();
+    expect(headers.find((h) => h.name === "From")).toBeTruthy();
+  });
+
+  it("graph-mail: Graph message envelope (from.emailAddress, isRead:false)", () => {
+    const t = generate("graph-mail", 1, NOW);
+    if (t.kind !== "sync") throw new Error("unreachable");
+    expect(t.model).toBe("messages");
+    const r = t.record as Record<string, any>;
+    expect(r.from.emailAddress.address).toMatch(/@/);
+    expect(r.isRead).toBe(false);
+    expect(r.receivedDateTime).toBe(NOW.toISOString());
+  });
+
+  it("teams: chatMessage with body.contentType + from.user.displayName", () => {
+    const t = generate("teams", 2, NOW);
+    if (t.kind !== "sync") throw new Error("unreachable");
+    expect(t.model).toBe("messages");
+    const r = t.record as Record<string, any>;
+    expect(r.messageType).toBe("message");
+    expect(r.body.contentType).toBe("html");
+    expect(typeof r.from.user.displayName).toBe("string");
+  });
+
+  it("drive: drive#file with name + mimeType + modifiedTime", () => {
+    const t = generate("drive", 3, NOW);
+    if (t.kind !== "sync") throw new Error("unreachable");
+    expect(t.model).toBe("files");
+    const r = t.record as Record<string, any>;
+    expect(r.kind).toBe("drive#file");
+    expect(typeof r.name).toBe("string");
+    expect(typeof r.mimeType).toBe("string");
+    expect(r.modifiedTime).toBe(NOW.toISOString());
+  });
+
+  it("calendar: confirmed event with start/end dateTime", () => {
+    const t = generate("calendar", 4, NOW);
+    if (t.kind !== "sync") throw new Error("unreachable");
+    expect(t.model).toBe("events");
+    const r = t.record as Record<string, any>;
+    expect(r.status).toBe("confirmed");
+    expect(typeof r.start.dateTime).toBe("string");
+    expect(new Date(r.end.dateTime).getTime()).toBeGreaterThan(new Date(r.start.dateTime).getTime());
+  });
+});
+
+describe("generate — forward (whatsapp inbound)", () => {
+  it("emits the Meta whatsapp_business_account envelope", () => {
+    const t = generate("whatsapp", 5, NOW);
+    expect(t.kind).toBe("forward");
+    if (t.kind !== "forward") throw new Error("unreachable");
+    const p = t.payload as Record<string, any>;
+    expect(p.object).toBe("whatsapp_business_account");
+    const change = p.entry[0].changes[0];
+    expect(change.field).toBe("messages");
+    expect(change.value.messaging_product).toBe("whatsapp");
+    const msg = change.value.messages[0];
+    expect(msg.type).toBe("text");
+    expect(typeof msg.text.body).toBe("string");
+    expect(typeof msg.from).toBe("string");
+  });
+});
+
+describe("generate — determinism", () => {
+  it("same seq → same id; different seq → different id", () => {
+    const a = generate("gmail", 11, NOW);
+    const b = generate("gmail", 11, NOW);
+    const c = generate("gmail", 12, NOW);
+    if (a.kind !== "sync" || b.kind !== "sync" || c.kind !== "sync") throw new Error("unreachable");
+    expect((a.record as any).id).toBe((b.record as any).id);
+    expect((a.record as any).id).not.toBe((c.record as any).id);
+  });
+
+  it("throws on a provider it cannot generate for", () => {
+    // @ts-expect-error — exercising the runtime guard
+    expect(() => generate("pager", 1, NOW)).toThrow(/provider/i);
+  });
+});

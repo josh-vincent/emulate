@@ -123,4 +123,23 @@ export function connectionRoutes(app: Hono<AppEnv>, ns: NangoStoreFacade): void 
   };
   app.get("/records", recordsHandler);
   app.get("/records/", recordsHandler);
+
+  // POST /connections/:connectionId/records/:model — append rows onto a live
+  // model (not a real Nango endpoint; the emulator's hook for streaming new
+  // activity in — an email landing, a Teams message arriving). `records` may
+  // be an array or a single object. Idempotency is the caller's concern.
+  app.post("/connections/:connectionId/records/:model", async (c) => {
+    const connectionId = c.req.param("connectionId");
+    const model = c.req.param("model");
+    if (!ns.getConnection(connectionId)) {
+      return c.json({ error: "Connection not found", connection_id: connectionId }, 404);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as { records?: unknown };
+    const rows = (Array.isArray(body.records) ? body.records : body.records != null ? [body.records] : []) as Record<
+      string,
+      unknown
+    >[];
+    const total = ns.appendRecords(connectionId, model, rows);
+    return c.json({ model, appended: rows.length, total });
+  });
 }
