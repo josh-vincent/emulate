@@ -29,6 +29,9 @@ pnpm --filter api-emulators-quickstart nango-providers
 # The three 3-month simulations (full route coverage, assertion-gated)
 pnpm --filter api-emulators-quickstart sims
 
+# Realtime streaming — live events from one and many providers
+pnpm --filter api-emulators-quickstart realtime-stream
+
 # Everything
 pnpm --filter api-emulators-quickstart all
 ```
@@ -93,8 +96,24 @@ where Slack/Gmail/Jira/Salesforce records link into Google Drive files (images
 and proposal/report docs) and Jira issues into resolving GitHub PRs — every
 cross-reference is resolved against the target provider's real records.
 
-For **live activity streaming** (gmail / teams / drive / calendar / whatsapp
-arriving in real time) see `emulate-sim` and `inbox-stream.yaml` in
+## Realtime streaming
+
+`realtime-stream` drives the published [`@emulators/simulator`](../../packages/@emulators/simulator/)
+`Simulator` against an in-process Nango emulator (injected `fetch` →
+`emu.app.request`, zero network), proving the *moving* picture — new records
+arriving over time exactly as a real connector feeds them. It is fully
+config-driven by the scenario YAML in [`scenarios/`](./scenarios):
+
+| Segment | Scenario | Proves |
+| --- | --- | --- |
+| **A — one, realtime** | `single-gmail.yaml` | One Gmail inbox dripping under the **real wall clock**; each message printed as it lands, then `GET /records` confirms it's queryable |
+| **B — many, one run** | `all-streams.yaml` | All **6 providers at once** (5 `sync` + WhatsApp `forward`) under a virtual clock; every stream asserted to deliver exactly its cap and every record/webhook to resolve |
+| **C — different time frame** | `quarter-drip.yaml` | A slow drip whose injected clock advances **~a quarter**; the streamed records' own timestamps are asserted to span ≥ 60 days — the time window is configurable per scenario |
+
+Each scenario also runs unchanged against a real deployment via the published
+CLI: `emulate-sim run scenarios/all-streams.yaml --base http://nango.localhost:1355`.
+
+For the package's own example see `emulate-sim` and `inbox-stream.yaml` in
 [`../../packages/@emulators/simulator/`](../../packages/@emulators/simulator/).
 
 ## How it works
@@ -117,5 +136,10 @@ src/
   uptick-sim.ts             Uptick 3-month sim, 24/24 route coverage
   simpro-sim.ts             Simpro 3-month sim, 372/372 route coverage
   simpro-routes.generated.ts  Auto-generated simpro route table (driver input)
-  nango-providers-sim.ts    Nango 4-provider 3-month sim, 18/18 route coverage
+  nango-providers-sim.ts    Nango 10-connection cross-provider 3-month sim
+  realtime-stream.ts        Realtime streaming (one + many providers) via @emulators/simulator
+scenarios/
+  single-gmail.yaml         One stream, realtime cadence
+  all-streams.yaml          All 6 providers at once, capped + deterministic
+  quarter-drip.yaml         Slow drip spanning a simulated quarter
 ```

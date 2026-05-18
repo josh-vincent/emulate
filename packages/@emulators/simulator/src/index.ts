@@ -8,4 +8,4 @@
 
 export { loadScenario, type Scenario, type Stream } from "./scenario.js";
 export { generate, type GeneratedTick } from "./generators.js";
-export { Simulator, type SimulatorOptions } from "./engine.js";
+export { Simulator, type SimulatorOptions, type TimerLike } from "./engine.js";
