@@ -9,12 +9,15 @@
 // adapter only touches this file.
 import { SERVICE_REGISTRY as BUILTIN_REGISTRY, SERVICE_NAMES as BUILTIN_NAMES } from "emulate";
 import type { ServiceEntry, ServiceName as BuiltinServiceName } from "emulate";
+// Generated: every Nango-proxied provider, also available standalone direct.
+import { DIRECT_REGISTRY, DIRECT_NAMES } from "./direct-emulators.js";
 
 const CUSTOM_NAME_LIST = ["workos", "nango", "simpro", "uptick"] as const;
 export type CustomServiceName = (typeof CUSTOM_NAME_LIST)[number];
+export type DirectServiceName = (typeof DIRECT_NAMES)[number];
 
-/** Built-in upstream services plus our private adapters. */
-export type ServiceName = BuiltinServiceName | CustomServiceName;
+/** Built-in upstream services, our private adapters, and the direct emulators. */
+export type ServiceName = BuiltinServiceName | CustomServiceName | DirectServiceName;
 
 const CUSTOM_REGISTRY: Record<CustomServiceName, ServiceEntry> = {
   simpro: {
@@ -251,6 +254,7 @@ const CUSTOM_REGISTRY: Record<CustomServiceName, ServiceEntry> = {
 export const SERVICE_REGISTRY: Record<ServiceName, ServiceEntry> = {
   ...(BUILTIN_REGISTRY as Record<ServiceName, ServiceEntry>),
   ...CUSTOM_REGISTRY,
+  ...(DIRECT_REGISTRY as Record<ServiceName, ServiceEntry>),
 };
 
-export const SERVICE_NAMES: readonly ServiceName[] = [...BUILTIN_NAMES, ...CUSTOM_NAME_LIST];
+export const SERVICE_NAMES: readonly ServiceName[] = [...BUILTIN_NAMES, ...CUSTOM_NAME_LIST, ...DIRECT_NAMES];
