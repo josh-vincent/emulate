@@ -1634,6 +1634,38 @@ export function graphRoutes({ app, store, baseUrl }: RouteContext): void {
     return c.json(item, 201);
   });
 
+  // Intercept path-based drive addressing: GET /v1.0/me/drive/root:/{path}
+  // Registered before the literal routes since Hono can't match literal colons.
+  app.use("/v1.0/me/drive/*", async (c, next) => {
+    if (c.req.method !== "GET") return next();
+    const match = c.req.path.match(/\/drive\/root:\/(.+)$/);
+    if (!match) return next();
+    if (!requireAuth(c)) {
+      return c.json(graphError("InvalidAuthenticationToken", "Authentication required."), 401);
+    }
+    const segments = match[1]
+      .split("/")
+      .map((s) => decodeURIComponent(s))
+      .filter(Boolean);
+    const items = getDriveItems(store);
+    // Strict walk from root, then fall back to a global name match on the leaf.
+    let parentId = "root";
+    let current: GraphDriveItem | undefined;
+    for (const seg of segments) {
+      current = items.find((i) => i.parentReference?.id === parentId && i.name === seg);
+      if (!current) break;
+      parentId = current.id;
+    }
+    if (!current) {
+      const leaf = segments[segments.length - 1];
+      current = items.find((i) => i.name === leaf);
+    }
+    if (!current) {
+      return c.json(graphError("itemNotFound", "The resource could not be found."), 404);
+    }
+    return c.json(current);
+  });
+
   // ========== OUTLOOK MAIL ==========
 
   app.get("/v1.0/me/mailFolders", (c) => {
@@ -2759,6 +2791,206 @@ export function graphRoutes({ app, store, baseUrl }: RouteContext): void {
     store.setData(STORE_KEY_DRIVE_CONTENT, content);
     debug("microsoft.graph", `[Graph] Deleted drive item: ${itemId}`);
     return c.body(null, 204);
+  });
+
+  const SYSTEM_OWNER: GraphIdentity = { id: "system", displayName: "System" };
+
+  // GET /v1.0/me/drive/root — the synthetic root DriveItem (a folder)
+  app.get("/v1.0/me/drive/root", (c) => {
+    if (!requireAuth(c)) {
+      return c.json(graphError("InvalidAuthenticationToken", "Authentication required."), 401);
+    }
+    const nowIso = new Date().toISOString();
+    const childCount = getDriveItems(store).filter((i) => i.parentReference?.id === "root").length;
+    return c.json(
+      buildDriveItem(
+        {
+          id: "root",
+          name: "root",
+          size: 0,
+          webUrl: `${baseUrl}/drive/root`,
+          createdDateTime: nowIso,
+          lastModifiedDateTime: nowIso,
+          folder: { childCount },
+        },
+        SYSTEM_OWNER,
+      ),
+    );
+  });
+
+  // GET /v1.0/me/drive/root/delta — all items plus a deltaLink
+  app.get("/v1.0/me/drive/root/delta", (c) => {
+    if (!requireAuth(c)) {
+      return c.json(graphError("InvalidAuthenticationToken", "Authentication required."), 401);
+    }
+    const token = c.req.query("token") ?? randomBytes(8).toString("hex");
+    return c.json({
+      "@odata.context": `${baseUrl}/v1.0/$metadata#driveItems`,
+      value: getDriveItems(store),
+      "@odata.deltaLink": `${baseUrl}/v1.0/me/drive/root/delta?token=${token}`,
+    });
+  });
+
+  // GET /v1.0/me/drive/recent — recently used files
+  app.get("/v1.0/me/drive/recent", (c) => {
+    if (!requireAuth(c)) {
+      return c.json(graphError("InvalidAuthenticationToken", "Authentication required."), 401);
+    }
+    const files = getDriveItems(store).filter((i) => !i.folder);
+    return c.json({
+      "@odata.context": `${baseUrl}/v1.0/$metadata#driveItems`,
+      value: files,
+    });
+  });
+
+  // GET /v1.0/me/drive/sharedWithMe — items shared with the signed-in user
+  app.get("/v1.0/me/drive/sharedWithMe", (c) => {
+    if (!requireAuth(c)) {
+      return c.json(graphError("InvalidAuthenticationToken", "Authentication required."), 401);
+    }
+    return c.json({
+      "@odata.context": `${baseUrl}/v1.0/$metadata#driveItems`,
+      value: [],
+    });
+  });
+
+  // GET /v1.0/me/drive/items/:itemId/thumbnails — thumbnail set
+  app.get("/v1.0/me/drive/items/:itemId/thumbnails", (c) => {
+    if (!requireAuth(c)) {
+      return c.json(graphError("InvalidAuthenticationToken", "Authentication required."), 401);
+    }
+    const itemId = c.req.param("itemId");
+    const item = getDriveItems(store).find((i) => i.id === itemId);
+    if (!item) {
+      return c.json(graphError("itemNotFound", "The resource could not be found."), 404);
+    }
+    const thumbUrl = (size: string) => `${baseUrl}/drive/items/${itemId}/thumbnails/0/${size}/content`;
+    return c.json({
+      "@odata.context": `${baseUrl}/v1.0/$metadata#driveItems('${itemId}')/thumbnails`,
+      value: [
+        {
+          id: "0",
+          small: { width: 48, height: 48, url: thumbUrl("small") },
+          medium: { width: 176, height: 176, url: thumbUrl("medium") },
+          large: { width: 800, height: 800, url: thumbUrl("large") },
+        },
+      ],
+    });
+  });
+
+  // POST /v1.0/me/drive/items/:itemId/children — create a child in a folder
+  app.post("/v1.0/me/drive/items/:itemId/children", async (c) => {
+    if (!requireAuth(c)) {
+      return c.json(graphError("InvalidAuthenticationToken", "Authentication required."), 401);
+    }
+    const parentId = c.req.param("itemId");
+    const body = (await c.req.json()) as {
+      name: string;
+      folder?: Record<string, unknown>;
+      file?: Record<string, unknown>;
+    };
+    const nowIso = new Date().toISOString();
+    const newItem = buildDriveItem(
+      {
+        id: `item-${randomBytes(6).toString("hex")}`,
+        name: body.name,
+        size: 0,
+        webUrl: `${baseUrl}/drive/items/${parentId}/${body.name}`,
+        createdDateTime: nowIso,
+        lastModifiedDateTime: nowIso,
+        parentReference: { id: parentId, driveType: "business", path: `/drive/items/${parentId}` },
+        ...(body.folder ? { folder: { childCount: 0 } } : {}),
+      },
+      SYSTEM_OWNER,
+    );
+    const items = getDriveItems(store);
+    items.push(newItem);
+    store.setData(STORE_KEY_DRIVE_ITEMS, items);
+    debug("microsoft.graph", `[Graph] Created child of ${parentId}: ${newItem.name}`);
+    return c.json(newItem, 201);
+  });
+
+  // POST /v1.0/me/drive/items/:itemId/copy — async copy (202 + Location monitor)
+  app.post("/v1.0/me/drive/items/:itemId/copy", async (c) => {
+    if (!requireAuth(c)) {
+      return c.json(graphError("InvalidAuthenticationToken", "Authentication required."), 401);
+    }
+    const sourceId = c.req.param("itemId");
+    const items = getDriveItems(store);
+    const source = items.find((i) => i.id === sourceId);
+    if (!source) {
+      return c.json(graphError("itemNotFound", "The resource could not be found."), 404);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: string;
+      parentReference?: { id: string };
+    };
+    const copyId = `item-${randomBytes(6).toString("hex")}`;
+    const nowIso = new Date().toISOString();
+    const copy = buildDriveItem(
+      {
+        ...source,
+        id: copyId,
+        name: body.name ?? source.name,
+        createdDateTime: nowIso,
+        lastModifiedDateTime: nowIso,
+        parentReference: body.parentReference
+          ? { id: body.parentReference.id, driveType: "business", path: `/drive/items/${body.parentReference.id}` }
+          : source.parentReference,
+      },
+      SYSTEM_OWNER,
+    );
+    items.push(copy);
+    store.setData(STORE_KEY_DRIVE_ITEMS, items);
+    const content = getDriveContent(store);
+    if (content[sourceId] !== undefined) {
+      content[copyId] = content[sourceId];
+      store.setData(STORE_KEY_DRIVE_CONTENT, content);
+    }
+    debug("microsoft.graph", `[Graph] Copied ${sourceId} -> ${copyId}`);
+    c.header("Location", `${baseUrl}/v1.0/me/drive/items/${sourceId}/copy/monitor/${copyId}`);
+    return c.body(null, 202);
+  });
+
+  // POST /v1.0/me/drive/items/:itemId/createLink — create a sharing link
+  app.post("/v1.0/me/drive/items/:itemId/createLink", async (c) => {
+    if (!requireAuth(c)) {
+      return c.json(graphError("InvalidAuthenticationToken", "Authentication required."), 401);
+    }
+    const itemId = c.req.param("itemId");
+    const item = getDriveItems(store).find((i) => i.id === itemId);
+    if (!item) {
+      return c.json(graphError("itemNotFound", "The resource could not be found."), 404);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as { type?: string; scope?: string };
+    const type = body.type ?? "view";
+    const scope = body.scope ?? "anonymous";
+    return c.json(
+      {
+        id: `perm-${randomBytes(6).toString("hex")}`,
+        roles: [type === "edit" ? "write" : "read"],
+        link: {
+          type,
+          scope,
+          webUrl: `${baseUrl}/personal/share/${itemId}?e=${randomBytes(4).toString("hex")}`,
+          preventsDownload: false,
+        },
+      },
+      201,
+    );
+  });
+
+  // GET /v1.0/drives/:driveId/items/:itemId — drive-scoped addressing
+  app.get("/v1.0/drives/:driveId/items/:itemId", (c) => {
+    if (!requireAuth(c)) {
+      return c.json(graphError("InvalidAuthenticationToken", "Authentication required."), 401);
+    }
+    const itemId = c.req.param("itemId");
+    const item = getDriveItems(store).find((i) => i.id === itemId);
+    if (!item) {
+      return c.json(graphError("itemNotFound", "The resource could not be found."), 404);
+    }
+    return c.json(item);
   });
 
   // ========== CONTACTS ==========
