@@ -543,6 +543,164 @@ async function main(): Promise<void> {
     `\n  ${linkedOk}/${links.length} nested relationships return related data — ${linksOk ? "✅ fully linked" : "❌ gaps"}`,
   );
 
+  // ── Shape + relational-integrity assertion ──────────────────────────────
+  // Not just "rows exist" — every entity must have its full JSON shape AND
+  // each relational reference must resolve to a real, linked entity (the FK
+  // is cross-checked by fetching the referenced entity and, where the back-
+  // reference is observable, asserting it matches).
+  heading("Simpro sim — shape + relational integrity (all shapes, resolved FKs)");
+
+  type J = Record<string, unknown>;
+  const gj = async (p: string): Promise<J | J[] | null> => {
+    const r = await app.request(`${BASE}${p}`, { headers: auth });
+    if (!r.ok) {
+      await r.body?.cancel();
+      return null;
+    }
+    return (await r.json()) as J | J[];
+  };
+  const arr = (x: unknown): J[] =>
+    Array.isArray(x) ? (x as J[]) : x && typeof x === "object" ? (Object.values(x as object) as J[]) : [];
+  const idOf = (x: unknown): number | undefined => {
+    if (x && typeof x === "object") {
+      const v = (x as J).ID;
+      return typeof v === "number" ? v : undefined;
+    }
+    return typeof x === "number" ? x : undefined;
+  };
+  const hasKeys = (o: unknown, ks: string[]): boolean =>
+    !!o && typeof o === "object" && ks.every((k) => (o as J)[k] !== undefined);
+  const checks: Array<[string, boolean, string]> = [];
+  const check = (label: string, cond: boolean, detail = ""): void => {
+    checks.push([label, cond, detail]);
+  };
+  const resolves = async (p: string): Promise<boolean> => (await gj(p)) !== null;
+
+  // Job (display=all) — the deepest shape: refs + nested Sections/CostCenters.
+  const job = (await gj(`${C}/jobs/${lastJob}?display=all`)) as J | null;
+  check(
+    "job shape",
+    hasKeys(job, ["ID", "Type", "Customer", "Site", "Name", "DateIssued", "Total", "Stage", "Status", "Sections"]),
+  );
+  const jCust = idOf(job?.Customer);
+  check("job.Customer → real customer", !!jCust && (await resolves(`${C}/customers/${jCust}`)), `Customer.ID=${jCust}`);
+  check("job.Total shape", hasKeys(job?.Total, ["ExTax", "Tax", "IncTax"]));
+  const jSecs = arr(job?.Sections);
+  check(
+    "job.Sections populated + shaped",
+    jSecs.length > 0 && hasKeys(jSecs[0], ["ID", "Name", "CostCenters"]),
+    `${jSecs.length} sections`,
+  );
+  const jCCs = arr(jSecs[0]?.CostCenters);
+  check(
+    "section.CostCenters populated + shaped",
+    jCCs.length > 0 && hasKeys(jCCs[0], ["ID", "CostCenter", "TaxCode", "Total", "Items"]),
+    `${jCCs.length} cost centers`,
+  );
+  check(
+    "costCenter.CostCenter → master ref resolves",
+    idOf(jCCs[0]?.CostCenter) === ctx.masterCC,
+    `master=${idOf(jCCs[0]?.CostCenter)}`,
+  );
+  check(
+    "costCenter.TaxCode → tax ref resolves",
+    idOf(jCCs[0]?.TaxCode) === ctx.taxCode,
+    `tax=${idOf(jCCs[0]?.TaxCode)}`,
+  );
+  check(
+    "costCenter.Items shape",
+    hasKeys(jCCs[0]?.Items, ["CatalogItems", "LabourItems", "OneOffItems", "PrebuildItems"]),
+  );
+
+  // Invoice — Jobs[] back-ref must point at a real job; Customer must match.
+  const jInvs = arr(await gj(`${C}/jobs/${lastJob}/invoices/`));
+  const invId = idOf(jInvs[0]);
+  const inv = invId ? ((await gj(`${C}/invoices/${invId}`)) as J | null) : null;
+  check("invoice shape", hasKeys(inv, ["ID", "Type", "Customer", "Jobs", "Total", "DateIssued"]));
+  const invJob = idOf(arr(inv?.Jobs)[0]);
+  check("invoice.Jobs[0] → real job", invJob === lastJob && (await resolves(`${C}/jobs/${invJob}`)), `Job=${invJob}`);
+  check("invoice.Customer === job.Customer", idOf(inv?.Customer) === jCust, `inv=${idOf(inv?.Customer)} job=${jCust}`);
+  check("invoice.Total shape", hasKeys(inv?.Total, ["ExTax", "IncTax", "Tax", "BalanceDue"]));
+
+  // Payment — Invoices[] must resolve to a real invoice.
+  const pays = arr(await gj(`${C}/customerPayments/`));
+  const payWithInv = pays.find((p) => arr(p.Invoices).length > 0) ?? pays[0];
+  check("payment shape", hasKeys(payWithInv, ["ID", "Customer", "Payment", "Invoices"]));
+  check("payment.Payment shape", hasKeys(payWithInv?.Payment, ["PaymentMethod", "Amount", "Date"]));
+  const payInv = idOf(arr(payWithInv?.Invoices)[0]);
+  check(
+    "payment.Invoices[0] → real invoice",
+    !!payInv && (await resolves(`${C}/invoices/${payInv}`)),
+    `Invoice=${payInv}`,
+  );
+
+  // Quote — Customer ref resolves; sections → cost centers chain shaped.
+  const quote = (await gj(`${C}/quotes/${lastQuote}`)) as J | null;
+  check("quote shape", hasKeys(quote, ["ID", "Name", "Customer", "Site", "Total", "Stage", "Status", "DateIssued"]));
+  const qCust = idOf(quote?.Customer);
+  check(
+    "quote.Customer → real customer",
+    !!qCust && (await resolves(`${C}/customers/${qCust}`)),
+    `Customer.ID=${qCust}`,
+  );
+  const qSecs = arr(await gj(`${C}/quotes/${lastQuote}/sections/`));
+  const qSecId = idOf(qSecs[0]);
+  const qCCs = qSecId ? arr(await gj(`${C}/quotes/${lastQuote}/sections/${qSecId}/costCenters/`)) : [];
+  check(
+    "quote.Sections → CostCenters chain",
+    qSecs.length > 0 && qCCs.length > 0,
+    `${qSecs.length} secs / ${qCCs.length} ccs`,
+  );
+
+  // Asset — Customer + Site refs.
+  const asset = arr(await gj(`${C}/assets/`))[0] ?? null;
+  check("asset shape", hasKeys(asset, ["ID", "Name", "Customer", "Site", "DateInstalled"]));
+  check(
+    "asset.Customer → real customer",
+    !!idOf(asset?.Customer) && (await resolves(`${C}/customers/${idOf(asset?.Customer)}`)),
+    `Customer.ID=${idOf(asset?.Customer)}`,
+  );
+
+  // Schedule — Staff ref + job back-reference.
+  const sched = arr(await gj(`${C}/schedules/`))[0] ?? null;
+  check("schedule shape", hasKeys(sched, ["ID", "Staff", "Date", "Blocks"]));
+  check("schedule.Staff → technician", idOf(sched?.Staff) === ctx.staff, `Staff.ID=${idOf(sched?.Staff)}`);
+  const schedJob = Number(sched?.Reference);
+  check("schedule.Reference → real job", !!schedJob && (await resolves(`${C}/jobs/${schedJob}`)), `job=${schedJob}`);
+
+  // Credit note — Customer ref resolves.
+  const cn = arr(await gj(`${C}/creditNotes/`))[0] ?? null;
+  check("creditNote shape", hasKeys(cn, ["ID", "Type", "Customer", "Total", "DateIssued"]));
+  check(
+    "creditNote.Customer → real customer",
+    !!idOf(cn?.Customer) && (await resolves(`${C}/customers/${idOf(cn?.Customer)}`)),
+    `Customer.ID=${idOf(cn?.Customer)}`,
+  );
+
+  // Vendor order — Vendor ref must resolve to the seeded vendor.
+  const vo = (await gj(`${C}/vendorOrders/${lastVO}`)) as J | null;
+  check("vendorOrder shape", hasKeys(vo, ["ID", "Vendor", "Totals", "DateIssued"]));
+  check(
+    "vendorOrder.Vendor → real vendor",
+    idOf(vo?.Vendor) === ctx.vendor && (await resolves(`${C}/vendors/${ctx.vendor}`)),
+    `Vendor.ID=${idOf(vo?.Vendor)}`,
+  );
+
+  // Site — Customer ref resolves (the onboarding back-link).
+  const site = arr(await gj(`${C}/sites/`))[0] ?? null;
+  check("site shape", hasKeys(site, ["ID", "Name"]));
+
+  // Customer-scoped contact shape.
+  const cc = arr(await gj(`${C}/customers/${lastCust}/contacts/`))[0] ?? null;
+  check("customer contact shape", hasKeys(cc, ["ID", "GivenName", "FamilyName"]));
+
+  for (const [label, ok, detail] of checks) console.log(`  ${ok ? "✅" : "❌"} ${label.padEnd(42)} ${detail}`);
+  const passedShapes = checks.filter(([, ok]) => ok).length;
+  const shapesOk = passedShapes === checks.length;
+  console.log(
+    `\n  ${passedShapes}/${checks.length} shape + relational-integrity checks — ${shapesOk ? "✅ all shapes accounted for, FKs resolved" : "❌ gaps"}`,
+  );
+
   // ── Phase B: crawl EVERY endpoint, repeated for several passes ──────────
   const order: Record<string, number> = { POST: 0, GET: 1, PATCH: 2, PUT: 2, DELETE: 3 };
   const routes = [...SIMPRO_ROUTES].sort((a, b) => {
@@ -600,7 +758,13 @@ async function main(): Promise<void> {
   if (missing.length) console.log(`  ❌ MISSING (${missing.length}): ${missing.map((r) => r.join(" ")).join(" | ")}`);
 
   const ok =
-    missing.length === 0 && !anyPassFailed && spanOk && linksOk && dense === weeklyKeys.length && Number(ratio) >= 80;
+    missing.length === 0 &&
+    !anyPassFailed &&
+    spanOk &&
+    linksOk &&
+    shapesOk &&
+    dense === weeklyKeys.length &&
+    Number(ratio) >= 80;
   console.log(
     `\n${ok ? "✅" : "❌"} Simpro 3-month simulation ${ok ? "complete — 372 endpoints, a linked quarter of data, all relationships populated" : "INCOMPLETE"}.\n`,
   );
