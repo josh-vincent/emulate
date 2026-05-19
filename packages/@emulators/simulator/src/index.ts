@@ -6,6 +6,13 @@
 // forward webhooks the emulator already speaks. Nothing here imports the
 // emulator — it is a pure HTTP client, so it drives any deployment.
 
-export { loadScenario, type Scenario, type Stream } from "./scenario.js";
-export { generate, type GeneratedTick } from "./generators.js";
+export { loadScenario, type Scenario, type Stream, SYNC_PROVIDERS, FORWARD_PROVIDERS } from "./scenario.js";
+export {
+  generate,
+  registerGenerator,
+  hasGenerator,
+  generatorProviders,
+  type GeneratedTick,
+  type GeneratorFn,
+} from "./generators.js";
 export { Simulator, type SimulatorOptions, type TimerLike } from "./engine.js";

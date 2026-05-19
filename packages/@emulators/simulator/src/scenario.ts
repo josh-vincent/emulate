@@ -1,17 +1,23 @@
 import { parse as parseYaml } from "yaml";
+import { hasGenerator, generatorProviders } from "./generators.js";
 
 // A scenario describes *what activity to stream and how fast*. It is the
 // human-editable contract; the engine consumes only the normalised shape
-// produced here, so all validation lives in one place.
+// produced here, so all validation lives in one place. Which providers are
+// valid is whatever the generator registry knows — so adding a provider is a
+// `registerGenerator(...)` call (or a built-in entry), not a scenario-schema
+// change.
 
-/** Providers that emit a record into a synced model (→ "sync" webhook). */
+/**
+ * The original built-in inbox/messaging providers, kept exported for backward
+ * compatibility. Validation no longer depends on these lists — any provider
+ * with a registered generator is accepted (see `generatorProviders()`).
+ */
 export const SYNC_PROVIDERS = ["gmail", "graph-mail", "teams", "drive", "calendar"] as const;
 /** Providers whose own webhook is wrapped + relayed (→ "forward" webhook). */
 export const FORWARD_PROVIDERS = ["whatsapp"] as const;
 
-export type SyncProvider = (typeof SYNC_PROVIDERS)[number];
-export type ForwardProvider = (typeof FORWARD_PROVIDERS)[number];
-export type Provider = SyncProvider | ForwardProvider;
+export type Provider = string;
 
 export interface Stream {
   name: string;
@@ -62,9 +68,8 @@ function normaliseStream(raw: RawStream, i: number): Stream {
   if (kind !== "sync" && kind !== "forward") fail(`${at}: kind must be "sync" or "forward"`);
 
   const provider = raw.provider as Provider;
-  const known = [...SYNC_PROVIDERS, ...FORWARD_PROVIDERS] as readonly string[];
-  if (!provider || !known.includes(provider)) {
-    fail(`${at}: unknown provider "${raw.provider}" (expected one of ${known.join(", ")})`);
+  if (!provider || !hasGenerator(provider)) {
+    fail(`${at}: unknown provider "${raw.provider}" (expected one of ${generatorProviders().join(", ")})`);
   }
 
   if (!raw.connectionId) fail(`${at}: connectionId is required`);

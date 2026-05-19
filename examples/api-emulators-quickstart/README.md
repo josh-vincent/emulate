@@ -103,6 +103,7 @@ contract tests.
 | `simpro-sim`          | ~30 dated jobs (+ schedules/invoices/payments) across 90 days; a generic crawler resolves every `:param` transitively and exercises **all 372** (method, path) endpoints (≥97 % 2xx, 0 × 5xx); **29/29** shape + relational-integrity checks (every entity's full shape + every FK resolved to a real linked record)                                                                                                                                                                                                                                                                                           |
 | `nango-providers-sim` | **10 connections**, 90 days of dated records each. Four (xero, quickbooks, google-drive, onedrive) drive every provider-native `/proxy/*` path; the rest form a **cross-provider graph** — Slack/Gmail/Jira/Salesforce records link into Google Drive by file id + share URL, Jira links into GitHub PRs. **Each connection is independently verified** (resolves through the emulator, records are emulator-served, a live append round-trips back through `GET /records`, ≥75-day span), then a cross-provider integrity phase resolves **all 95** references to real linked records; **18/18** Nango routes |
 | `direct-sim`          | **No Nango layer at all** — 5 emulators (GitHub, Slack, Stripe, Resend, Vercel) each spoken to through their _own_ native API. A 90-day DevOps quarter: 12 weekly cycles of incident → deploy notice → invoice payment → customer mail → service ship, then a third of incidents resolved via PATCH. Every created entity is **round-tripped back through that provider's own GET**; **24/24** native route patterns across 5 providers, **11/11** assertion checks, 0 × non-2xx                                                                                                                               |
+| `business-streams`    | **Phase 2.1 — scenario-declared provider streams, zero simulator source edits.** Xero invoices, Jira issues, Salesforce opportunities, GitHub PRs and Slack messages streamed into a running Nango emulator purely from [`scenarios/business-streams.yaml`](./scenarios/business-streams.yaml) via the open generator registry; every stream's records asserted queryable through `GET /records` and each sync asserted to have fired a webhook delivery |
 | `xero-quickbooks-webhooks` | **Full create → provider → signed webhook → our destination chain**, no Nango envelope. Stands up a real listening socket, registers it via `POST /webhook-settings`, then for **Xero** and **QuickBooks**: OAuth2 token → create invoice through the native write API → the emulator POSTs our destination the provider's _own_ webhook shape (Xero `events[]` under `x-xero-signature`, QuickBooks `eventNotifications[]` under `intuit-signature`), each signed **base64-HMAC-SHA256 re-derived locally and compared byte-for-byte**, then follows the webhook's resource pointer back to GET the new invoice. **11/11** assertions; both deliveries logged in `/webhook-deliveries` |
 
 ## Nango provider library
@@ -217,9 +218,11 @@ src/
   direct-sim.ts             Direct (no-Nango) 5-provider native-API 3-month sim
   xero-quickbooks-webhooks.ts  Create invoice → Xero/QuickBooks → signed webhook → our destination
   realtime-stream.ts        Realtime streaming (one + many providers) via @emulators/simulator
+  business-streams.ts       Phase 2.1 — Xero/Jira/Salesforce/GitHub/Slack streams, scenario-only
   external-consumer.ts      Separate-process OIDC + refresh + proxy proof over real HTTP
 scenarios/
   single-gmail.yaml         One stream, realtime cadence
-  all-streams.yaml          All 6 providers at once, capped + deterministic
+  all-streams.yaml          All 6 inbox providers at once, capped + deterministic
   quarter-drip.yaml         Slow drip spanning a simulated quarter
+  business-streams.yaml     5 business providers (Xero/Jira/Salesforce/GitHub/Slack)
 ```

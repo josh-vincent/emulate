@@ -30,7 +30,7 @@ YAML or JSON. See [`examples/inbox-stream.yaml`](./examples/inbox-stream.yaml).
 | `base` | Default emulator base URL (CLI `--base` wins). |
 | `durationSec` | Optional global stop. |
 | `streams[].kind` | `sync` (append a record + fire a `sync` webhook) or `forward` (wrap+relay a provider webhook). |
-| `streams[].provider` | `gmail` · `graph-mail` · `teams` · `drive` · `calendar` (sync) · `whatsapp` (forward). |
+| `streams[].provider` | Any provider in the generator registry. Built in: `gmail` · `graph-mail` · `teams` · `drive` · `calendar` · `xero` · `jira` · `salesforce` · `github` · `slack` (sync) · `whatsapp` (forward). Add your own with `registerGenerator(...)` — no scenario-schema change. |
 | `streams[].connectionId` / `providerConfigKey` | Must match a Nango connection the emulator is seeded with. |
 | `streams[].model` | Required for `sync` (the Nango model appended to). |
 | `streams[].environmentUuid` | Required for `forward` (the inbound URL path segment). |
@@ -49,5 +49,24 @@ const done = sim.start(); // resolves on maxCount / duration / sim.stop()
 
 Everything non-deterministic (clock, timer, `fetch`, RNG) is injectable for
 reproducible runs and tests.
+
+### Teaching it a new provider
+
+Generators live in an open registry keyed by provider name, so any
+Nango-seeded provider can be a stream declared purely in a scenario — zero
+package edits:
+
+```ts
+import { registerGenerator, generatorProviders } from "@emulators/simulator";
+
+registerGenerator("acme-crm", (seq, now) => ({
+  kind: "sync",
+  model: "deals",
+  record: { id: `acme-${seq}`, stage: "won", updatedAt: now.toISOString() },
+}));
+
+// scenarios can now use `provider: acme-crm`
+generatorProviders(); // → [..., "acme-crm", ...]
+```
 
 Apache-2.0
