@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import type { RouteContext } from "@emulators/core";
 import {
+  buildIntrospectionResponse,
   escapeHtml,
   escapeAttr,
   renderCardPage,
@@ -684,5 +685,29 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     }
 
     return c.body(null, 200);
+  });
+
+  // ---------- Token introspection (RFC 7662) ----------
+
+  app.post("/oauth2/v2.0/introspect", async (c) => {
+    const contentType = c.req.header("Content-Type") ?? "";
+    const rawText = await c.req.text();
+    let token = "";
+    if (contentType.includes("application/json")) {
+      try {
+        const parsed = JSON.parse(rawText);
+        token = typeof parsed.token === "string" ? parsed.token : "";
+      } catch {
+        token = "";
+      }
+    } else {
+      token = new URLSearchParams(rawText).get("token") ?? "";
+    }
+
+    return c.json(
+      tokenMap
+        ? buildIntrospectionResponse(tokenMap, token, { issuer: `${baseUrl}/${DEFAULT_TENANT_ID}/v2.0` })
+        : { active: false },
+    );
   });
 }

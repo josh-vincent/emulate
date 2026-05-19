@@ -1143,4 +1143,38 @@ describe("Google plugin integration", () => {
     expect(uploadedMediaRes.status).toBe(200);
     expect(Buffer.from(await uploadedMediaRes.arrayBuffer()).toString("utf8")).toBe(uploadedContent);
   });
+
+  it("introspects an issued access token (RFC 7662)", async () => {
+    const authorizeRes = await formRequest(app, "/o/oauth2/v2/auth/callback", {
+      email: "testuser@example.com",
+      redirect_uri: "http://localhost:3000/api/auth/callback/google",
+      scope: "openid email profile",
+      client_id: "emu_google_client_id",
+    });
+    const code = new URL(authorizeRes.headers.get("Location")!).searchParams.get("code")!;
+    const tokenBody = (await (
+      await formRequest(app, "/oauth2/token", {
+        code,
+        grant_type: "authorization_code",
+        redirect_uri: "http://localhost:3000/api/auth/callback/google",
+        client_id: "emu_google_client_id",
+        client_secret: "emu_google_client_secret",
+      })
+    ).json()) as { access_token: string };
+
+    const activeRes = await formRequest(app, "/oauth2/v2/introspect", {
+      token: tokenBody.access_token,
+    });
+    expect(activeRes.status).toBe(200);
+    const active = (await activeRes.json()) as Record<string, unknown>;
+    expect(active.active).toBe(true);
+    expect(active.username).toBe("testuser@example.com");
+    expect(active.iss).toBe(base);
+    expect(typeof active.scope).toBe("string");
+
+    const inactive = (await (
+      await formRequest(app, "/oauth2/v2/introspect", { token: "google_bogus" })
+    ).json()) as Record<string, unknown>;
+    expect(inactive).toEqual({ active: false });
+  });
 });

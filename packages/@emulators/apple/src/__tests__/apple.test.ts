@@ -207,6 +207,43 @@ describe("Apple plugin integration", () => {
     expect(claims.auth_time).toBeDefined();
   });
 
+  it("introspects an issued access token and resolves userinfo (RFC 7662)", async () => {
+    const { code } = await getAuthCode(app);
+    const tokenBody = (await (await exchangeCode(app, code)).json()) as Record<string, string>;
+    const accessToken = tokenBody.access_token;
+
+    const introspectRes = await app.request(`${base}/auth/introspect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: accessToken }).toString(),
+    });
+    expect(introspectRes.status).toBe(200);
+    const introspect = (await introspectRes.json()) as Record<string, unknown>;
+    expect(introspect.active).toBe(true);
+    expect(introspect.username).toBe("testuser@example.com");
+    expect(introspect.iss).toBe(base);
+
+    const inactive = (await (
+      await app.request(`${base}/auth/introspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token: "apple_not_a_real_token" }).toString(),
+      })
+    ).json()) as Record<string, unknown>;
+    expect(inactive).toEqual({ active: false });
+
+    const userinfoRes = await app.request(`${base}/auth/userinfo`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    expect(userinfoRes.status).toBe(200);
+    const userinfo = (await userinfoRes.json()) as Record<string, unknown>;
+    expect(userinfo.email).toBe("testuser@example.com");
+    expect(userinfo.sub).toBeDefined();
+
+    const unauth = await app.request(`${base}/auth/userinfo`);
+    expect(unauth.status).toBe(401);
+  });
+
   // --- Refresh token flow ---
 
   it("exchanges refresh_token for new access_token without new refresh_token", async () => {

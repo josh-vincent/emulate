@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import type { RouteContext } from "@emulators/core";
 import {
+  buildIntrospectionResponse,
   escapeHtml,
   escapeAttr,
   renderCardPage,
@@ -114,6 +115,8 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
       authorization_endpoint: `${baseUrl}/auth/authorize`,
       token_endpoint: `${baseUrl}/auth/token`,
       revocation_endpoint: `${baseUrl}/auth/revoke`,
+      introspection_endpoint: `${baseUrl}/auth/introspect`,
+      userinfo_endpoint: `${baseUrl}/auth/userinfo`,
       jwks_uri: `${baseUrl}/auth/keys`,
       response_types_supported: ["code"],
       response_modes_supported: ["query", "fragment", "form_post"],
@@ -397,5 +400,50 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     }
 
     return c.body(null, 200);
+  });
+
+  // ---------- UserInfo ----------
+  // Apple does not ship a real userinfo endpoint (claims ride the id_token),
+  // but a standards-shaped one lets generic OIDC clients resolve the subject
+  // the same way they do for the other providers.
+
+  app.get("/auth/userinfo", (c) => {
+    const authUser = c.get("authUser");
+    if (!authUser) {
+      return c.json({ error: "invalid_token", error_description: "Authentication required." }, 401);
+    }
+    const user = as.users.findOneBy("email", authUser.login as AppleUser["email"]);
+    if (!user) {
+      return c.json({ error: "invalid_token", error_description: "User not found." }, 401);
+    }
+    return c.json({
+      sub: user.uid,
+      email: user.email,
+      email_verified: user.email_verified,
+      is_private_email: user.is_private_email,
+      name: user.name,
+      given_name: user.given_name,
+      family_name: user.family_name,
+    });
+  });
+
+  // ---------- Token introspection (RFC 7662) ----------
+
+  app.post("/auth/introspect", async (c) => {
+    const contentType = c.req.header("Content-Type") ?? "";
+    const rawText = await c.req.text();
+    let token = "";
+    if (contentType.includes("application/json")) {
+      try {
+        const parsed = JSON.parse(rawText);
+        token = typeof parsed.token === "string" ? parsed.token : "";
+      } catch {
+        token = "";
+      }
+    } else {
+      token = new URLSearchParams(rawText).get("token") ?? "";
+    }
+
+    return c.json(tokenMap ? buildIntrospectionResponse(tokenMap, token, { issuer: baseUrl }) : { active: false });
   });
 }
