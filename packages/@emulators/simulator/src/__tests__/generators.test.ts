@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generate } from "../generators.js";
+import { generate, registerGenerator, hasGenerator, generatorProviders } from "../generators.js";
 
 // Generators must emit records shaped like each provider's real API record so
 // the same code paths an SDK consumer runs against production also run here.
@@ -93,7 +93,87 @@ describe("generate — determinism", () => {
   });
 
   it("throws on a provider it cannot generate for", () => {
-    // @ts-expect-error — exercising the runtime guard
     expect(() => generate("pager", 1, NOW)).toThrow(/provider/i);
+  });
+});
+
+describe("generate — business providers (Phase 2.1, scenario-declared, no source edit)", () => {
+  it("xero: ACCREC invoice with totals + currency", () => {
+    const t = generate("xero", 1, NOW);
+    if (t.kind !== "sync") throw new Error("unreachable");
+    expect(t.model).toBe("invoices");
+    const r = t.record as Record<string, any>;
+    expect(r.Type).toBe("ACCREC");
+    expect(r.InvoiceNumber).toMatch(/^INV-/);
+    expect(r.CurrencyCode).toBe("AUD");
+    expect(r.Total).toBeGreaterThan(r.SubTotal);
+  });
+
+  it("jira: issue with key + fields.status/issuetype", () => {
+    const t = generate("jira", 2, NOW);
+    if (t.kind !== "sync") throw new Error("unreachable");
+    expect(t.model).toBe("issues");
+    const r = t.record as Record<string, any>;
+    expect(r.key).toMatch(/^SIM-/);
+    expect(typeof r.fields.status.name).toBe("string");
+    expect(typeof r.fields.issuetype.name).toBe("string");
+  });
+
+  it("salesforce: opportunity with StageName + Amount", () => {
+    const t = generate("salesforce", 3, NOW);
+    if (t.kind !== "sync") throw new Error("unreachable");
+    expect(t.model).toBe("opportunities");
+    const r = t.record as Record<string, any>;
+    expect(r.Id).toMatch(/^006SIM/);
+    expect(typeof r.StageName).toBe("string");
+    expect(typeof r.Amount).toBe("number");
+  });
+
+  it("github: pull_request with number/state/base.ref", () => {
+    const t = generate("github", 4, NOW);
+    if (t.kind !== "sync") throw new Error("unreachable");
+    expect(t.model).toBe("pull_requests");
+    const r = t.record as Record<string, any>;
+    expect(typeof r.number).toBe("number");
+    expect(["open", "closed"]).toContain(r.state);
+    expect(r.base.ref).toBe("main");
+  });
+
+  it("slack: message with channel/user/ts", () => {
+    const t = generate("slack", 5, NOW);
+    if (t.kind !== "sync") throw new Error("unreachable");
+    expect(t.model).toBe("messages");
+    const r = t.record as Record<string, any>;
+    expect(r.type).toBe("message");
+    expect(typeof r.channel).toBe("string");
+    expect(r.ts).toMatch(/\./);
+  });
+});
+
+describe("generator registry — open for extension", () => {
+  it("lists every built-in provider", () => {
+    const names = generatorProviders();
+    for (const p of ["gmail", "whatsapp", "xero", "jira", "salesforce", "github", "slack"]) {
+      expect(names).toContain(p);
+    }
+  });
+
+  it("hasGenerator reflects (un)known providers", () => {
+    expect(hasGenerator("xero")).toBe(true);
+    expect(hasGenerator("myspace")).toBe(false);
+  });
+
+  it("registerGenerator teaches the simulator a new provider with no source edit", () => {
+    expect(hasGenerator("acme-crm")).toBe(false);
+    registerGenerator("acme-crm", (seq) => ({
+      kind: "sync",
+      model: "deals",
+      record: { id: `acme-${seq}`, stage: "won" },
+    }));
+    expect(hasGenerator("acme-crm")).toBe(true);
+    const t = generate("acme-crm", 9, NOW);
+    if (t.kind !== "sync") throw new Error("unreachable");
+    expect(t.model).toBe("deals");
+    expect((t.record as any).id).toBe("acme-9");
   });
 });

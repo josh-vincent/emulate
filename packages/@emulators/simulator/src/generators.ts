@@ -1,12 +1,19 @@
-import type { Provider } from "./scenario.js";
-
 // Each generator emits a record/payload shaped like the provider's *real* API
 // object, so the consumer's production code paths exercise unchanged. Output is
 // deterministic in `seq` for reproducible runs and assertions.
+//
+// Generators live in an open *registry* keyed by provider name. The six
+// inbox/messaging providers ship built in; any Nango-seeded provider (Xero
+// invoices, Jira issues, Salesforce opportunities, GitHub PRs, Slack messages)
+// is just another entry, so a new stream is declared purely in a scenario YAML
+// with zero simulator source edits. Third parties can `registerGenerator(...)`
+// their own.
 
 export type GeneratedTick =
   | { kind: "sync"; model: string; record: Record<string, unknown> }
   | { kind: "forward"; payload: Record<string, unknown> };
+
+export type GeneratorFn = (seq: number, now: Date) => GeneratedTick;
 
 const SUBJECTS = [
   "AS1851 inspection due",
@@ -151,18 +158,148 @@ function whatsapp(seq: number, now: Date): GeneratedTick {
   };
 }
 
-const GENERATORS: Record<Provider, (seq: number, now: Date) => GeneratedTick> = {
-  gmail,
-  "graph-mail": graphMail,
-  teams,
-  drive,
-  calendar,
-  whatsapp,
-};
+// --- High-value business providers (Nango-seeded) --------------------------
+
+const CONTACTS = ["Acme Pty Ltd", "Globex Corp", "Initech", "Umbrella Co", "Soylent Industries"];
+const AMOUNTS = [125000, 48050, 990000, 7600, 312400]; // cents
+
+function xero(seq: number, now: Date): GeneratedTick {
+  const total = AMOUNTS[seq % AMOUNTS.length] / 100;
+  return {
+    kind: "sync",
+    model: "invoices",
+    record: {
+      InvoiceID: `sim-inv-${seq}`,
+      Type: "ACCREC",
+      InvoiceNumber: `INV-${1000 + seq}`,
+      Contact: { Name: pick(CONTACTS, seq) },
+      Date: now.toISOString().slice(0, 10),
+      DueDate: new Date(now.getTime() + 14 * 86_400_000).toISOString().slice(0, 10),
+      Status: seq % 3 === 0 ? "PAID" : "AUTHORISED",
+      SubTotal: total,
+      TotalTax: Number((total * 0.1).toFixed(2)),
+      Total: Number((total * 1.1).toFixed(2)),
+      AmountDue: seq % 3 === 0 ? 0 : Number((total * 1.1).toFixed(2)),
+      CurrencyCode: "AUD",
+      UpdatedDateUTC: now.toISOString(),
+    },
+  };
+}
+
+function jira(seq: number, now: Date): GeneratedTick {
+  const types = ["Bug", "Task", "Story"];
+  const statuses = ["To Do", "In Progress", "Done"];
+  return {
+    kind: "sync",
+    model: "issues",
+    record: {
+      id: `${10000 + seq}`,
+      key: `SIM-${seq}`,
+      fields: {
+        summary: pick(SUBJECTS, seq),
+        issuetype: { name: types[seq % types.length] },
+        status: { name: statuses[seq % statuses.length] },
+        priority: { name: seq % 4 === 0 ? "High" : "Medium" },
+        assignee: { displayName: pick(["Sam Ops", "Jess Field", "Priya Lead"], seq) },
+        created: now.toISOString(),
+        updated: now.toISOString(),
+      },
+    },
+  };
+}
+
+function salesforce(seq: number, now: Date): GeneratedTick {
+  const stages = ["Prospecting", "Qualification", "Proposal", "Closed Won", "Closed Lost"];
+  return {
+    kind: "sync",
+    model: "opportunities",
+    record: {
+      Id: `006SIM${String(seq).padStart(9, "0")}`,
+      Name: `${pick(CONTACTS, seq)} — Expansion`,
+      StageName: stages[seq % stages.length],
+      Amount: AMOUNTS[seq % AMOUNTS.length] / 100,
+      Probability: (seq % 5) * 20,
+      CloseDate: new Date(now.getTime() + 30 * 86_400_000).toISOString().slice(0, 10),
+      CreatedDate: now.toISOString(),
+      LastModifiedDate: now.toISOString(),
+    },
+  };
+}
+
+function github(seq: number, now: Date): GeneratedTick {
+  const states = ["open", "open", "closed"];
+  return {
+    kind: "sync",
+    model: "pull_requests",
+    record: {
+      id: 5_000_000 + seq,
+      number: seq + 1,
+      state: states[seq % states.length],
+      title: pick(SUBJECTS, seq),
+      user: { login: pick(["octocat", "hubot", "monalisa"], seq) },
+      draft: seq % 5 === 0,
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+      merged: seq % 3 === 2,
+      head: { ref: `feature/sim-${seq}` },
+      base: { ref: "main" },
+    },
+  };
+}
+
+function slack(seq: number, now: Date): GeneratedTick {
+  const ts = (now.getTime() / 1000).toFixed(6);
+  return {
+    kind: "sync",
+    model: "messages",
+    record: {
+      type: "message",
+      channel: pick(["C_OPS", "C_FIELD", "C_COMPLIANCE"], seq),
+      user: pick(["U_SAM", "U_JESS", "U_PRIYA"], seq),
+      text: pick(BODIES, seq),
+      ts,
+      client_msg_id: `sim-slack-${seq}`,
+    },
+  };
+}
+
+// --- Registry --------------------------------------------------------------
+
+const GENERATORS = new Map<string, GeneratorFn>([
+  ["gmail", gmail],
+  ["graph-mail", graphMail],
+  ["teams", teams],
+  ["drive", drive],
+  ["calendar", calendar],
+  ["whatsapp", whatsapp],
+  ["xero", xero],
+  ["jira", jira],
+  ["salesforce", salesforce],
+  ["github", github],
+  ["slack", slack],
+]);
+
+/** Register (or override) a generator for `provider`. Lets a host app teach
+ *  the simulator about providers it seeds without forking this package. */
+export function registerGenerator(provider: string, fn: GeneratorFn): void {
+  GENERATORS.set(provider, fn);
+}
+
+/** True if a scenario stream may name this provider. */
+export function hasGenerator(provider: string): boolean {
+  return GENERATORS.has(provider);
+}
+
+/** All registered provider names (sorted, for help text / validation errors). */
+export function generatorProviders(): string[] {
+  return [...GENERATORS.keys()].sort();
+}
 
 /** Build one provider-faithful tick. Deterministic in `seq`. */
-export function generate(provider: Provider, seq: number, now: Date): GeneratedTick {
-  const fn = GENERATORS[provider];
-  if (!fn) throw new Error(`[emulate-sim] no generator for provider "${provider}"`);
+export function generate(provider: string, seq: number, now: Date): GeneratedTick {
+  const fn = GENERATORS.get(provider);
+  if (!fn) {
+    throw new Error(`[emulate-sim] no generator for provider "${provider}" (have: ${generatorProviders().join(", ")})`);
+  }
   return fn(seq, now);
 }

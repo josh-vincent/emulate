@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { loadScenario } from "../scenario.js";
+import { registerGenerator } from "../generators.js";
 
 // ---------------------------------------------------------------------------
 // A scenario is the human-editable description of what activity to stream and
@@ -156,6 +157,54 @@ describe("loadScenario — normalisation & validation", () => {
 
   it("requires at least one stream", () => {
     expect(() => loadScenario(JSON.stringify({ streams: [] }))).toThrow(/stream/i);
+  });
+
+  it("accepts business providers from the generator registry with no schema change", () => {
+    const s = loadScenario(
+      JSON.stringify({
+        streams: [
+          {
+            name: "inv",
+            kind: "sync",
+            provider: "xero",
+            connectionId: "c",
+            providerConfigKey: "xero",
+            model: "invoices",
+            ratePerMinute: 10,
+          },
+          {
+            name: "iss",
+            kind: "sync",
+            provider: "jira",
+            connectionId: "c",
+            providerConfigKey: "jira",
+            model: "issues",
+            ratePerMinute: 10,
+          },
+        ],
+      }),
+    );
+    expect(s.streams.map((x) => x.provider)).toEqual(["xero", "jira"]);
+  });
+
+  it("accepts a provider added at runtime via registerGenerator", () => {
+    registerGenerator("scenario-custom", (seq) => ({ kind: "sync", model: "things", record: { id: seq } }));
+    const s = loadScenario(
+      JSON.stringify({
+        streams: [
+          {
+            name: "x",
+            kind: "sync",
+            provider: "scenario-custom",
+            connectionId: "c",
+            providerConfigKey: "k",
+            model: "things",
+            ratePerMinute: 5,
+          },
+        ],
+      }),
+    );
+    expect(s.streams[0].provider).toBe("scenario-custom");
   });
 
   it("requires a model for sync streams and environmentUuid for forward streams", () => {
