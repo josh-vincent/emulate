@@ -1,4 +1,5 @@
 import type { Hono } from "hono";
+import { requireAuthWhen } from "@emulators/core";
 import type { ServicePlugin, Store, WebhookDispatcher, TokenMap, AppEnv, RouteContext } from "@emulators/core";
 import { getAwsStore } from "./store.js";
 import { getAccountId, getDefaultRegion, generateAwsId } from "./helpers.js";
@@ -181,6 +182,13 @@ export const awsPlugin: ServicePlugin = {
     // Register inspector and service-specific routes first (static paths),
     // then S3 last since its routes use wildcard path params (/:bucket, /:bucket/:key)
     inspectorRoutes(ctx);
+    // Opt-in: real AWS rejects unsigned requests. Off by default so the
+    // smoke tests / quickstart stay green; the inspector (registered above)
+    // stays open. Scoped to the explicit service prefixes.
+    const awsAuth = requireAuthWhen("EMULATE_AWS_REQUIRE_AUTH", "EMULATE_REQUIRE_AUTH");
+    app.use("/sqs/*", awsAuth);
+    app.use("/iam/*", awsAuth);
+    app.use("/s3/*", awsAuth);
     sqsRoutes(ctx);
     iamRoutes(ctx);
     s3Routes(ctx);

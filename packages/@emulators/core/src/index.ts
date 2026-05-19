@@ -31,6 +31,8 @@ export {
   authMiddleware,
   requireAuth,
   requireScope,
+  requireAuthWhen,
+  authFlagEnabled,
   requireAppAuth,
   serializeTokenMap,
   restoreTokenMap,

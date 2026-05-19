@@ -1,3 +1,4 @@
+import { requireAuthWhen } from "@emulators/core";
 import type { AppEnv, ServicePlugin, Store, WebhookDispatcher } from "@emulators/core";
 import type { Hono } from "hono";
 import { discoveryRoutes } from "./routes/discovery.js";
@@ -133,6 +134,11 @@ export const workosPlugin: ServicePlugin = {
     inspectorRoutes({ app, store, webhooks, baseUrl });
     discoveryRoutes(app, baseUrl);
     oauthRoutes(app, ws, baseUrl);
+    // Opt-in: real WorkOS rejects management API calls without a token.
+    // `authorize`/`authenticate` (registered above) and discovery/JWKS/health
+    // stay open so a token can still be obtained; only the management
+    // surface below is gated. Off by default so smoke tests/demos are green.
+    app.use("/user_management/*", requireAuthWhen("EMULATE_WORKOS_REQUIRE_AUTH", "EMULATE_REQUIRE_AUTH"));
     userRoutes(app, ws);
     organizationRoutes(app, ws);
     sessionRoutes(app, ws);

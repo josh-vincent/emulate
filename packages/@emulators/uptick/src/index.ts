@@ -1,4 +1,5 @@
 import type { Hono } from "hono";
+import { requireAuthWhen } from "@emulators/core";
 import type { AppEnv, RouteContext, ServicePlugin, Store, TokenMap, WebhookDispatcher } from "@emulators/core";
 import { getUptickStore } from "./store.js";
 import { assetRoutes } from "./routes/assets.js";
@@ -259,6 +260,11 @@ export const uptickPlugin: ServicePlugin = {
     app.get("/health", (c) => c.json({ status: "ok", service: "uptick" }));
     oauthRoutes(ctx);
     inspectorRoutes(ctx);
+    // Opt-in: real Uptick rejects API calls without a bearer token. The
+    // OAuth token endpoint and inspector are registered above so they stay
+    // open; only the `/api/:ver/*` data routes below are gated. Off by
+    // default so smoke tests / the config-driven quickstart stay green.
+    app.use("/api/*", requireAuthWhen("EMULATE_UPTICK_REQUIRE_AUTH", "EMULATE_REQUIRE_AUTH"));
     referenceRoutes(ctx);
     clientRoutes(ctx);
     propertyRoutes(ctx);

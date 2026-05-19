@@ -4,6 +4,8 @@ import {
   authMiddleware,
   requireAuth,
   requireScope,
+  requireAuthWhen,
+  authFlagEnabled,
   requireAppAuth,
   serializeTokenMap,
   restoreTokenMap,
@@ -177,6 +179,101 @@ describe("requireScope", () => {
     const res = await appWith("repo").request("/data", {
       headers: { Authorization: "Bearer readonly-token" },
     });
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("authFlagEnabled", () => {
+  const FLAG = "EMULATE_TEST_REQUIRE_AUTH";
+  const prev = process.env[FLAG];
+  afterAll(() => {
+    if (prev === undefined) delete process.env[FLAG];
+    else process.env[FLAG] = prev;
+  });
+
+  it('is false when unset, true only for "1"/"true"', () => {
+    delete process.env[FLAG];
+    expect(authFlagEnabled(FLAG)).toBe(false);
+    process.env[FLAG] = "0";
+    expect(authFlagEnabled(FLAG)).toBe(false);
+    process.env[FLAG] = "yes";
+    expect(authFlagEnabled(FLAG)).toBe(false);
+    process.env[FLAG] = "1";
+    expect(authFlagEnabled(FLAG)).toBe(true);
+    process.env[FLAG] = "true";
+    expect(authFlagEnabled(FLAG)).toBe(true);
+  });
+
+  it("ORs across multiple flags", () => {
+    delete process.env[FLAG];
+    delete process.env.EMULATE_REQUIRE_AUTH;
+    expect(authFlagEnabled(FLAG, "EMULATE_REQUIRE_AUTH")).toBe(false);
+    process.env.EMULATE_REQUIRE_AUTH = "1";
+    expect(authFlagEnabled(FLAG, "EMULATE_REQUIRE_AUTH")).toBe(true);
+    delete process.env.EMULATE_REQUIRE_AUTH;
+  });
+});
+
+describe("requireAuthWhen", () => {
+  const FLAG = "EMULATE_TEST_REQUIRE_AUTH";
+  const prevFlag = process.env[FLAG];
+  const prevLax = process.env.EMULATE_AUTH_LAX;
+  let tokenMap: TokenMap;
+
+  beforeEach(() => {
+    delete process.env[FLAG];
+    delete process.env.EMULATE_AUTH_LAX;
+    tokenMap = new Map();
+    tokenMap.set("good-token", { login: "alice", id: 1, scopes: ["repo"] });
+  });
+
+  afterAll(() => {
+    if (prevFlag === undefined) delete process.env[FLAG];
+    else process.env[FLAG] = prevFlag;
+    if (prevLax === undefined) delete process.env.EMULATE_AUTH_LAX;
+    else process.env.EMULATE_AUTH_LAX = prevLax;
+  });
+
+  function app() {
+    const a = new Hono<AppEnv>();
+    a.use("*", authMiddleware(tokenMap));
+    a.use("*", requireAuthWhen(FLAG, "EMULATE_REQUIRE_AUTH"));
+    a.get("/data", (c) => c.json({ ok: true }));
+    return a;
+  }
+
+  it("is a pass-through when no flag is set (back-compat default)", async () => {
+    const res = await app().request("/data");
+    expect(res.status).toBe(200);
+  });
+
+  it("401s an unauthenticated request once the flag is on", async () => {
+    process.env[FLAG] = "1";
+    const res = await app().request("/data");
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { message: string };
+    expect(body.message).toBe("Requires authentication");
+  });
+
+  it("still allows an authenticated request when the flag is on", async () => {
+    process.env[FLAG] = "1";
+    const res = await app().request("/data", {
+      headers: { Authorization: "Bearer good-token" },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("honours the shared umbrella flag too", async () => {
+    process.env.EMULATE_REQUIRE_AUTH = "true";
+    const res = await app().request("/data");
+    expect(res.status).toBe(401);
+    delete process.env.EMULATE_REQUIRE_AUTH;
+  });
+
+  it("EMULATE_AUTH_LAX=1 wins over an enabled flag (global relax)", async () => {
+    process.env[FLAG] = "1";
+    process.env.EMULATE_AUTH_LAX = "1";
+    const res = await app().request("/data");
     expect(res.status).toBe(200);
   });
 });

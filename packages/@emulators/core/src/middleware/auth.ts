@@ -210,6 +210,50 @@ export function requireScope(...required: string[]) {
   };
 }
 
+/**
+ * Whether any of the named env flags is switched on (`"1"` or `"true"`).
+ * Read per-request (like `authLax`) so tests can toggle between cases.
+ * Exposed for unit-testing the gate without spinning up a server.
+ */
+export function authFlagEnabled(...flags: string[]): boolean {
+  return flags.some((f) => {
+    const v = process.env[f];
+    return v === "1" || v === "true";
+  });
+}
+
+/**
+ * Conditionally-enforced auth guard for providers whose real APIs reject
+ * unauthenticated calls, but whose emulators have always accepted them so the
+ * generated smoke tests and zero-setup quickstarts stay green.
+ *
+ * Mount it where `requireAuth()` would go on the data routes. Behaviour is
+ * deliberately drop-in and non-breaking:
+ *
+ *  - No listed flag enabled         → pass-through (the back-compat default,
+ *    so existing tests/demos are completely unaffected).
+ *  - `EMULATE_AUTH_LAX=1|true`      → pass-through (the global relax wins,
+ *    mirroring token-expiry lax and `requireScope`).
+ *  - A listed flag enabled, but no authenticated user → 401 with the same
+ *    body as `requireAuth()`, so opting in exercises the consumer's auth
+ *    path exactly like production.
+ *  - A listed flag enabled and a user present → continue.
+ *
+ * Variadic so a provider can honour both its own switch and a shared
+ * umbrella, e.g. `requireAuthWhen("EMULATE_STRIPE_REQUIRE_AUTH",
+ * "EMULATE_REQUIRE_AUTH")` — set the umbrella to gate every wired provider
+ * at once.
+ */
+export function requireAuthWhen(...flags: string[]) {
+  return async (c: Context, next: Next) => {
+    if (!authLax() && authFlagEnabled(...flags) && !c.get("authUser")) {
+      const docsUrl = (c.get("docsUrl") as string | undefined) ?? "https://emulate.dev";
+      return c.json({ message: "Requires authentication", documentation_url: docsUrl }, 401);
+    }
+    await next();
+  };
+}
+
 export function requireAppAuth() {
   return async (c: Context, next: Next) => {
     if (!c.get("authApp")) {
