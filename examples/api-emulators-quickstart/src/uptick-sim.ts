@@ -10,11 +10,19 @@
 // quarter of activity, not a toy fixture.
 //
 //   pnpm --filter api-emulators-quickstart uptick-sim
+import { writeFileSync } from "node:fs";
 import { uptickPlugin, seedFromConfig, storeToSeedConfig } from "@emulators/uptick";
 import { heading, mount } from "./harness.js";
 
 const BASE = "http://localhost:4020";
 const VER = "v2";
+
+// REMOTE mode: drive a *per-port* `emulate` server (uptick on its own port)
+// instead of an in-process store. The server is booted with the reference
+// data (asset types + technicians) as its `--seed`, so this sim skips its own
+// seeding and builds the 90-day quarter over real HTTP — the data then
+// PERSISTS in that long-lived server. Set UPTICK_SIM_REMOTE=http://host:port.
+const REMOTE = process.env.UPTICK_SIM_REMOTE?.replace(/\/+$/, "");
 
 // Every route pattern the uptick emulator registers. The sim must touch each.
 const ROUTES = [
@@ -64,22 +72,27 @@ const day = (n: number): string => new Date(START.getTime() + n * DAY).toISOStri
 async function main(): Promise<void> {
   const emu = mount(uptickPlugin, BASE);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (globalThis as any).__uptickEmu = emu.app;
+  (globalThis as any).__uptickEmu = REMOTE
+    ? { request: (u: string, i?: RequestInit): Promise<Response> => fetch(u.replace(BASE, REMOTE), i) }
+    : emu.app;
+  if (REMOTE) console.log(`\n  🟢 REMOTE mode — building the quarter on ${REMOTE} (per-port, persists)\n`);
 
   // Seed reference data (asset types + technicians) — uptick has no default
   // seed, so these must exist before the simulation creates assets/defects.
-  seedFromConfig(emu.store, BASE, {
-    asset_types: [
-      { name: "Sprinkler System", description: "Wet/dry pipe sprinkler network" },
-      { name: "Fire Extinguisher", description: "Portable extinguisher (ABE/CO2)" },
-      { name: "Fire Door", description: "Rated fire/smoke door assembly" },
-      { name: "Hydrant", description: "Booster + feed hydrant" },
-    ],
-    users: [
-      { username: "tess", email: "tess@demo.com.au", first_name: "Tess", last_name: "Tech" },
-      { username: "ravi", email: "ravi@demo.com.au", first_name: "Ravi", last_name: "Singh" },
-    ],
-  });
+  // In REMOTE mode the per-port server is booted with these as its `--seed`.
+  if (!REMOTE)
+    seedFromConfig(emu.store, BASE, {
+      asset_types: [
+        { name: "Sprinkler System", description: "Wet/dry pipe sprinkler network" },
+        { name: "Fire Extinguisher", description: "Portable extinguisher (ABE/CO2)" },
+        { name: "Fire Door", description: "Rated fire/smoke door assembly" },
+        { name: "Hydrant", description: "Booster + feed hydrant" },
+      ],
+      users: [
+        { username: "tess", email: "tess@demo.com.au", first_name: "Tess", last_name: "Tech" },
+        { username: "ravi", email: "ravi@demo.com.au", first_name: "Ravi", last_name: "Singh" },
+      ],
+    });
 
   const token = (await (
     await req("POST /api/oauth2/token/", `${BASE}/api/oauth2/token/`, {
@@ -240,28 +253,47 @@ async function main(): Promise<void> {
 
   heading("Uptick sim — round-trip + coverage report");
 
-  const exported = storeToSeedConfig(emu.store, BASE);
-  const fresh = mount(uptickPlugin, BASE);
-  seedFromConfig(fresh.store, BASE, exported);
-  const ft = (await (
-    await fresh.app.request(`${BASE}/api/oauth2/token/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "password", username: "tess@demo.com.au", password: "x" }).toString(),
-    })
-  ).json()) as { access_token: string };
-  const rt = (await (
-    await fresh.app.request(`${BASE}/api/${VER}/defects/?status=closed`, {
-      headers: { Authorization: `Bearer ${ft.access_token}` },
-    })
-  ).json()) as JsonApiList;
-  const expectedClosed = Math.floor(defectIds.length / 3);
-  const rtOk = rt.data.length === expectedClosed;
-  console.log(
-    `\n  round-trip: ${exported.clients?.length ?? 0} clients / ${exported.assets?.length ?? 0} assets / ` +
-      `${exported.defects?.length ?? 0} defects exported; closed defects after re-seed = ${rt.data.length} ` +
-      `(expected ${expectedClosed}) — ${rtOk ? "✅" : "❌"}`,
-  );
+  // In REMOTE mode the quarter already lives in the long-lived per-port
+  // server, so the in-process export + fresh-mount round-trip is skipped.
+  let rtOk = true;
+  if (REMOTE) {
+    console.log(
+      `\n  ⓘ round-trip skipped in remote mode — the 90-day quarter persists in the running server (${REMOTE})`,
+    );
+  } else {
+    const exported = storeToSeedConfig(emu.store, BASE);
+
+    // Optional: dump the round-trippable seed config so a *running* `emulate`
+    // server can boot this 90-day quarter (parity with SIMPRO_SIM_EXPORT). This
+    // sim runs in-process, so without this the quarter never reaches a server.
+    const exportPath = process.env.UPTICK_SIM_EXPORT;
+    if (exportPath) {
+      writeFileSync(exportPath, JSON.stringify({ uptick: exported }, null, 2));
+      console.log(`\n  📦 exported 90-day quarter → ${exportPath} (boot: EMULATE_CONFIG_PATH=${exportPath})`);
+    }
+
+    const fresh = mount(uptickPlugin, BASE);
+    seedFromConfig(fresh.store, BASE, exported);
+    const ft = (await (
+      await fresh.app.request(`${BASE}/api/oauth2/token/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "password", username: "tess@demo.com.au", password: "x" }).toString(),
+      })
+    ).json()) as { access_token: string };
+    const rt = (await (
+      await fresh.app.request(`${BASE}/api/${VER}/defects/?status=closed`, {
+        headers: { Authorization: `Bearer ${ft.access_token}` },
+      })
+    ).json()) as JsonApiList;
+    const expectedClosed = Math.floor(defectIds.length / 3);
+    rtOk = rt.data.length === expectedClosed;
+    console.log(
+      `\n  round-trip: ${exported.clients?.length ?? 0} clients / ${exported.assets?.length ?? 0} assets / ` +
+        `${exported.defects?.length ?? 0} defects exported; closed defects after re-seed = ${rt.data.length} ` +
+        `(expected ${expectedClosed}) — ${rtOk ? "✅" : "❌"}`,
+    );
+  }
 
   const missing = ROUTES.filter((r) => !covered.has(r));
   console.log(`\n  ${calls} calls • ${failures} unexpected failures`);
