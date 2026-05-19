@@ -121,6 +121,7 @@ export function authMiddleware(tokens: TokenMap, appKeyResolver?: AppKeyResolver
         }
       } else {
         let user = tokens.get(token);
+        let expiredKnownToken = false;
         if (user && user.expiresAt !== undefined && !authLax() && Date.now() > user.expiresAt) {
           // Expired: drop it and fall through unauthenticated so requireAuth()
           // returns the provider's own 401 — exactly what a real expired
@@ -128,8 +129,13 @@ export function authMiddleware(tokens: TokenMap, appKeyResolver?: AppKeyResolver
           debug("auth", "expired token rejected", { login: user.login, expiredMsAgo: Date.now() - user.expiresAt });
           tokens.delete(token);
           user = undefined;
+          // A token the emulator *issued* and that has now expired must 401 —
+          // it must NOT be rescued by the convenience fallback below, or
+          // expiry-driven refresh flows can never be exercised against the
+          // standalone server (which always wires a `defaultFallback`).
+          expiredKnownToken = true;
         }
-        if (!user && fallbackUser && token.length > 0) {
+        if (!user && !expiredKnownToken && fallbackUser && token.length > 0) {
           debug("auth", "fallback user for unknown token", { login: fallbackUser.login, id: fallbackUser.id });
           user = { login: fallbackUser.login, id: fallbackUser.id, scopes: fallbackUser.scopes };
         }

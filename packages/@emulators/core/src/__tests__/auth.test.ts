@@ -164,6 +164,35 @@ describe("authMiddleware token expiry", () => {
     expect(tokenMap.has("tok")).toBe(false);
   });
 
+  it("an expired issued token is NOT rescued by the convenience fallbackUser", async () => {
+    // The standalone server always wires a `defaultFallback`. An expired token
+    // the emulator issued must still 401 (driving refresh) rather than being
+    // silently re-mapped to the fallback identity.
+    const tokenMap: TokenMap = new Map();
+    tokenMap.set("tok", { login: "u", id: 1, scopes: [], expiresAt: Date.now() - 1000 });
+    const app = new Hono<AppEnv>();
+    app.use("*", authMiddleware(tokenMap, undefined, { login: "fallback", id: 99, scopes: [] }));
+    app.use("/guarded", requireAuth());
+    app.get("/guarded", (c) => c.json({ user: c.get("authUser") }));
+
+    const res = await app.request("/guarded", { headers: { Authorization: "Bearer tok" } });
+    expect(res.status).toBe(401);
+    expect(tokenMap.has("tok")).toBe(false);
+  });
+
+  it("an unknown token still falls back (test convenience preserved)", async () => {
+    const tokenMap: TokenMap = new Map();
+    const app = new Hono<AppEnv>();
+    app.use("*", authMiddleware(tokenMap, undefined, { login: "fallback", id: 99, scopes: [] }));
+    app.use("/guarded", requireAuth());
+    app.get("/guarded", (c) => c.json({ user: c.get("authUser") }));
+
+    const res = await app.request("/guarded", { headers: { Authorization: "Bearer never-issued" } });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { user: { login: string } };
+    expect(body.user.login).toBe("fallback");
+  });
+
   it("accepts a not-yet-expired token", async () => {
     const tokenMap: TokenMap = new Map();
     tokenMap.set("tok", { login: "u", id: 1, scopes: [], expiresAt: Date.now() + 60_000 });
