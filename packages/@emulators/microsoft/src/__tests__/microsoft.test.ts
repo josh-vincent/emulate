@@ -533,6 +533,39 @@ describe("Microsoft plugin integration", () => {
     expect(body.access_token).toBeDefined();
   });
 
+  it("introspects an issued access token (RFC 7662)", async () => {
+    const tokenRes = await app.request(`${base}/oauth2/v2.0/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: "test-client",
+        client_secret: "test-secret",
+        scope: ".default",
+      }).toString(),
+    });
+    const { access_token } = (await tokenRes.json()) as { access_token: string };
+
+    const activeRes = await app.request(`${base}/oauth2/v2.0/introspect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: access_token }).toString(),
+    });
+    expect(activeRes.status).toBe(200);
+    const active = (await activeRes.json()) as Record<string, unknown>;
+    expect(active.active).toBe(true);
+    expect(active.iss).toBe(`${base}/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0`);
+
+    const inactive = (await (
+      await app.request(`${base}/oauth2/v2.0/introspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token: "microsoft_bogus" }).toString(),
+      })
+    ).json()) as Record<string, unknown>;
+    expect(inactive).toEqual({ active: false });
+  });
+
   // --- Seed from config ---
 
   it("seeds users and clients from config", () => {

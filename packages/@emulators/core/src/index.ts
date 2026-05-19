@@ -44,6 +44,7 @@ export {
   type AppEnv,
 } from "./middleware/auth.js";
 export { parsePagination, setLinkHeader, type PaginationParams } from "./middleware/pagination.js";
+export { buildIntrospectionResponse, type IntrospectionOptions, type IntrospectionResponse } from "./introspection.js";
 export {
   escapeHtml,
   escapeAttr,
