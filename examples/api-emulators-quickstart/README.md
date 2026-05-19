@@ -278,10 +278,11 @@ Your app's existing flows then run unchanged against emulate:
 ## Comprehensive seeded server — `seeded-server`
 
 `live-feed` seeds a light SimPro fixture; `seeded-server` boots the same
-per-port server **pre-loaded with the full comprehensive 90-day quarter** for
-**both SimPro and Uptick** — every endpoint, dated across the quarter, the same
-data `simpro-sim` / `uptick-sim` build and assert. It exists because those sims
-run in-process and **exit**: the quarter never reaches a server otherwise.
+per-port server and then **builds the full comprehensive 90-day quarter inside
+it** for **both SimPro and Uptick** — every endpoint, dated across the quarter,
+including job → section → cost center → **line items** (catalog/labour/one-off/
+prebuild), invoices → payments, quotes, recurring jobs/invoices, vendor orders,
+leads, credit notes and the 79 `setup/*` collections.
 
 ```bash
 pnpm -w build
@@ -290,24 +291,29 @@ pnpm --filter api-emulators-quickstart seeded-server          # or: -- --seconds
 
 What it does, in order:
 
-1. **Factory** — runs `simpro-sim` + `uptick-sim` with their `SIMPRO_SIM_EXPORT`
-   / `UPTICK_SIM_EXPORT` hooks so each writes its round-trippable seed config to
-   disk (the durable artifact that outlives the sim process — _that_ is how the
-   data gets out of an in-process sim).
-2. **Merge** — combines both quarters with WorkOS (login) and Nango
-   (already-linked Google connections + 90d history) into one seed.
-3. **Serve** — boots the per-port `emulate` CLI seeded from it. The quarter now
-   lives behind real HTTP and **persists until you Ctrl-C** — nothing disappears
-   when you read it.
+1. **Seed** — boots ONE per-port `emulate` server (a port per provider) with
+   only the _roots_: WorkOS login, 90d of Nango Google history, and the
+   SimPro/Uptick reference rows (oauth client, baseline customer/site/job,
+   asset types, technicians). Nothing comprehensive yet.
+2. **Build** — drives `simpro-sim` + `uptick-sim` in **REMOTE mode** against the
+   running server over real HTTP (`SIMPRO_SIM_REMOTE` / `UPTICK_SIM_REMOTE`).
+   They build the full linked quarter — and SimPro additionally crawls all 372
+   endpoints — writing every row _into the long-lived server_.
+3. **Persist** — because the data was written into the running server (not an
+   in-process store that exits), it stays there until you Ctrl-C. Nothing
+   disappears when you read it.
 4. **Stream** — layers the unbounded simulator on top, so the Nango feed keeps
-   growing while the SimPro/Uptick backfill stays put.
+   growing while the SimPro/Uptick quarter stays put.
 
 Point your app at the printed env block and read the quarter like the real
-providers (verified end-to-end — SimPro standard OAuth auth-code → `GET
-…:4003/api/v1.0/companies/0/jobs` returns the 14-job linked quarter; Uptick
-password grant → `GET …:4004/api/v2/defects/` returns 24 dated defects; browse
-`…:4003/inspector/jobs` and `…:4004/?tab=defects`). The data does **not** vanish
-between requests — it is a live in-memory store on a long-lived server.
+providers (verified end-to-end — after the sims exit, the long-lived server
+still serves SimPro standard OAuth auth-code → `GET
+…:4003/api/v1.0/companies/0/jobs` (17 jobs; freshest carries 4 line items),
+`…/customerPayments` `…/leads` `…/vendorOrders` `…/setup/teams` all return dated
+rows; Uptick password grant → `GET …:4004/api/v2/defects/` returns 24 dated
+defects; browse `…:4003/inspector/jobs` and `…:4004/?tab=defects`). The data
+does **not** vanish between requests — it is a live in-memory store on a
+long-lived server.
 
 ## How it works
 
@@ -338,7 +344,7 @@ src/
   external-consumer.ts      Separate-process OIDC + refresh + proxy proof over real HTTP
   workos-dashboard-live.ts  Composed story: WorkOS → connect Google+SimPro → unified reads → live webhook stream
   live-feed.ts              "Leave it running": per-port server + 90d seed + unbounded sim, env for your app
-  seeded-server.ts          live-feed pre-loaded with the full SimPro+Uptick 90-day quarter (every endpoint)
+  seeded-server.ts          per-port server with the full SimPro+Uptick 90-day quarter built in via REMOTE crawl (every endpoint)
 scenarios/
   single-gmail.yaml         One stream, realtime cadence
   all-streams.yaml          All 6 inbox providers at once, capped + deterministic

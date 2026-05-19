@@ -57,6 +57,17 @@ const liveApp = {
     fetch(u.startsWith(BASE) ? `${TARGET}/simpro${u.slice(BASE.length)}` : u, init),
 };
 
+// REMOTE mode: drive a *per-port* `emulate` server (simpro on its own port, no
+// `/simpro` prefix, no `_admin` endpoints). The server is booted with the
+// Phase-A roots as its `--seed`, so this sim skips its own seeding and just
+// builds the quarter + crawls every endpoint over real HTTP — the data then
+// PERSISTS in that long-lived server. Set SIMPRO_SIM_REMOTE=http://host:port.
+const REMOTE = process.env.SIMPRO_SIM_REMOTE?.replace(/\/+$/, "");
+const remoteApp = {
+  request: (u: string, init?: RequestInit): Promise<Response> =>
+    fetch(u.startsWith(BASE) ? `${REMOTE}${u.slice(BASE.length)}` : u, init),
+};
+
 let auth: Record<string, string>;
 const covered = new Set<string>();
 const status: Record<string, number> = {};
@@ -111,6 +122,9 @@ function bodyFor(date = day(45)): string {
 async function call(method: string, rawPath: string): Promise<void> {
   const key = `${method} ${rawPath}`;
   covered.add(key);
+  // REMOTE mode crawls a *long-lived* server whose data must persist, so the
+  // route is counted as covered but the destructive DELETE is not executed.
+  if (REMOTE && method === "DELETE") return;
   calls++;
 
   const url = await resolve(rawPath);
@@ -247,8 +261,9 @@ const SETUP = [
 
 async function main(): Promise<void> {
   const emu = mount(simproPlugin, BASE);
-  app = LIVE ? liveApp : emu.app;
-  if (LIVE)
+  app = REMOTE ? remoteApp : LIVE ? liveApp : emu.app;
+  if (REMOTE) console.log(`\n  🟢 REMOTE mode — building + crawling the quarter on ${REMOTE} (per-port, persists)\n`);
+  else if (LIVE)
     console.log(`\n  🔴 LIVE mode — streaming into ${TARGET}/simpro (watch the dashboard /_inspector/simpro)\n`);
 
   // ── Phase A: seed dependency roots, then simulate a quarter ──────────────
@@ -290,7 +305,11 @@ async function main(): Promise<void> {
     contacts: [{ id: 600, type: "Customer", customer_id: 200, given_name: "Cara", family_name: "Contact" }],
     stock_items: [{ id: 700, name: "Pipe 50mm", part_no: "P-50" }],
   };
-  if (LIVE) {
+  if (REMOTE) {
+    // Roots (oauth client + baseline customer/site/job/… with the exact ids
+    // ctx links to) are booted into the per-port server via its `--seed`, so
+    // nothing to push here — go straight to building the quarter over HTTP.
+  } else if (LIVE) {
     // Push roots into the running server's store via its own upsert endpoint
     // (no reset — exact ids 200/55/12345/… are preserved so ctx links hold).
     const r = await fetch(`${TARGET}/_admin/seed?mode=merge`, {
@@ -324,6 +343,60 @@ async function main(): Promise<void> {
   // POST the superset body merged with explicit links, return the new id.
   const mk = (path: string, date: string, link: Record<string, unknown> = {}): Promise<number> =>
     post(path, { ...JSON.parse(bodyFor(date)), ...link });
+
+  // Fill a cost center with real, priced line items so jobs aren't empty
+  // shells — catalog material, labour hours, a one-off and a prebuild kit.
+  const lineItems = async (ccPath: string, prebuildId: number): Promise<void> => {
+    bump(
+      "cc.catalogs",
+      await post(`${ccPath}/catalogs/`, {
+        Name: "Copper Pipe 50mm",
+        PartNo: "P-50",
+        Quantity: 12,
+        UnitPrice: 18.5,
+        Markup: 25,
+        SellPrice: 23.1,
+        ExTax: 277.2,
+        StockItem: { ID: 700 },
+      }),
+    );
+    bump(
+      "cc.labor",
+      await post(`${ccPath}/labor/`, {
+        Name: "Install labour",
+        Labour: { ID: ctx.staff },
+        Hours: 6,
+        LabourRate: 95,
+        SellPrice: 570,
+        ExTax: 570,
+      }),
+    );
+    bump(
+      "cc.oneOffs",
+      await post(`${ccPath}/oneOffs/`, {
+        Description: "Site access fee",
+        Quantity: 1,
+        EstCost: 40,
+        ActCost: 45,
+        Markup: 10,
+        SellPrice: 49.5,
+        ExTax: 49.5,
+      }),
+    );
+    if (prebuildId)
+      bump(
+        "cc.prebuilds",
+        await post(`${ccPath}/prebuilds/`, {
+          Name: "AC Service Kit",
+          Prebuild: { ID: prebuildId },
+          Quantity: 2,
+          CostPrice: 120,
+          Markup: 30,
+          SellPrice: 312,
+          ExTax: 312,
+        }),
+      );
+  };
 
   heading(`Simpro sim — building a linked operational graph over ${WEEKS} weeks (≈90 days)`);
 
@@ -392,14 +465,15 @@ async function main(): Promise<void> {
       if (sec) {
         bump("job.sections", sec);
         lastJobSec = sec;
-        bump(
-          "job.costCenters",
-          await mk(`${C}/jobs/${job}/sections/${sec}/costCenters/`, d, {
-            Name: "Labour",
-            CostCenter: { ID: ctx.masterCC },
-            TaxCode: { ID: ctx.taxCode },
-          }),
-        );
+        const cc = await mk(`${C}/jobs/${job}/sections/${sec}/costCenters/`, d, {
+          Name: "Labour",
+          CostCenter: { ID: ctx.masterCC },
+          TaxCode: { ID: ctx.taxCode },
+        });
+        if (cc) {
+          bump("job.costCenters", cc);
+          await lineItems(`${C}/jobs/${job}/sections/${sec}/costCenters/${cc}`, preb);
+        }
       }
       bump("tasks", await mk(`${C}/tasks/`, d, { Name: `Task W${w}`, Job: { ID: job }, DueDate: d }));
       bump("schedules", await mk(`${C}/schedules/`, d, { Job: { ID: job }, Technician: { ID: ctx.staff }, Date: d }));
@@ -473,8 +547,8 @@ async function main(): Promise<void> {
   // a job→task link can only exist via the store (as the emulator's own seed
   // does). Insert one dated task per job so /jobs/:jid/tasks/ returns real data.
   // No remote-store hook exists, so LIVE mode drops this one chain (of 25).
-  if (LIVE) {
-    console.log("  ⓘ live mode: job→task chain skipped (no public job-task POST)");
+  if (LIVE || REMOTE) {
+    console.log("  ⓘ remote/live mode: job→task store chain skipped (no public job-task POST)");
   } else {
     const ss = getSimproStore(emu.store);
     jobIds.forEach((jid, i) => {
@@ -513,7 +587,7 @@ async function main(): Promise<void> {
     "leads",
     "lead.notes",
     ...FLAT,
-  ].filter((k) => !LIVE || k !== "job.tasks");
+  ].filter((k) => !(LIVE || REMOTE) || k !== "job.tasks");
   const dense = weeklyKeys.filter((k) => (n[k] ?? 0) >= WEEKS).length;
   console.log(
     `\n  created ${totalCreated} linked rows • ${dense}/${weeklyKeys.length} weekly chains carry ≥${WEEKS} weeks` +
@@ -572,7 +646,7 @@ async function main(): Promise<void> {
     ["lead → notes", `${C}/leads/${lastLead}/notes/`],
   ];
   // LIVE has no public job-task POST, so its job→tasks chain is skipped above.
-  const linkChecks = links.filter(([label]) => !LIVE || label !== "job → tasks");
+  const linkChecks = links.filter(([label]) => !(LIVE || REMOTE) || label !== "job → tasks");
   let linkedOk = 0;
   console.log("");
   for (const [label, p] of linkChecks) {
@@ -749,9 +823,9 @@ async function main(): Promise<void> {
   // the round-trippable seed config; boot the server with
   // `EMULATE_CONFIG_PATH=<path>` and the dashboard at /simpro shows this data.
   const exportPath = process.env.SIMPRO_SIM_EXPORT;
-  if (exportPath && LIVE) {
+  if (exportPath && (LIVE || REMOTE)) {
     console.log(
-      `\n  ⓘ export skipped in LIVE mode — the quarter is already in ${TARGET}; use GET ${TARGET}/_admin/export?service=simpro`,
+      `\n  ⓘ export skipped in remote/live mode — the quarter lives in the running server (${REMOTE ?? TARGET}); no static dump needed`,
     );
   } else if (exportPath) {
     const seed = storeToSeedConfig(emu.store, BASE);

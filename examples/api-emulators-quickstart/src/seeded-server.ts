@@ -1,24 +1,27 @@
-// `emulate start`, pre-loaded with a *comprehensive 90-day quarter*.
+// `emulate start`, then *build a comprehensive 90-day quarter inside it* and
+// leave it running. This is the handoff from "the sims exit" to "a server my
+// app talks to that never loses the data":
 //
-// The problem this solves: `simpro-sim` / `uptick-sim` build a full, dated,
-// every-endpoint quarter — but they run in-process and EXIT, so the data
-// never reaches a server your app can talk to. This script is the handoff:
-//
-//   1. FACTORY — run both sims with their *_SIM_EXPORT hooks so each writes
-//      its round-trippable seed config to disk (the durable artifact that
-//      outlives the sim process).
-//   2. MERGE   — combine the SimPro + Uptick quarters with WorkOS (login) and
-//      Nango (already-linked Google connections + 90d history) into one seed.
-//   3. SERVE   — boot the per-port `emulate` CLI seeded from it. The quarter
-//      now lives behind real HTTP and PERSISTS until you Ctrl-C. Your app
-//      reads it like the real providers; nothing disappears.
-//   4. STREAM  — layer the unbounded simulator on top so the Nango feed keeps
-//      growing while the SimPro/Uptick backfill stays put.
+//   1. SEED  — boot ONE per-port `emulate` server (a port per provider) with
+//      only the *roots*: WorkOS login, 90d of Nango Google history, and the
+//      SimPro/Uptick reference rows (oauth client, baseline customer/site/job,
+//      asset types, technicians). Nothing comprehensive yet.
+//   2. BUILD — drive `simpro-sim` and `uptick-sim` in REMOTE mode *against the
+//      running server over real HTTP*. They build the full linked quarter —
+//      jobs → sections → cost centers → **line items** (catalog/labour/one-off/
+//      prebuild), invoices → payments, quotes, recurring jobs/invoices, vendor
+//      orders, leads, credit notes, the 79 setup collections, … — and SimPro
+//      additionally crawls all 372 endpoints. Every row is dated across 90d.
+//   3. PERSIST — because the data was written *into the long-lived server*
+//      (not an in-process store that exits), it stays there until you Ctrl-C.
+//      Your app reads it like the real providers; nothing disappears.
+//   4. STREAM — layer the unbounded simulator on top so the Nango feed keeps
+//      growing while the SimPro/Uptick quarter stays put.
 //
 //   pnpm --filter api-emulators-quickstart seeded-server
 //   pnpm --filter api-emulators-quickstart seeded-server -- --seconds 8
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -91,25 +94,85 @@ const workosBlock = (): Record<string, unknown> => ({
   ],
 });
 
-function runFactory(label: string, script: string, exportEnv: string, outPath: string): Promise<void> {
+// SimPro *roots* only — the exact ids `simpro-sim` links its quarter to (oauth
+// client, baseline customer 200 / site 55 / job 12345 / stock item 700, …).
+// The comprehensive quarter is built on top of these by the REMOTE crawl.
+const simproRoots = (): Record<string, unknown> => ({
+  oauth: { client_id: "taskr_dev", client_secret: "taskr_dev_secret" },
+  companies: [{ id: 0, name: "Taskr Test Co" }],
+  tax_codes: [{ id: 1, name: "GST", rate: 10 }],
+  statuses: [
+    { id: 10, kind: "job", name: "In Progress" },
+    { id: 20, kind: "quote", name: "Quoted" },
+  ],
+  master_cost_centers: [{ id: 500, name: "Service" }],
+  staff: [{ id: 7, given_name: "Dana", family_name: "Tech", email: "dana@taskr.example" }],
+  contractors: [{ id: 90, company_name: "Subbie Co", given_name: "Sam", family_name: "Sub" }],
+  customers: [
+    {
+      id: 200,
+      type: "company",
+      company_name: "Acme Facilities Pty Ltd",
+      email: "ops@acme.example",
+      sites: [{ id: 55, name: "North Campus Building A" }],
+    },
+    { id: 201, type: "individual", given_name: "Pat", family_name: "Owner" },
+  ],
+  jobs: [
+    {
+      id: 12345,
+      type: "Project",
+      name: "Baseline Job",
+      customer_id: 200,
+      site_id: 55,
+      sections: [{ id: 1, name: "Mechanical", cost_centers: [{ id: 800, name: "Pipework", ex_tax: 4000 }] }],
+    },
+  ],
+  quotes: [{ id: 9001, name: "Baseline Quote", customer_id: 201, status_id: 20 }],
+  invoices: [{ id: 7001, job_id: 12345, type: "ProgressInvoice", total_ex_tax: 4000, total_inc_tax: 4400 }],
+  schedules: [
+    {
+      id: 301,
+      job_id: 12345,
+      technician_id: 7,
+      date: new Date(Date.now() - 90 * DAY).toISOString().slice(0, 10),
+      start_time: "09:00",
+      duration_minutes: 240,
+    },
+  ],
+  assets: [{ id: 410, customer_id: 200, site_id: 55, name: "Pump A1", asset_type: "Pump" }],
+  contacts: [{ id: 600, type: "Customer", customer_id: 200, given_name: "Cara", family_name: "Contact" }],
+  stock_items: [{ id: 700, name: "Pipe 50mm", part_no: "P-50" }],
+});
+
+// Uptick has no default seed — these reference rows must exist before the
+// REMOTE crawl creates clients/properties/assets/defects against them.
+const uptickRef = (): Record<string, unknown> => ({
+  asset_types: [
+    { name: "Sprinkler System", description: "Wet/dry pipe sprinkler network" },
+    { name: "Fire Extinguisher", description: "Portable extinguisher (ABE/CO2)" },
+    { name: "Fire Door", description: "Rated fire/smoke door assembly" },
+    { name: "Hydrant", description: "Booster + feed hydrant" },
+  ],
+  users: [
+    { username: "tess", email: "tess@demo.com.au", first_name: "Tess", last_name: "Tech" },
+    { username: "ravi", email: "ravi@demo.com.au", first_name: "Ravi", last_name: "Singh" },
+  ],
+});
+
+/** Run a sim in REMOTE mode against the running per-port server. */
+function runRemoteSim(label: string, script: string, envVar: string, target: string): Promise<void> {
   return new Promise((resolvePromise, reject) => {
     if (!TSX_BIN) return reject(new Error("tsx binary not found — run `pnpm install`"));
-    console.log(`[seeded-server] factory: ${label} (building + asserting a 90-day quarter)…`);
+    console.log(`\n[seeded-server] BUILD: ${label} — crawling ${target} to build a comprehensive 90-day quarter…\n`);
     const child = spawn(TSX_BIN, [join("src", script)], {
       cwd: EXAMPLE_DIR,
-      env: { ...process.env, [exportEnv]: outPath },
-      stdio: ["ignore", "ignore", "pipe"],
+      env: { ...process.env, [envVar]: target },
+      stdio: "inherit", // show the coverage/line-item/span assertions as they run
     });
-    let tail = "";
-    child.stderr?.on("data", (d: Buffer) => (tail = (tail + d).slice(-2000)));
-    child.on("exit", (code) => {
-      if (code === 0 && existsSync(outPath)) {
-        console.log(`[seeded-server]   ↳ ${label} quarter exported`);
-        resolvePromise();
-      } else {
-        reject(new Error(`${label} factory failed (exit ${code}).\n${tail}`));
-      }
-    });
+    child.on("exit", (code) =>
+      code === 0 ? resolvePromise() : reject(new Error(`${label} REMOTE crawl failed (exit ${code})`)),
+    );
   });
 }
 
@@ -132,10 +195,72 @@ async function waitForReady(timeoutMs: number): Promise<void> {
   throw new Error("seeded per-port server did not become ready within timeout");
 }
 
-function banner(counts: { simpro: number; uptick: number }): void {
-  const line = "─".repeat(76);
+/** Authenticated SimPro count + a proof that jobs carry line items. */
+async function simproProof(): Promise<{ jobs: number; lineItems: number }> {
+  const authz = await fetch(
+    `${url("simpro")}/oauth/authorize?client_id=taskr_dev&redirect_uri=http://localhost/cb&state=s`,
+    { redirect: "manual" },
+  );
+  const code = new URL(authz.headers.get("Location") ?? "http://x/?code=x").searchParams.get("code");
+  const tok = (await (
+    await fetch(`${url("simpro")}/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ grant_type: "authorization_code", code, client_id: "taskr_dev" }),
+    })
+  ).json()) as { access_token?: string };
+  const H = { Authorization: `Bearer ${tok.access_token}` };
+  const C = `${url("simpro")}/api/v1.0/companies/0`;
+  const jobs = (await (await fetch(`${C}/jobs/?columns=ID&pageSize=250`, { headers: H })).json()) as Array<{
+    ID: number;
+  }>;
+  // Scan newest→oldest for a job whose section → cost center carries line
+  // items (Phase-B crawl appends bare jobs last, so don't just take .at(-1)).
+  let lineItems = 0;
+  for (const j of [...jobs].reverse().slice(0, 40)) {
+    const secs = (await (await fetch(`${C}/jobs/${j.ID}/sections/`, { headers: H })).json()) as Array<{ ID: number }>;
+    const sid = secs[0]?.ID;
+    if (!sid) continue;
+    const ccs = (await (
+      await fetch(`${C}/jobs/${j.ID}/sections/${sid}/costCenters/`, { headers: H })
+    ).json()) as Array<{ ID: number }>;
+    const ccid = ccs[0]?.ID;
+    if (!ccid) continue;
+    let n = 0;
+    for (const kind of ["catalogs", "labor", "oneOffs", "prebuilds"]) {
+      const items = (await (
+        await fetch(`${C}/jobs/${j.ID}/sections/${sid}/costCenters/${ccid}/${kind}/`, { headers: H })
+      ).json()) as unknown[];
+      if (Array.isArray(items)) n += items.length;
+    }
+    if (n > 0) {
+      lineItems = n;
+      break;
+    }
+  }
+  return { jobs: jobs.length, lineItems };
+}
+
+async function uptickDefectCount(): Promise<number> {
+  const tok = (await (
+    await fetch(`${url("uptick")}/api/oauth2/token/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "password", username: "tess@demo.com.au", password: "x" }).toString(),
+    })
+  ).json()) as { access_token?: string };
+  const r = (await (
+    await fetch(`${url("uptick")}/api/v2/defects/?page[size]=300`, {
+      headers: { Authorization: `Bearer ${tok.access_token}`, Accept: "application/vnd.api+json" },
+    })
+  ).json()) as { data?: unknown[] };
+  return r.data?.length ?? 0;
+}
+
+function banner(simpro: { jobs: number; lineItems: number }, defects: number): void {
+  const line = "─".repeat(78);
   console.log(`\n${line}`);
-  console.log("  emulate is LIVE — per-port, pre-seeded with a 90-day quarter (persists)\n");
+  console.log("  emulate is LIVE — per-port, with a COMPREHENSIVE 90-day quarter built in (persists)\n");
   for (const s of SERVICES) console.log(`    ${s.padEnd(8)} ${url(s)}`);
   console.log("\n  Paste into your app's env (host-only, no path prefix):\n");
   console.log(`    WORKOS_BASE_URL=${url("workos")}   WORKOS_CLIENT_ID=client_app_01`);
@@ -143,18 +268,19 @@ function banner(counts: { simpro: number; uptick: number }): void {
   console.log(`    NANGO_HOST=${url("nango")}`);
   console.log(`    SIMPRO_BASE_URL=${url("simpro")}`);
   console.log(`    UPTICK_BASE_URL=${url("uptick")}`);
-  console.log(`\n  Seeded quarter (read it over HTTP — it does NOT disappear):`);
-  console.log(`    SimPro  ${counts.simpro} jobs/quotes/invoices, full graph, every endpoint`);
+  console.log(`\n  Built into the running server (read it over HTTP — it does NOT disappear):`);
+  console.log(`    SimPro  ${simpro.jobs} jobs across 90 days; freshest job carries ${simpro.lineItems} line items`);
+  console.log(`            (catalog/labour/one-off/prebuild) + all 372 endpoints exercised`);
   console.log(`            browse: ${url("simpro")}/inspector/jobs`);
   console.log(`            api:    GET ${url("simpro")}/api/v1.0/companies/0/jobs  (Bearer token)`);
-  console.log(`    Uptick  ${counts.uptick} defects across clients/properties/assets`);
+  console.log(`    Uptick  ${defects} defects across clients → properties → assets`);
   console.log(`            browse: ${url("uptick")}/?tab=defects`);
   console.log(`            api:    GET ${url("uptick")}/api/v2/defects/  (Bearer token)`);
   console.log(`    Nango   3 Google connections, ~90 days of history each`);
   console.log(
     seconds > 0
       ? `\n  Streaming live Nango activity for ${seconds}s, then shutting down…`
-      : "\n  Streaming live Nango activity on top — Ctrl-C to stop (seeded data stays).",
+      : "\n  Streaming live Nango activity on top — Ctrl-C to stop (the built quarter stays).",
   );
   console.log(`${line}\n`);
 }
@@ -169,8 +295,7 @@ async function main(): Promise<void> {
   }
 
   const workdir = mkdtempSync(join(tmpdir(), "emulate-seeded-"));
-  const simproOut = join(workdir, "simpro.json");
-  const uptickOut = join(workdir, "uptick.json");
+  const seedPath = join(workdir, "seed.json");
   let server: ChildProcess | undefined;
   let sim: ChildProcess | undefined;
   let shuttingDown = false;
@@ -188,24 +313,16 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => shutdown(0));
 
   try {
-    // 1 + 2 — run the factories, then merge their exports into one seed.
-    await runFactory("SimPro", "simpro-sim.ts", "SIMPRO_SIM_EXPORT", simproOut);
-    await runFactory("Uptick", "uptick-sim.ts", "UPTICK_SIM_EXPORT", uptickOut);
-
-    const simpro = (JSON.parse(readFileSync(simproOut, "utf8")) as { simpro: Record<string, unknown> }).simpro;
-    const uptick = (JSON.parse(readFileSync(uptickOut, "utf8")) as { uptick: Record<string, unknown> }).uptick;
-    const seedPath = join(workdir, "seed.json");
+    // 1 — SEED: write the roots-only seed and boot the per-port server.
     writeFileSync(
       seedPath,
-      JSON.stringify({ workos: workosBlock(), nango: nangoConnections(), simpro, uptick }, null, 2),
+      JSON.stringify(
+        { workos: workosBlock(), nango: nangoConnections(), simpro: simproRoots(), uptick: uptickRef() },
+        null,
+        2,
+      ),
     );
-    const counts = {
-      simpro: (simpro.jobs as unknown[] | undefined)?.length ?? 0,
-      uptick: (uptick.defects as unknown[] | undefined)?.length ?? 0,
-    };
-
-    // 3 — long-lived per-port server seeded from the merged quarter.
-    console.log(`[seeded-server] booting per-port emulate (${SERVICES.join(", ")})…`);
+    console.log(`[seeded-server] SEED: booting per-port emulate (${SERVICES.join(", ")}) with roots only…`);
     server = spawn(
       process.execPath,
       [EMULATE_CLI, "start", "--service", SERVICES.join(","), "--port", String(BASE_PORT), "--seed", seedPath],
@@ -215,11 +332,18 @@ async function main(): Promise<void> {
     server.on("exit", (c) => {
       if (!shuttingDown && c) shutdown(1);
     });
-
     await waitForReady(25_000);
-    banner(counts);
 
-    // 4 — unbounded live Nango feed on top of the static backfill.
+    // 2 — BUILD: drive both sims in REMOTE mode *into* the running server.
+    await runRemoteSim("SimPro", "simpro-sim.ts", "SIMPRO_SIM_REMOTE", url("simpro"));
+    await runRemoteSim("Uptick", "uptick-sim.ts", "UPTICK_SIM_REMOTE", url("uptick"));
+
+    // 3 — PERSIST: the quarter is now in the long-lived server. Prove it.
+    const simpro = await simproProof();
+    const defects = await uptickDefectCount();
+    banner(simpro, defects);
+
+    // 4 — STREAM: unbounded live Nango feed on top of the static backfill.
     const simArgs = [SIM_CLI, "run", SCENARIO, "--base", url("nango")];
     if (seconds > 0) simArgs.push("--duration", String(seconds));
     sim = spawn(process.execPath, simArgs, { cwd: REPO_ROOT, env: { ...process.env }, stdio: "inherit" });

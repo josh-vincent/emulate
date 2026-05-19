@@ -815,10 +815,11 @@ pnpm --filter api-emulators-quickstart live-feed          # or: -- --seconds 8
 ```
 
 For the **full comprehensive 90-day SimPro + Uptick quarter** (every endpoint,
-not a light fixture) on the same long-lived per-port server, use `seeded-server`
-— it runs the `simpro-sim`/`uptick-sim` factories, merges their exported
-quarters, and serves them so your app reads a real quarter that persists until
-Ctrl-C:
+including line items, payments, leads, vendor orders and the 79 `setup/*`
+collections — not a light fixture) on the same long-lived per-port server, use
+`seeded-server` — it boots the per-port server with roots only, then drives
+`simpro-sim`/`uptick-sim` in REMOTE mode to build the quarter _inside the
+running server_ so your app reads a real quarter that persists until Ctrl-C:
 
 ```bash
 pnpm --filter api-emulators-quickstart seeded-server      # or: -- --seconds 8
