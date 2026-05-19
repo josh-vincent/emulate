@@ -12,6 +12,7 @@ import {
 } from "./middleware/auth.js";
 import type { ServicePlugin } from "./plugin.js";
 import { registerFontRoutes } from "./fonts.js";
+import { rateLimitProfile, rateLimitHeaders } from "./rate-limit.js";
 
 export interface ServerOptions {
   port?: number;
@@ -20,6 +21,8 @@ export interface ServerOptions {
   tokens?: Record<string, { login: string; id: number; scopes?: string[] }>;
   appKeyResolver?: AppKeyResolver;
   fallbackUser?: AuthFallback;
+  /** Override the resolved provider rate-limit window (useful in tests). */
+  rateLimit?: { limit?: number; windowSec?: number };
 }
 
 export function createServer(plugin: ServicePlugin, options: ServerOptions = {}) {
@@ -50,6 +53,9 @@ export function createServer(plugin: ServicePlugin, options: ServerOptions = {})
   app.use("*", createErrorHandler(docsUrl));
   app.use("*", authMiddleware(tokenMap, options.appKeyResolver, options.fallbackUser));
 
+  const rlProfile = rateLimitProfile(plugin.name);
+  const rlLimit = options.rateLimit?.limit ?? rlProfile.limit;
+  const rlWindow = options.rateLimit?.windowSec ?? rlProfile.windowSec;
   const rateLimitCounters = new Map<string, { remaining: number; resetAt: number }>();
   let lastPruneAt = Math.floor(Date.now() / 1000);
 
@@ -66,25 +72,19 @@ export function createServer(plugin: ServicePlugin, options: ServerOptions = {})
 
     let counter = rateLimitCounters.get(token);
     if (!counter || counter.resetAt <= now) {
-      counter = { remaining: 5000, resetAt: now + 3600 };
+      counter = { remaining: rlLimit, resetAt: now + rlWindow };
       rateLimitCounters.set(token, counter);
     }
 
     counter.remaining = Math.max(0, counter.remaining - 1);
 
-    c.header("X-RateLimit-Limit", "5000");
-    c.header("X-RateLimit-Remaining", String(counter.remaining));
-    c.header("X-RateLimit-Reset", String(counter.resetAt));
-    c.header("X-RateLimit-Resource", "core");
+    for (const [k, v] of Object.entries(rateLimitHeaders(rlProfile, counter, now))) {
+      c.header(k, v);
+    }
 
     if (counter.remaining === 0) {
-      return c.json(
-        {
-          message: "API rate limit exceeded",
-          documentation_url: docsUrl,
-        },
-        403,
-      );
+      const retryAfter = Math.max(0, counter.resetAt - now);
+      return c.json(rlProfile.body(retryAfter, docsUrl) as Record<string, unknown>, rlProfile.exceededStatus);
     }
 
     await next();
