@@ -234,4 +234,30 @@ describe("loadScenario — normalisation & validation", () => {
       ),
     ).toThrow(/environmentUuid/i);
   });
+
+  it("accepts a native stream without connectionId / providerConfigKey / model", () => {
+    const s = loadScenario(
+      JSON.stringify({
+        streams: [
+          {
+            name: "gh",
+            kind: "native",
+            provider: "github-issues",
+            pathPrefix: "/github",
+            ratePerMinute: 30,
+            maxCount: 4,
+          },
+        ],
+      }),
+    );
+    expect(s.streams[0].kind).toBe("native");
+    expect(s.streams[0].pathPrefix).toBe("/github");
+    expect(s.streams[0].connectionId).toBe("");
+  });
+
+  it("rejects an unknown kind", () => {
+    expect(() =>
+      loadScenario(JSON.stringify({ streams: [{ kind: "telepathy", provider: "gmail", ratePerMinute: 1 }] })),
+    ).toThrow(/kind must be/i);
+  });
 });

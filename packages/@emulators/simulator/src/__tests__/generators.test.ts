@@ -150,6 +150,33 @@ describe("generate — business providers (Phase 2.1, scenario-declared, no sour
   });
 });
 
+describe("generate — native-write providers (Phase 2.2)", () => {
+  it("github-issues: POSTs the repo issues API (fires the emulator's own webhook)", () => {
+    const t = generate("github-issues", 0, NOW);
+    if (t.kind !== "native") throw new Error("unreachable");
+    expect(t.method).toBe("POST");
+    expect(t.path).toBe("/repos/acme/app/issues");
+    const b = t.body as Record<string, any>;
+    expect(typeof b.title).toBe("string");
+    expect(Array.isArray(b.labels)).toBe(true);
+  });
+
+  it("stripe-payments: POSTs a payment_intent with amount + currency", () => {
+    const t = generate("stripe-payments", 2, NOW);
+    if (t.kind !== "native") throw new Error("unreachable");
+    expect(t.method).toBe("POST");
+    expect(t.path).toBe("/v1/payment_intents");
+    const b = t.body as Record<string, any>;
+    expect(typeof b.amount).toBe("number");
+    expect(b.currency).toBe("aud");
+  });
+
+  it("native providers are discoverable in the open registry", () => {
+    expect(hasGenerator("github-issues")).toBe(true);
+    expect(hasGenerator("stripe-payments")).toBe(true);
+  });
+});
+
 describe("generator registry — open for extension", () => {
   it("lists every built-in provider", () => {
     const names = generatorProviders();

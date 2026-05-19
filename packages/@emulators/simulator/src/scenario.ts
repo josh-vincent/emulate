@@ -21,14 +21,22 @@ export type Provider = string;
 
 export interface Stream {
   name: string;
-  kind: "sync" | "forward";
+  kind: "sync" | "forward" | "native";
   provider: Provider;
+  /** Required for sync/forward (the Nango connection); unused by native. */
   connectionId: string;
+  /** Required for sync/forward (the Nango config key); unused by native. */
   providerConfigKey: string;
   /** sync streams only — the Nango model the record is appended to. */
   model?: string;
   /** forward streams only — the {environmentUuid} path segment Nango uses. */
   environmentUuid?: string;
+  /**
+   * native streams only — prepended to the generator's provider-relative path.
+   * Empty for a single in-process plugin; `/github`, `/stripe`, … when driving
+   * `apps/server` (which mounts every service under its name).
+   */
+  pathPrefix?: string;
   /** Normalised from `ratePerMinute`: ms between ticks. */
   intervalMs: number;
   /** Fractional jitter on the interval, clamped to [0,1]. */
@@ -53,6 +61,7 @@ interface RawStream {
   providerConfigKey?: string;
   model?: string;
   environmentUuid?: string;
+  pathPrefix?: string;
   ratePerMinute?: number;
   jitter?: number;
   maxCount?: number;
@@ -65,15 +74,21 @@ function fail(msg: string): never {
 function normaliseStream(raw: RawStream, i: number): Stream {
   const at = `streams[${i}]${raw.name ? ` "${raw.name}"` : ""}`;
   const kind = raw.kind;
-  if (kind !== "sync" && kind !== "forward") fail(`${at}: kind must be "sync" or "forward"`);
+  if (kind !== "sync" && kind !== "forward" && kind !== "native") {
+    fail(`${at}: kind must be "sync", "forward" or "native"`);
+  }
 
   const provider = raw.provider as Provider;
   if (!provider || !hasGenerator(provider)) {
     fail(`${at}: unknown provider "${raw.provider}" (expected one of ${generatorProviders().join(", ")})`);
   }
 
-  if (!raw.connectionId) fail(`${at}: connectionId is required`);
-  if (!raw.providerConfigKey) fail(`${at}: providerConfigKey is required`);
+  // sync/forward go through Nango (connection-scoped); native writes the
+  // provider's own API directly, so it needs neither a connection nor a model.
+  if (kind !== "native") {
+    if (!raw.connectionId) fail(`${at}: connectionId is required`);
+    if (!raw.providerConfigKey) fail(`${at}: providerConfigKey is required`);
+  }
 
   const rate = raw.ratePerMinute;
   if (typeof rate !== "number" || !(rate > 0)) fail(`${at}: ratePerMinute must be a positive number`);
@@ -87,10 +102,11 @@ function normaliseStream(raw: RawStream, i: number): Stream {
     name: raw.name ?? `${provider}-${i}`,
     kind,
     provider,
-    connectionId: raw.connectionId,
-    providerConfigKey: raw.providerConfigKey,
+    connectionId: raw.connectionId ?? "",
+    providerConfigKey: raw.providerConfigKey ?? "",
     model: raw.model,
     environmentUuid: raw.environmentUuid,
+    pathPrefix: raw.pathPrefix,
     intervalMs: 60_000 / rate,
     jitter,
     maxCount: raw.maxCount,
