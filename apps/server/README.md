@@ -42,6 +42,25 @@ node apps/server/dist/index.js
 | `EMULATE_CONFIG_PATH` | YAML config path | auto-discover |
 | `EMULATE_CONFIG_URL` | Fetch config over HTTP at boot | — |
 | `EMULATE_ADMIN_TOKEN` | Bearer required on `/_admin/*` (except `/health`) | unset = open |
+| `EMULATE_SNAPSHOT_PATH` | Persist all service state to this file; restore it on boot (CLI `--snapshot-file <path>` wins) | unset = in-memory only |
+| `EMULATE_SNAPSHOT_INTERVAL_SEC` | When persistence is on, also flush every N seconds (besides on `SIGTERM`/`SIGINT`) | unset = save on exit only |
+
+### Persistence (survive a restart)
+
+By default the server is in-memory: every restart starts from the seed
+config. Point it at a snapshot file and connections, OAuth tokens and records
+survive a restart:
+
+```bash
+node apps/server/dist/index.js --snapshot-file ./.emulate-state.json
+# or: EMULATE_SNAPSHOT_PATH=./.emulate-state.json node apps/server/dist/index.js
+```
+
+On boot the stores are seeded as usual, then the snapshot is restored *over*
+that (persisted state is newer than fixtures). On `SIGTERM`/`SIGINT` — and, if
+`EMULATE_SNAPSHOT_INTERVAL_SEC` is set, periodically — the full state is
+written back. A missing, stale, or malformed snapshot is ignored (the server
+still boots from seed), so it is safe to delete the file to reset.
 
 ---
 

@@ -3,7 +3,7 @@ import { existsSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Collection, Store, type Entity, serializeValue, deserializeValue } from "../store.js";
-import { filePersistence } from "../persistence.js";
+import { filePersistence, snapshotBundle, restoreBundle, type ServerSnapshot } from "../persistence.js";
 
 interface User extends Entity {
   login: string;
@@ -246,5 +246,91 @@ describe("filePersistence", () => {
     await adapter.save("{}");
     expect(existsSync(nested)).toBe(true);
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+interface Conn extends Entity {
+  connection_id: string;
+}
+
+function seededStores(): Map<string, Store> {
+  const github = new Store();
+  github.collection<Conn>("repos").insert({ connection_id: "acme/app" } as Conn);
+  github.setData("github.oauth.tokens", new Map([["tok-1", { login: "octocat" }]]));
+
+  const nango = new Store();
+  nango.collection<Conn>("connections", ["connection_id"]).insert({ connection_id: "c-1" } as Conn);
+
+  return new Map<string, Store>([
+    ["github", github],
+    ["nango", nango],
+  ]);
+}
+
+describe("snapshotBundle / restoreBundle (server-wide persistence)", () => {
+  it("round-trips every service's collections, tokens and records", () => {
+    const json = snapshotBundle(seededStores());
+
+    const bundle = JSON.parse(json) as ServerSnapshot;
+    expect(bundle.version).toBe(1);
+    expect(typeof bundle.savedAt).toBe("string");
+    expect(Object.keys(bundle.services).sort()).toEqual(["github", "nango"]);
+
+    // Fresh stores (a "restart"): same names, empty.
+    const fresh = new Map<string, Store>([
+      ["github", new Store()],
+      ["nango", new Store()],
+    ]);
+    const restored = restoreBundle(fresh, json);
+    expect(restored.sort()).toEqual(["github", "nango"]);
+
+    const gh = fresh.get("github")!;
+    expect(gh.collection<Conn>("repos").all()).toHaveLength(1);
+    expect(gh.collection<Conn>("repos").all()[0].connection_id).toBe("acme/app");
+    const toks = gh.getData<Map<string, { login: string }>>("github.oauth.tokens");
+    expect(toks).toBeInstanceOf(Map);
+    expect(toks?.get("tok-1")?.login).toBe("octocat");
+
+    const ng = fresh.get("nango")!;
+    expect(ng.collection<Conn>("connections", ["connection_id"]).findOneBy("connection_id", "c-1")).toBeDefined();
+  });
+
+  it("only restores services present in BOTH the bundle and the live map", () => {
+    const json = snapshotBundle(seededStores()); // github + nango
+
+    const fresh = new Map<string, Store>([
+      ["github", new Store()],
+      ["stripe", new Store()], // not in the bundle → untouched
+    ]);
+    const restored = restoreBundle(fresh, json);
+    expect(restored).toEqual(["github"]);
+    expect(fresh.get("stripe")!.collection<Conn>("repos").all()).toHaveLength(0);
+  });
+
+  it("tolerates malformed / non-object JSON without throwing", () => {
+    const fresh = new Map<string, Store>([["github", new Store()]]);
+    expect(restoreBundle(fresh, "not json{")).toEqual([]);
+    expect(restoreBundle(fresh, "null")).toEqual([]);
+    expect(restoreBundle(fresh, JSON.stringify({ version: 1 }))).toEqual([]);
+  });
+
+  it("persists across a simulated restart via filePersistence", async () => {
+    const p = join(tmpdir(), `emulate-bundle-${Date.now()}.json`);
+    const adapter = filePersistence(p);
+    try {
+      await adapter.save(snapshotBundle(seededStores()));
+
+      const reboot = new Map<string, Store>([
+        ["github", new Store()],
+        ["nango", new Store()],
+      ]);
+      const onDisk = await adapter.load();
+      expect(onDisk).not.toBeNull();
+      const restored = restoreBundle(reboot, onDisk!);
+      expect(restored.sort()).toEqual(["github", "nango"]);
+      expect(reboot.get("github")!.collection<Conn>("repos").all()).toHaveLength(1);
+    } finally {
+      rmSync(p, { force: true });
+    }
   });
 });
