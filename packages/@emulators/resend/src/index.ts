@@ -1,4 +1,5 @@
 import type { Hono } from "hono";
+import { requireAuthWhen } from "@emulators/core";
 import type { ServicePlugin, Store, WebhookDispatcher, TokenMap, AppEnv, RouteContext } from "@emulators/core";
 import { getResendStore } from "./store.js";
 import { generateUuid } from "./helpers.js";
@@ -104,11 +105,17 @@ export const resendPlugin: ServicePlugin = {
   name: "resend",
   register(app: Hono<AppEnv>, store: Store, webhooks: WebhookDispatcher, baseUrl: string, tokenMap?: TokenMap): void {
     const ctx: RouteContext = { app, store, webhooks, baseUrl, tokenMap };
+    // `/inbox*` is the emulator's capture-inspection aid (not part of the
+    // real Resend API) — register it first so it stays reachable even when
+    // auth enforcement is opted in below.
+    inboxRoutes(ctx);
+    // Opt-in: the real Resend API rejects calls without an API key. Off by
+    // default so the generated smoke tests / quickstarts stay green.
+    app.use("*", requireAuthWhen("EMULATE_RESEND_REQUIRE_AUTH", "EMULATE_REQUIRE_AUTH"));
     emailRoutes(ctx);
     domainRoutes(ctx);
     apiKeyRoutes(ctx);
     contactRoutes(ctx);
-    inboxRoutes(ctx);
   },
   seed(_store: Store, _baseUrl: string): void {
     // No default seed data - inbox starts empty

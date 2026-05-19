@@ -1,3 +1,4 @@
+import { requireAuthWhen } from "@emulators/core";
 import type { AppEnv, RouteContext, ServicePlugin, Store, TokenMap, WebhookDispatcher } from "@emulators/core";
 import type { Hono } from "hono";
 import { stripeId } from "./helpers.js";
@@ -190,6 +191,10 @@ export const stripePlugin: ServicePlugin = {
     // Health check — used by dev-emulate.sh wait loop
     app.get("/health", (c) => c.json({ status: "ok", service: "stripe" }));
     inspectorRoutes(ctx);
+    // Opt-in: make the live API surface reject unauthenticated calls like
+    // the real Stripe API (off by default so smoke tests/demos are green).
+    // `/health` + `/inspector/*` stay open (not under `/v1`).
+    app.use("/v1/*", requireAuthWhen("EMULATE_STRIPE_REQUIRE_AUTH", "EMULATE_REQUIRE_AUTH"));
     customerRoutes(ctx);
     paymentMethodRoutes(ctx);
     paymentIntentRoutes(ctx);
