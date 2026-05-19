@@ -32,6 +32,10 @@ pnpm --filter api-emulators-quickstart sims
 # Realtime streaming — live events from one and many providers
 pnpm --filter api-emulators-quickstart realtime-stream
 
+# The end-to-end proof: a separate process auths over real HTTP through a
+# running emulate server (needs `pnpm -w build` first)
+pnpm --filter api-emulators-quickstart external-consumer
+
 # Everything
 pnpm --filter api-emulators-quickstart all
 ```
@@ -131,6 +135,63 @@ CLI: `emulate-sim run scenarios/all-streams.yaml --base http://nango.localhost:1
 For the package's own example see `emulate-sim` and `inbox-stream.yaml` in
 [`../../packages/@emulators/simulator/`](../../packages/@emulators/simulator/).
 
+## External-consumer proof — point your app at emulate
+
+Every script above mounts the emulator **in-process** for zero-setup demos.
+`external-consumer` is the opposite and the whole point of `emulate`: it spawns
+the real **`@emulators/server`** binary as a **separate OS process**, talks to
+it only over **real HTTP**, and proves a downstream app can treat emulate as a
+drop-in stand-in for the real providers — auth included.
+
+```bash
+pnpm -w build   # external-consumer runs the built server
+pnpm --filter api-emulators-quickstart external-consumer
+```
+
+It walks the exact path a production OpenID Connect client runs:
+
+1. **OIDC discovery** — `GET /google/.well-known/openid-configuration` →
+   `issuer`, `jwks_uri`, `RS256`.
+2. **Authorization-code flow** over HTTP → code → `POST /oauth2/token` →
+   `access_token` + `id_token` + `refresh_token`.
+3. **id_token verification with `jose`** — `createRemoteJWKSet(jwks_uri)` +
+   `jwtVerify(id_token, JWKS, { issuer, audience })`. These are the _same
+   primitives Auth.js / openid-client use internally_, so if this passes a real
+   auth library trusts emulate's tokens.
+4. **Token realism** — the server runs with `EMULATE_GOOGLE_TOKEN_TTL=1`, so the
+   access token expires in ~1s: a stale token gets a real **401**, and the
+   standard `grant_type=refresh_token` mints a fresh one that works again.
+5. **Provider proxy** — an authenticated `GET /github/user` through the _same_
+   running server shows emulate proxying a different provider.
+
+### Pointing a real Auth.js app at emulate
+
+The server's Google issuer is `http://localhost:<port>/google`. With
+[Auth.js](https://authjs.dev) you only override the issuer and credentials —
+**no application code changes**:
+
+```ts
+// auth.ts
+import NextAuth from "next-auth";
+import Google from "next-auth/providers/google";
+
+export const { handlers, auth } = NextAuth({
+  providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID,        // any value in no-config mode
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET, // any value in no-config mode
+      issuer: "http://localhost:4000/google",         // ← emulate, not accounts.google.com
+    }),
+  ],
+});
+```
+
+Run `pnpm --filter @emulators/server dev` (defaults to `:4000`), set the env
+above, and the app's normal sign-in flow — discovery, code exchange, JWKS
+verification, refresh — all resolve against emulate. Shorten the token lifetime
+with `EMULATE_GOOGLE_TOKEN_TTL` to exercise refresh in tests; flip
+`EMULATE_AUTH_LAX=1` to disable expiry when you don't care.
+
 ## How it works
 
 Every emulator is a `ServicePlugin` registered onto a [Hono](https://hono.dev)
@@ -156,6 +217,7 @@ src/
   direct-sim.ts             Direct (no-Nango) 5-provider native-API 3-month sim
   xero-quickbooks-webhooks.ts  Create invoice → Xero/QuickBooks → signed webhook → our destination
   realtime-stream.ts        Realtime streaming (one + many providers) via @emulators/simulator
+  external-consumer.ts      Separate-process OIDC + refresh + proxy proof over real HTTP
 scenarios/
   single-gmail.yaml         One stream, realtime cadence
   all-streams.yaml          All 6 providers at once, capped + deterministic

@@ -753,6 +753,20 @@ GitHub({
 
 No `oauth_apps` need to be seeded. When none are configured, the emulator skips `client_id`, `client_secret`, and `redirect_uri` validation.
 
+For OpenID Connect providers (Google, Okta, …) you only override the `issuer` — emulate serves a real discovery document, an RS256-signed `id_token`, and a live JWKS, so Auth.js / openid-client verify it exactly as they would the real provider:
+
+```typescript
+import Google from 'next-auth/providers/google'
+
+Google({
+  clientId: 'any-value',
+  clientSecret: 'any-value',
+  issuer: 'http://localhost:4000/google', // ← emulate, not accounts.google.com
+})
+```
+
+Access tokens expire (`EMULATE_GOOGLE_TOKEN_TTL`, default 1h) and drive the standard refresh flow; set `EMULATE_AUTH_LAX=1` to disable expiry in tests. For a runnable, separate-process proof of this whole path — OIDC discovery, code exchange, `jose` JWKS verification, token expiry → refresh, and a cross-provider authenticated read — run `pnpm --filter api-emulators-quickstart external-consumer` (see [`examples/api-emulators-quickstart`](./examples/api-emulators-quickstart/#external-consumer-proof--point-your-app-at-emulate)).
+
 ### Font files in serverless
 
 Emulator UI pages use bundled fonts. Wrap your Next.js config to include them in the serverless trace:
