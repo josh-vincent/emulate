@@ -23,7 +23,9 @@ export interface SimulatorOptions {
   /** Generate + log but make no HTTP calls. */
   dryRun?: boolean;
   /** Observation hook — fired after each tick (also in dry-run). */
-  onTick?: (info: { stream: string; provider: string; kind: "sync" | "forward"; seq: number }) => void;
+  onTick?: (info: { stream: string; provider: string; kind: "sync" | "forward" | "native"; seq: number }) => void;
+  /** Bearer token sent on native writes (the emulator's fallback identity). */
+  nativeToken?: string;
 }
 
 const defaultTimer: TimerLike = {
@@ -45,6 +47,7 @@ export class Simulator {
   private readonly random: () => number;
   private readonly dryRun: boolean;
   private readonly onTick?: SimulatorOptions["onTick"];
+  private readonly nativeToken: string;
 
   private readonly states: StreamState[];
   private durationHandle: unknown;
@@ -64,6 +67,7 @@ export class Simulator {
     this.random = opts.random ?? Math.random;
     this.dryRun = opts.dryRun ?? false;
     this.onTick = opts.onTick;
+    this.nativeToken = opts.nativeToken ?? "emulate-sim";
     this.states = scenario.streams.map((spec) => ({ spec, seq: 0, handle: undefined }));
   }
 
@@ -129,11 +133,16 @@ export class Simulator {
           model: t.model,
           added: 1,
         });
-      } else {
+      } else if (t.kind === "forward") {
         const env = encodeURIComponent(st.spec.environmentUuid ?? "env");
         const pck = encodeURIComponent(st.spec.providerConfigKey);
         await this.post(`${this.base}/webhook/${env}/${pck}`, t.payload, {
           "Connection-Id": st.spec.connectionId,
+        });
+      } else {
+        // Native write: the emulator's own webhook dispatch fires the event.
+        await this.send(t.method, `${this.base}${st.spec.pathPrefix ?? ""}${t.path}`, t.body, {
+          Authorization: `Bearer ${this.nativeToken}`,
         });
       }
     }
@@ -141,12 +150,16 @@ export class Simulator {
     this.onTick?.({ stream: st.spec.name, provider: st.spec.provider, kind: t.kind, seq });
   }
 
-  private async post(url: string, body: unknown, extraHeaders?: Record<string, string>): Promise<void> {
+  private post(url: string, body: unknown, extraHeaders?: Record<string, string>): Promise<void> {
+    return this.send("POST", url, body, extraHeaders);
+  }
+
+  private async send(method: string, url: string, body: unknown, extraHeaders?: Record<string, string>): Promise<void> {
     try {
       await this.fetch(url, {
-        method: "POST",
+        method,
         headers: { "Content-Type": "application/json", ...extraHeaders },
-        body: JSON.stringify(body),
+        body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch {
       // A streamed activity driver is best-effort: a transient emulator hiccup

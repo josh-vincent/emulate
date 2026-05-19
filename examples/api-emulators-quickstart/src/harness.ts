@@ -12,11 +12,13 @@
 // that identity (the registry's `defaultFallback`), or `tokens` to register
 // exact bearer tokens.
 import { createServer } from "@emulators/core";
-import type { ServicePlugin, Store, AuthFallback } from "@emulators/core";
+import type { ServicePlugin, Store, AuthFallback, WebhookDispatcher } from "@emulators/core";
 
 export interface Emulator {
   app: { request: (url: string, init?: RequestInit) => Response | Promise<Response> };
   store: Store;
+  /** The plugin's webhook dispatcher — for seed-time webhook registration. */
+  webhooks: WebhookDispatcher;
 }
 
 export interface MountOptions {
@@ -35,7 +37,7 @@ export function mount(plugin: ServicePlugin, baseUrl: string, opts: MountOptions
     tokens: opts.tokens,
   });
   if (opts.seedDefaults) plugin.seed?.(srv.store, baseUrl);
-  return { app: srv.app, store: srv.store };
+  return { app: srv.app, store: srv.store, webhooks: srv.webhooks };
 }
 
 export function heading(title: string): void {

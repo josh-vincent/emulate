@@ -126,6 +126,52 @@ describe("Simulator — forward stream", () => {
   });
 });
 
+const NATIVE_SCENARIO = `
+streams:
+  - name: gh-issues
+    kind: native
+    provider: github-issues
+    pathPrefix: /github
+    ratePerMinute: 60
+    maxCount: 2
+  - name: stripe-pi
+    kind: native
+    provider: stripe-payments
+    ratePerMinute: 60
+    maxCount: 1
+`;
+
+describe("Simulator — native stream", () => {
+  it("writes the provider's own API directly so its webhook dispatch fires", async () => {
+    const { calls, fn } = fakeFetch();
+    const sim = new Simulator(loadScenario(NATIVE_SCENARIO), {
+      base: "http://emu",
+      fetch: fn as never,
+      now: () => new Date("2026-05-16T00:00:00Z"),
+      nativeToken: "tok-123",
+    });
+    await sim.runOnce();
+
+    const gh = calls.find((c) => c.url.includes("/issues"))!;
+    expect(gh.method).toBe("POST");
+    expect(gh.url).toBe("http://emu/github/repos/acme/app/issues");
+    expect(gh.headers.Authorization).toBe("Bearer tok-123");
+    expect((gh.body as { title: string }).title).toContain("#0");
+
+    // No pathPrefix → provider-relative path is used as-is.
+    const stripe = calls.find((c) => c.url.includes("/payment_intents"))!;
+    expect(stripe.url).toBe("http://emu/v1/payment_intents");
+    expect((stripe.body as { currency: string }).currency).toBe("aud");
+  });
+
+  it("native streams need no connectionId / model in the scenario", () => {
+    const scn = loadScenario(NATIVE_SCENARIO);
+    expect(scn.streams[0]!.kind).toBe("native");
+    expect(scn.streams[0]!.pathPrefix).toBe("/github");
+    expect(scn.streams[0]!.connectionId).toBe("");
+  });
+});
+
 describe("Simulator — continuous run", () => {
   it("respects per-stream maxCount and resolves when all streams are done", async () => {
     const { calls, fn } = fakeFetch();

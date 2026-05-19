@@ -11,7 +11,13 @@
 
 export type GeneratedTick =
   | { kind: "sync"; model: string; record: Record<string, unknown> }
-  | { kind: "forward"; payload: Record<string, unknown> };
+  | { kind: "forward"; payload: Record<string, unknown> }
+  // A *native* tick is a direct write against a native emulator's real API.
+  // The emulator's own on-write webhook dispatch fires as a side effect — so a
+  // native stream drives a realistic provider event stream with no Nango in
+  // the path. `path` is provider-relative; the stream's `pathPrefix` (e.g.
+  // `/github`) is prepended by the engine for `apps/server`-style mounts.
+  | { kind: "native"; method: string; path: string; body?: unknown };
 
 export type GeneratorFn = (seq: number, now: Date) => GeneratedTick;
 
@@ -263,6 +269,47 @@ function slack(seq: number, now: Date): GeneratedTick {
   };
 }
 
+// --- Native-write providers ------------------------------------------------
+//
+// These don't append a Nango record — they POST a native emulator's real API,
+// and the emulator's *own* webhook dispatch (now retry-backed) fires the
+// event. The path is provider-relative; demo identifiers are fixed so the
+// scenario only has to seed `acme/app` (GitHub) and a Stripe webhook endpoint.
+
+const PR_TITLES = [
+  "Fix flaky pump-test parser",
+  "Add AS1851 schedule export",
+  "Bump compliance ruleset to 2026",
+  "Patch defect-notification race",
+];
+
+function githubIssues(seq: number, now: Date): GeneratedTick {
+  return {
+    kind: "native",
+    method: "POST",
+    path: "/repos/acme/app/issues",
+    body: {
+      title: `${pick(PR_TITLES, seq)} (#${seq})`,
+      body: `${pick(BODIES, seq)}\n\nopened by emulate-sim at ${now.toISOString()}`,
+      labels: [seq % 2 === 0 ? "bug" : "enhancement"],
+    },
+  };
+}
+
+function stripePayments(seq: number, now: Date): GeneratedTick {
+  return {
+    kind: "native",
+    method: "POST",
+    path: "/v1/payment_intents",
+    body: {
+      amount: AMOUNTS[seq % AMOUNTS.length],
+      currency: "aud",
+      description: `Invoice ${1000 + seq} — ${pick(CONTACTS, seq)}`,
+      metadata: { simSeq: String(seq), at: now.toISOString() },
+    },
+  };
+}
+
 // --- Registry --------------------------------------------------------------
 
 const GENERATORS = new Map<string, GeneratorFn>([
@@ -277,6 +324,8 @@ const GENERATORS = new Map<string, GeneratorFn>([
   ["salesforce", salesforce],
   ["github", github],
   ["slack", slack],
+  ["github-issues", githubIssues],
+  ["stripe-payments", stripePayments],
 ]);
 
 /** Register (or override) a generator for `provider`. Lets a host app teach
