@@ -779,6 +779,30 @@ Google({
 
 Access tokens expire (`EMULATE_GOOGLE_TOKEN_TTL`, default 1h) and drive the standard refresh flow; set `EMULATE_AUTH_LAX=1` to disable expiry in tests. For a runnable, separate-process proof of this whole path — OIDC discovery, code exchange, `jose` JWKS verification, token expiry → refresh, and a cross-provider authenticated read — run `pnpm --filter api-emulators-quickstart external-consumer` (see [`examples/api-emulators-quickstart`](./examples/api-emulators-quickstart/#external-consumer-proof--point-your-app-at-emulate)).
 
+### Production-like hardening (opt-in)
+
+By default the emulators are permissive so zero-setup demos and CI smoke tests just work. Three opt-in switches make them behave like production when you want to exercise an app's failure paths — all **off by default** (no behaviour change unless you set them) and overridden globally by `EMULATE_AUTH_LAX=1`:
+
+| Switch | Effect |
+| --- | --- |
+| `EMULATE_<PROVIDER>_REQUIRE_AUTH=1` | The provider's data routes reject unauthenticated calls with a real `401` (drives your auth/refresh path). Wired for `STRIPE`, `RESEND`, `UPTICK`, `AWS`, `WORKOS`. OAuth/token, discovery, JWKS, health and inspector stay open. |
+| `EMULATE_REQUIRE_AUTH=1` | Umbrella — enables the above for every wired provider at once. |
+| `EMULATE_MULTI_TENANT=1` | Each request is isolated by the `X-Emulate-Tenant` header — every tenant gets its own backing store, so two orgs hitting the same emulator never see each other's data. Absent header → the `default` tenant (single-tenant behaviour). |
+
+```bash
+# Reject tokenless Stripe calls; isolate data per tenant
+EMULATE_STRIPE_REQUIRE_AUTH=1 EMULATE_MULTI_TENANT=1 npx emulate start
+curl -H 'X-Emulate-Tenant: acme'   .../v1/customers   # acme's data only
+```
+
+Programmatically the same is available via `createServer(plugin, { multiTenant: true })` and the `requireAuthWhen(...flags)` / `requireScope(...scopes)` middleware exported from `@emulators/core`.
+
+For the whole picture end to end — WorkOS sign-in → connect Google + SimPro via Nango → unified proxied reads → live events streamed to a webhook sink — run the composed walkthrough:
+
+```bash
+pnpm --filter api-emulators-quickstart workos-dashboard-live
+```
+
 ### Font files in serverless
 
 Emulator UI pages use bundled fonts. Wrap your Next.js config to include them in the serverless trace:
