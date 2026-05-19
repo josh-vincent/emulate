@@ -2,6 +2,18 @@
 
 Local drop-in replacement services for CI and no-network sandboxes. Fully stateful, production-fidelity API emulation. Not mocks.
 
+## The three pillars
+
+emulate is built around one idea: **emulate the auth, simulate the activity, and act as a proxy for the providers** — so your downstream app can talk to one local deployment instead of dozens of real SaaS APIs.
+
+1. **Emulate auth.** Real OAuth 2.0 / OIDC flows: authorize → code exchange → RS256 ID tokens signed by a published JWKS, access-token expiry, and the standard refresh round-trip. Your app's sign-in code runs unmodified. For a runnable, separate-process proof — OIDC discovery, code exchange, `jose` JWKS verification, expiry → refresh, and a cross-provider authenticated read — run `pnpm --filter api-emulators-quickstart external-consumer` ([source](./examples/api-emulators-quickstart/)).
+
+2. **Simulate activity.** Static fixtures become *living* ones. [`emulate-sim`](./packages/@emulators/simulator/) is an external driver that streams new records and events into a running deployment over time — emails into an inbox, Teams/WhatsApp messages, Drive files, Calendar events — and can drive native emulators directly so each emulator's own webhook dispatch fires on a schedule.
+
+3. **Proxy for providers.** One deployable server ([`apps/server`](./apps/server/)) multiplexes every emulator behind a single origin. Point a real vendor SDK at it — path-routed (`/<service>/*`) or, for prefix-less SDKs (Stripe, Salesforce, Xero, QuickBooks, WorkOS), at the bare origin — and it forwards transparently. State [survives a restart](./apps/server/README.md#persistence-survive-a-restart) via a snapshot file.
+
+**Examples as the spine:** [`examples/oauth`](./examples/oauth/) (raw OAuth flow), [`examples/nextjs-embedded`](./examples/nextjs-embedded/) (embedded in a Next.js app), [`examples/api-emulators-quickstart`](./examples/api-emulators-quickstart/) (the external-consumer proof + narrated per-provider walkthroughs).
+
 ## Quick Start
 
 ```bash
@@ -849,26 +861,50 @@ Each entry uses each provider's real API field shapes so client code transfers c
 
 For a runnable narrated walkthrough (list connections, fetch credentials, merge sync state, pull records, proxy a provider-native call, run the hosted connect-session handshake), see [`examples/api-emulators-quickstart`](./examples/api-emulators-quickstart/).
 
+## Simulating live activity (`emulate-sim`)
+
+A static emulator answers whatever you seeded. Real systems also *change over time* — new emails arrive, issues get opened, payments settle. [`@emulators/simulator`](./packages/@emulators/simulator/) is a standalone driver that turns a running deployment into a living one. It imports nothing from the emulator — a pure HTTP client that pushes new records/events on a schedule and lets each emulator's own webhook dispatch fire:
+
+```bash
+emulate-sim run scenario.yaml --base http://localhost:4000
+  --once              # one tick per stream, then exit
+  --dry-run           # generate + log, no HTTP calls
+  --duration <sec>    # stop after N seconds
+```
+
+A scenario is YAML/JSON describing streams (inbox emails, Teams/WhatsApp messages, Drive files, Calendar events, or native actions like opening GitHub issues / creating Stripe payment intents). See [`examples/inbox-stream.yaml`](./packages/@emulators/simulator/examples/inbox-stream.yaml) and the [simulator README](./packages/@emulators/simulator/README.md).
+
+## Deployable server
+
+[`apps/server`](./apps/server/) is a single Hono app that multiplexes every emulator behind one port — drop it on a server, point dev/staging at it, run real OAuth against fake providers. It adds two production conveniences over the per-service CLI:
+
+- **Persistence** — `--snapshot-file ./state.json` (or `EMULATE_SNAPSHOT_PATH`) restores connections, OAuth tokens and records on boot and flushes on `SIGTERM`/`SIGINT`. See [Persistence](./apps/server/README.md#persistence-survive-a-restart).
+- **Base-URL ergonomics** — prefix-less SDKs (Stripe `apiBase`, Salesforce instance URL, Xero/QuickBooks/WorkOS hosts) work pointed at the bare origin; everything else is path-routed at `/<service>/*`. See the [base-URL matrix](./apps/server/README.md#pointing-an-sdk-at-the-server).
+
+Multi-tenant note: a deployment is a single shared state space today. For isolated tenants, run separate deployments (or separate snapshot files) per tenant until per-request tenant isolation lands.
+
 ## Architecture
 
 ```
 packages/
-  emulate/          # CLI entry point (commander)
+  emulate/          # CLI entry point (commander) + upstream service registry
   @emulators/
-    core/           # HTTP server, in-memory store, plugin interface, middleware
+    core/           # HTTP server, store, plugin interface, middleware,
+                    #   persistence, root-fallback routing
     adapter-next/   # Next.js App Router integration
-    vercel/         # Vercel API service
-    github/         # GitHub API service
-    google/         # Google OAuth 2.0 / OIDC + Gmail, Calendar, Drive
-    slack/          # Slack Web API, OAuth v2, incoming webhooks
-    apple/          # Apple Sign In / OIDC
-    microsoft/      # Microsoft Entra ID OAuth 2.0 / OIDC + Graph /me
-    aws/            # AWS S3, SQS, IAM, STS
+    native-kit/     # spec-driven engine for ~30 SDK-aligned REST emulators
+    nango/          # multi-provider integration emulator (proxy + records)
+    simulator/      # emulate-sim — external live-activity driver
+    vercel/ github/ google/ slack/ apple/ microsoft/ okta/ aws/ resend/
+    stripe/ clerk/ workos/ mongoatlas/ ...  # first-class provider services
+    salesforce/ xero/ quickbooks/ hubspot/ simpro/ uptick/ + ~30 more
+                    #   direct-to-source emulators (native REST, no proxy)
 apps/
-  web/              # Documentation site (Next.js)
+  server/           # deployable multiplexer: all emulators behind one port
+  web/              # documentation site (Next.js)
 ```
 
-The core provides a generic `Store` with typed `Collection<T>` instances supporting CRUD, indexing, filtering, and pagination. Each service plugin registers its routes on the shared Hono app and uses the store for state.
+The core provides a generic `Store` with typed `Collection<T>` instances supporting CRUD, indexing, filtering, and pagination. Each service plugin registers its routes on the shared Hono app and uses the store for state. `native-kit` generates SDK-aligned emulators from the same provider seed shapes used by the Nango library, so coverage scales without hand-writing every route.
 
 ## Auth
 
