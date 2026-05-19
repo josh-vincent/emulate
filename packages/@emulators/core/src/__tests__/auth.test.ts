@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import {
   authMiddleware,
   requireAuth,
+  requireScope,
   requireAppAuth,
   serializeTokenMap,
   restoreTokenMap,
@@ -100,6 +101,83 @@ describe("requireAuth", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { user: { login: string } };
     expect(body.user?.login).toBe("alice");
+  });
+});
+
+describe("requireScope", () => {
+  const prevLax = process.env.EMULATE_AUTH_LAX;
+  let tokenMap: TokenMap;
+
+  beforeEach(() => {
+    delete process.env.EMULATE_AUTH_LAX;
+    tokenMap = new Map();
+    tokenMap.set("repo-token", { login: "alice", id: 1, scopes: ["repo", "user"] });
+    tokenMap.set("readonly-token", { login: "bob", id: 2, scopes: ["user"] });
+    tokenMap.set("wildcard-token", { login: "root", id: 3, scopes: ["*"] });
+  });
+
+  afterAll(() => {
+    if (prevLax === undefined) delete process.env.EMULATE_AUTH_LAX;
+    else process.env.EMULATE_AUTH_LAX = prevLax;
+  });
+
+  function appWith(...scopes: string[]) {
+    const app = new Hono<AppEnv>();
+    app.use("*", authMiddleware(tokenMap));
+    app.use("*", requireAuth());
+    app.use("*", requireScope(...scopes));
+    app.get("/data", (c) => c.json({ ok: true }));
+    return app;
+  }
+
+  it("passes when the token holds every required scope", async () => {
+    const res = await appWith("repo").request("/data", {
+      headers: { Authorization: "Bearer repo-token" },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 403 insufficient_scope when a required scope is missing", async () => {
+    const res = await appWith("repo").request("/data", {
+      headers: { Authorization: "Bearer readonly-token" },
+    });
+    expect(res.status).toBe(403);
+    expect(res.headers.get("WWW-Authenticate")).toBe('Bearer error="insufficient_scope", scope="repo"');
+    const body = (await res.json()) as { message: string; documentation_url: string };
+    expect(body.message).toContain("repo");
+  });
+
+  it("ANDs multiple required scopes", async () => {
+    const res = await appWith("repo", "admin:org").request("/data", {
+      headers: { Authorization: "Bearer repo-token" },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("a wildcard `*` scope satisfies any requirement", async () => {
+    const res = await appWith("repo", "admin:org").request("/data", {
+      headers: { Authorization: "Bearer wildcard-token" },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 401 when there is no authenticated user", async () => {
+    const app = new Hono<AppEnv>();
+    app.use("*", authMiddleware(tokenMap));
+    app.use("*", requireScope("repo"));
+    app.get("/data", (c) => c.json({ ok: true }));
+    const res = await app.request("/data");
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { message: string };
+    expect(body.message).toBe("Requires authentication");
+  });
+
+  it("EMULATE_AUTH_LAX=1 bypasses scope enforcement", async () => {
+    process.env.EMULATE_AUTH_LAX = "1";
+    const res = await appWith("repo").request("/data", {
+      headers: { Authorization: "Bearer readonly-token" },
+    });
+    expect(res.status).toBe(200);
   });
 });
 

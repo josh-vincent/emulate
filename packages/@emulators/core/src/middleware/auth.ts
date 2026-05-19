@@ -166,6 +166,50 @@ export function requireAuth() {
   };
 }
 
+/**
+ * Opt-in scope guard for data routes (RFC 6750 §3.1). Mount *after*
+ * `requireAuth()` on routes that should reject tokens lacking a scope —
+ * this exercises the consumer's re-consent / scope-upgrade path against
+ * the emulator instead of always succeeding.
+ *
+ * Behaviour (chosen to be drop-in and non-breaking):
+ *  - `EMULATE_AUTH_LAX=1|true` → bypass entirely (mirrors token-expiry lax),
+ *    so the ~30 generated smoke tests and quick demos are unaffected.
+ *  - No authenticated user → 401 (same body as `requireAuth`) so the guard
+ *    is safe even if mounted without `requireAuth` ahead of it.
+ *  - A token carrying the wildcard `*` scope satisfies any requirement —
+ *    matches how the standalone server issues "all scopes" default tokens.
+ *  - Otherwise every listed scope must be held (AND-ed); a miss returns 403
+ *    with `WWW-Authenticate: Bearer error="insufficient_scope"` (RFC 6750),
+ *    which real SDKs surface as a permission error.
+ */
+export function requireScope(...required: string[]) {
+  return async (c: Context, next: Next) => {
+    if (!authLax()) {
+      const user = c.get("authUser") as AuthUser | undefined;
+      const docsUrl = (c.get("docsUrl") as string | undefined) ?? "https://emulate.dev";
+      if (!user) {
+        return c.json({ message: "Requires authentication", documentation_url: docsUrl }, 401);
+      }
+      const held = new Set<string>(c.get("authScopes") ?? user.scopes ?? []);
+      if (!held.has("*")) {
+        const missing = required.filter((s) => !held.has(s));
+        if (missing.length > 0) {
+          c.header("WWW-Authenticate", `Bearer error="insufficient_scope", scope="${required.join(" ")}"`);
+          return c.json(
+            {
+              message: `Token missing required scope: ${missing.join(", ")}`,
+              documentation_url: docsUrl,
+            },
+            403,
+          );
+        }
+      }
+    }
+    await next();
+  };
+}
+
 export function requireAppAuth() {
   return async (c: Context, next: Next) => {
     if (!c.get("authApp")) {
