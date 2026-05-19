@@ -2,7 +2,14 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import pc from "picocolors";
-import { registerFontRoutes, type AppEnv } from "@emulators/core";
+import {
+  registerFontRoutes,
+  filePersistence,
+  snapshotBundle,
+  restoreBundle,
+  type AppEnv,
+  type Store,
+} from "@emulators/core";
 import { SERVICE_NAMES } from "./plugins.js";
 import { loadConfig } from "./config.js";
 import { expandUnifiedUsers } from "./seed/users.js";
@@ -54,8 +61,75 @@ async function main() {
   parent.route("/", createAdminRouter({ apps, config, tokens, baseUrl }));
   mountDispatcher(parent, apps);
 
+  // Optional cross-restart persistence: restore a prior snapshot over the
+  // freshly-seeded stores (persisted state is newer than fixtures), then
+  // flush back on shutdown so connections, tokens and records survive a
+  // restart. Off unless --snapshot-file / EMULATE_SNAPSHOT_PATH is given.
+  const snapshotPath = resolveSnapshotPath();
+  if (snapshotPath) await wireSnapshotPersistence(snapshotPath, apps);
+
   serve({ fetch: parent.fetch, port });
   printBanner({ port, baseUrl, source, services: [...apps.keys()], tokens });
+}
+
+/** `--snapshot-file <path>` / `--snapshot-file=<path>` (CLI wins) else
+ *  `EMULATE_SNAPSHOT_PATH`. Returns undefined when persistence is disabled. */
+function resolveSnapshotPath(): string | undefined {
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--snapshot-file") return argv[i + 1];
+    if (a.startsWith("--snapshot-file=")) return a.slice("--snapshot-file=".length);
+  }
+  return process.env.EMULATE_SNAPSHOT_PATH || undefined;
+}
+
+async function wireSnapshotPersistence(path: string, apps: Map<ServiceName, { store: Store }>): Promise<void> {
+  const persistence = filePersistence(path);
+  const stores = new Map<string, Store>([...apps].map(([name, sa]) => [name, sa.store]));
+
+  const existing = await persistence.load();
+  if (existing) {
+    const restored = restoreBundle(stores, existing);
+    console.log(
+      restored.length > 0
+        ? `[emulate] snapshot: restored ${restored.length} service(s) from ${path}`
+        : `[emulate] snapshot: ${path} present but matched no services — booted from seed`,
+    );
+  } else {
+    console.log(`[emulate] snapshot: none at ${path} — booted from seed (persists on exit)`);
+  }
+
+  let saving = false;
+  const persist = async (): Promise<void> => {
+    if (saving) return;
+    saving = true;
+    try {
+      await persistence.save(snapshotBundle(stores));
+    } catch (err) {
+      console.error("[emulate] snapshot: save failed", err);
+    } finally {
+      saving = false;
+    }
+  };
+
+  let shuttingDown = false;
+  const shutdown = (sig: NodeJS.Signals): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    void persist().then(() => {
+      console.log(`[emulate] snapshot: saved to ${path} on ${sig}`);
+      process.exit(0);
+    });
+  };
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
+
+  const intervalSec = Number.parseInt(process.env.EMULATE_SNAPSHOT_INTERVAL_SEC ?? "0", 10);
+  if (Number.isFinite(intervalSec) && intervalSec > 0) {
+    setInterval(() => void persist(), intervalSec * 1000).unref();
+    console.log(`[emulate] snapshot: periodic flush every ${intervalSec}s`);
+  }
 }
 
 interface BannerOpts {

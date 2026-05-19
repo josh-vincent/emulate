@@ -61,4 +61,10 @@ export {
 export { registerFontRoutes } from "./fonts.js";
 export { normalizeUri, matchesRedirectUri, constantTimeSecretEqual, bodyStr, parseCookies } from "./oauth-helpers.js";
 export { debug } from "./debug.js";
-export { type PersistenceAdapter, filePersistence } from "./persistence.js";
+export {
+  type PersistenceAdapter,
+  type ServerSnapshot,
+  filePersistence,
+  snapshotBundle,
+  restoreBundle,
+} from "./persistence.js";
