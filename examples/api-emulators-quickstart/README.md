@@ -36,9 +36,36 @@ pnpm --filter api-emulators-quickstart realtime-stream
 # running emulate server (needs `pnpm -w build` first)
 pnpm --filter api-emulators-quickstart external-consumer
 
+# The composed story: WorkOS sign-in → connect Google + SimPro → unified
+# proxy reads → live events streamed into the app's webhook sink
+pnpm --filter api-emulators-quickstart workos-dashboard-live
+
 # Everything
 pnpm --filter api-emulators-quickstart all
 ```
+
+## Composed end-to-end story (`workos-dashboard-live`)
+
+The whole three-pillar vision — **emulate auth → simulate activity → proxy for
+the providers** — in one narrated run, with no ports and no network (three
+emulators mounted in-process; the simulator's `fetch` injected straight at
+`app.request`):
+
+1. **Sign in with WorkOS** — `authorize` → `authenticate` → the user's
+   organization membership loads the dashboard context.
+2. **Connect applications from the dashboard** — Google Mail + Drive through
+   the hosted **Nango** connect-session handshake (`/connect/sessions` →
+   `/connect/complete`), and **SimPro** via its own OAuth 2.0 code flow.
+3. **Unified data back to the end app** — proxied reads across every linked
+   provider: `GET /connection`, Gmail messages and Drive files through Nango,
+   and the SimPro job through its own API surface.
+4. **Watch live events arrive** — [`@emulators/simulator`](../../packages/@emulators/simulator/)
+   drips brand-new Gmail messages into the _running_ emulator over real
+   wall-clock time ([`scenarios/single-gmail.yaml`](./scenarios/single-gmail.yaml));
+   each one lands at the app's registered webhook sink. Asserted: 6 streamed,
+   `GET /records` grows by 6, ≥6 webhook deliveries to the app.
+
+Every act is assertion-gated; the script exits non-zero if any pillar fails.
 
 ## Quickstarts
 
@@ -97,14 +124,14 @@ emulator registers, asserting 100 % route-pattern coverage. They exit non-zero
 on any coverage gap, 5xx, or list-endpoint failure — so they double as
 contract tests.
 
-| Script                | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `uptick-sim`          | 12 weekly client onboardings + defect lifecycle across 90 days; **24/24** uptick routes; round-trip verified                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `simpro-sim`          | ~30 dated jobs (+ schedules/invoices/payments) across 90 days; a generic crawler resolves every `:param` transitively and exercises **all 372** (method, path) endpoints (≥97 % 2xx, 0 × 5xx); **29/29** shape + relational-integrity checks (every entity's full shape + every FK resolved to a real linked record)                                                                                                                                                                                                                                                                                           |
-| `nango-providers-sim` | **10 connections**, 90 days of dated records each. Four (xero, quickbooks, google-drive, onedrive) drive every provider-native `/proxy/*` path; the rest form a **cross-provider graph** — Slack/Gmail/Jira/Salesforce records link into Google Drive by file id + share URL, Jira links into GitHub PRs. **Each connection is independently verified** (resolves through the emulator, records are emulator-served, a live append round-trips back through `GET /records`, ≥75-day span), then a cross-provider integrity phase resolves **all 95** references to real linked records; **18/18** Nango routes |
-| `direct-sim`          | **No Nango layer at all** — 5 emulators (GitHub, Slack, Stripe, Resend, Vercel) each spoken to through their _own_ native API. A 90-day DevOps quarter: 12 weekly cycles of incident → deploy notice → invoice payment → customer mail → service ship, then a third of incidents resolved via PATCH. Every created entity is **round-tripped back through that provider's own GET**; **24/24** native route patterns across 5 providers, **11/11** assertion checks, 0 × non-2xx                                                                                                                               |
-| `business-streams`    | **Phase 2.1 — scenario-declared provider streams, zero simulator source edits.** Xero invoices, Jira issues, Salesforce opportunities, GitHub PRs and Slack messages streamed into a running Nango emulator purely from [`scenarios/business-streams.yaml`](./scenarios/business-streams.yaml) via the open generator registry; every stream's records asserted queryable through `GET /records` and each sync asserted to have fired a webhook delivery |
-| `native-driver`       | **Phase 2.2 — native-provider activity driver, zero simulator source edits.** The simulator performs scheduled real API writes against native emulators (open GitHub issues, create Stripe payment intents) so each emulator's _own_ retry-backed webhook dispatch fires; a real downstream HTTP consumer asserts it received the full **6× `issues.opened` + 4× `payment_intent.created`** stream — declared only via the `kind: native` streams in the script's inline scenarios |
+| Script                     | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `uptick-sim`               | 12 weekly client onboardings + defect lifecycle across 90 days; **24/24** uptick routes; round-trip verified                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `simpro-sim`               | ~30 dated jobs (+ schedules/invoices/payments) across 90 days; a generic crawler resolves every `:param` transitively and exercises **all 372** (method, path) endpoints (≥97 % 2xx, 0 × 5xx); **29/29** shape + relational-integrity checks (every entity's full shape + every FK resolved to a real linked record)                                                                                                                                                                                                                                                                                                                                                                    |
+| `nango-providers-sim`      | **10 connections**, 90 days of dated records each. Four (xero, quickbooks, google-drive, onedrive) drive every provider-native `/proxy/*` path; the rest form a **cross-provider graph** — Slack/Gmail/Jira/Salesforce records link into Google Drive by file id + share URL, Jira links into GitHub PRs. **Each connection is independently verified** (resolves through the emulator, records are emulator-served, a live append round-trips back through `GET /records`, ≥75-day span), then a cross-provider integrity phase resolves **all 95** references to real linked records; **18/18** Nango routes                                                                          |
+| `direct-sim`               | **No Nango layer at all** — 5 emulators (GitHub, Slack, Stripe, Resend, Vercel) each spoken to through their _own_ native API. A 90-day DevOps quarter: 12 weekly cycles of incident → deploy notice → invoice payment → customer mail → service ship, then a third of incidents resolved via PATCH. Every created entity is **round-tripped back through that provider's own GET**; **24/24** native route patterns across 5 providers, **11/11** assertion checks, 0 × non-2xx                                                                                                                                                                                                        |
+| `business-streams`         | **Phase 2.1 — scenario-declared provider streams, zero simulator source edits.** Xero invoices, Jira issues, Salesforce opportunities, GitHub PRs and Slack messages streamed into a running Nango emulator purely from [`scenarios/business-streams.yaml`](./scenarios/business-streams.yaml) via the open generator registry; every stream's records asserted queryable through `GET /records` and each sync asserted to have fired a webhook delivery                                                                                                                                                                                                                                |
+| `native-driver`            | **Phase 2.2 — native-provider activity driver, zero simulator source edits.** The simulator performs scheduled real API writes against native emulators (open GitHub issues, create Stripe payment intents) so each emulator's _own_ retry-backed webhook dispatch fires; a real downstream HTTP consumer asserts it received the full **6× `issues.opened` + 4× `payment_intent.created`** stream — declared only via the `kind: native` streams in the script's inline scenarios                                                                                                                                                                                                      |
 | `xero-quickbooks-webhooks` | **Full create → provider → signed webhook → our destination chain**, no Nango envelope. Stands up a real listening socket, registers it via `POST /webhook-settings`, then for **Xero** and **QuickBooks**: OAuth2 token → create invoice through the native write API → the emulator POSTs our destination the provider's _own_ webhook shape (Xero `events[]` under `x-xero-signature`, QuickBooks `eventNotifications[]` under `intuit-signature`), each signed **base64-HMAC-SHA256 re-derived locally and compared byte-for-byte**, then follows the webhook's resource pointer back to GET the new invoice. **11/11** assertions; both deliveries logged in `/webhook-deliveries` |
 
 ## Nango provider library
@@ -180,9 +207,9 @@ import Google from "next-auth/providers/google";
 export const { handlers, auth } = NextAuth({
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,        // any value in no-config mode
+      clientId: process.env.GOOGLE_CLIENT_ID, // any value in no-config mode
       clientSecret: process.env.GOOGLE_CLIENT_SECRET, // any value in no-config mode
-      issuer: "http://localhost:4000/google",         // ← emulate, not accounts.google.com
+      issuer: "http://localhost:4000/google", // ← emulate, not accounts.google.com
     }),
   ],
 });
@@ -221,6 +248,7 @@ src/
   realtime-stream.ts        Realtime streaming (one + many providers) via @emulators/simulator
   business-streams.ts       Phase 2.1 — Xero/Jira/Salesforce/GitHub/Slack streams, scenario-only
   external-consumer.ts      Separate-process OIDC + refresh + proxy proof over real HTTP
+  workos-dashboard-live.ts  Composed story: WorkOS → connect Google+SimPro → unified reads → live webhook stream
 scenarios/
   single-gmail.yaml         One stream, realtime cadence
   all-streams.yaml          All 6 inbox providers at once, capped + deterministic

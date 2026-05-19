@@ -29,12 +29,13 @@
     "mongoatlas": "tsx src/mongoatlas.ts",
     "clerk": "tsx src/clerk.ts",
     "workos": "tsx src/workos.ts",
+    "workos-dashboard-live": "tsx src/workos-dashboard-live.ts",
     "crm": "tsx src/crm.ts",
     "external-consumer": "tsx src/external-consumer.ts",
     "native-driver": "tsx src/native-driver.ts",
     "direct": "tsx src/vercel.ts && tsx src/github.ts && tsx src/google.ts && tsx src/slack.ts && tsx src/apple.ts && tsx src/microsoft.ts && tsx src/okta.ts && tsx src/aws.ts && tsx src/resend.ts && tsx src/stripe.ts && tsx src/mongoatlas.ts && tsx src/clerk.ts && tsx src/workos.ts && tsx src/simpro.ts && tsx src/uptick.ts && tsx src/crm.ts",
     "sims": "tsx src/uptick-sim.ts && tsx src/simpro-sim.ts && tsx src/nango-providers-sim.ts && tsx src/direct-sim.ts && tsx src/xero-quickbooks-webhooks.ts && tsx src/business-streams.ts && tsx src/native-driver.ts",
-    "all": "pnpm direct && tsx src/nango.ts && tsx src/nango-providers.ts && pnpm sims && tsx src/realtime-stream.ts && tsx src/external-consumer.ts"
+    "all": "pnpm direct && tsx src/nango.ts && tsx src/nango-providers.ts && pnpm sims && tsx src/realtime-stream.ts && tsx src/external-consumer.ts && tsx src/workos-dashboard-live.ts"
   },
   "dependencies": {
     "@emulators/apple": "workspace:*",
