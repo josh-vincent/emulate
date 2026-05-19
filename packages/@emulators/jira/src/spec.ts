@@ -11,6 +11,7 @@ export const spec: NativeSpec = {
     cloud_id: "1f4e0a8e-d100-4c93-a8b6-acme00000000",
     site_url: "https://acme.atlassian.net",
   },
+  dialect: "jira",
   models: [
     {
       model: "Issue",

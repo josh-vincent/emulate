@@ -10,6 +10,7 @@ export const spec: NativeSpec = {
   connectionConfig: {
     subdomain: "acme",
   },
+  dialect: "zendesk",
   models: [
     {
       model: "Ticket",

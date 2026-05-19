@@ -10,6 +10,7 @@ export const spec: NativeSpec = {
   connectionConfig: {
     shop: "acme-supply.myshopify.com",
   },
+  dialect: "shopify",
   models: [
     {
       model: "Product",

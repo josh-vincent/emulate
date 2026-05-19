@@ -107,3 +107,111 @@ describe("native-kit makeNativePlugin", () => {
     expect(((await r.json()) as { total: number }).total).toBe(3);
   });
 });
+
+// Phase 3.1 — per-provider response parity. Each dialect must emit the exact
+// list envelope, pagination contract and error body the provider's real SDK
+// strict-parses (deserialization fails otherwise).
+const rows = (n: number, field = "id"): Array<Record<string, unknown>> =>
+  Array.from({ length: n }, (_, i) => ({ [field]: i + 1, name: `r${i + 1}` }));
+
+function mkDialect(s: NativeSpec) {
+  const { plugin } = makeNativePlugin(s);
+  const store = new Store();
+  const app = new Hono();
+  plugin.register(app as never, store, new WebhookDispatcher(), base);
+  plugin.seed?.(store, base);
+  const auth = { Authorization: "Bearer x" };
+  return { app, auth };
+}
+
+describe("native-kit response dialects", () => {
+  it("jira: search-style { startAt, maxResults, total, issues } + offset paging", async () => {
+    const { app, auth } = mkDialect({
+      name: "jira",
+      dialect: "jira",
+      models: [{ model: "Issue", collectionPath: "/rest/api/3/issue", idField: "id", rows: rows(5) }],
+    });
+
+    const r = await app.request(`${base}/rest/api/3/issue?startAt=2&maxResults=2`, { headers: auth });
+    expect(r.status).toBe(200);
+    const b = (await r.json()) as { startAt: number; maxResults: number; total: number; issues: unknown[] };
+    expect(b.startAt).toBe(2);
+    expect(b.maxResults).toBe(2);
+    expect(b.total).toBe(5);
+    // native-kit stringifies row ids on seed; assert the page window, not types.
+    expect(b.issues.map((x) => String((x as { id: unknown }).id))).toEqual(["3", "4"]);
+
+    const u = await app.request(`${base}/rest/api/3/issue`);
+    expect(u.status).toBe(401);
+    expect((await u.json()) as { errorMessages: string[] }).toHaveProperty("errorMessages");
+  });
+
+  it("zendesk: { tickets, count, next_page, previous_page } cursor URLs", async () => {
+    const { app, auth } = mkDialect({
+      name: "zendesk",
+      dialect: "zendesk",
+      models: [{ model: "Ticket", collectionPath: "/api/v2/tickets", idField: "id", rows: rows(3) }],
+    });
+
+    const r = await app.request(`${base}/api/v2/tickets?page=1&per_page=2`, { headers: auth });
+    const b = (await r.json()) as {
+      tickets: unknown[];
+      count: number;
+      next_page: string | null;
+      previous_page: string | null;
+    };
+    expect(b.tickets.length).toBe(2);
+    expect(b.count).toBe(3);
+    expect(b.previous_page).toBeNull();
+    expect(b.next_page).toContain("page=2");
+
+    const r2 = await app.request(`${base}/api/v2/tickets?page=2&per_page=2`, { headers: auth });
+    const b2 = (await r2.json()) as { tickets: unknown[]; next_page: string | null; previous_page: string | null };
+    expect(b2.tickets.length).toBe(1);
+    expect(b2.next_page).toBeNull();
+    expect(b2.previous_page).toContain("page=1");
+
+    const u = await app.request(`${base}/api/v2/tickets`);
+    expect(u.status).toBe(401);
+    expect((await u.json()) as { error: string }).toEqual({ error: "Couldn't authenticate you" });
+  });
+
+  it("shopify: { products } body + Link header cursor pagination", async () => {
+    const { app, auth } = mkDialect({
+      name: "shopify",
+      dialect: "shopify",
+      models: [{ model: "Product", collectionPath: "/admin/api/2024-01/products", idField: "id", rows: rows(3) }],
+    });
+
+    const r = await app.request(`${base}/admin/api/2024-01/products?limit=2`, { headers: auth });
+    expect(r.status).toBe(200);
+    const b = (await r.json()) as { products: unknown[]; data?: unknown };
+    expect(b.products.length).toBe(2);
+    expect(b.data).toBeUndefined();
+    const link = r.headers.get("Link") ?? "";
+    expect(link).toContain('rel="next"');
+    const next = /<([^>]+)>;\s*rel="next"/.exec(link)?.[1];
+    expect(next).toBeTruthy();
+
+    const r2 = await app.request(next!, { headers: auth });
+    const b2 = (await r2.json()) as { products: unknown[] };
+    expect(b2.products.length).toBe(1);
+    expect(r2.headers.get("Link") ?? "").toContain('rel="previous"');
+
+    const u = await app.request(`${base}/admin/api/2024-01/products`);
+    expect(u.status).toBe(401);
+    expect((await u.json()) as { errors: string }).toHaveProperty("errors");
+  });
+
+  it("default dialect is unchanged ({ data, total, model })", async () => {
+    const { app, auth } = mkDialect({
+      name: "demo2",
+      models: [{ model: "Widget", collectionPath: "/v1/widgets", idField: "id", rows: rows(2) }],
+    });
+    const r = await app.request(`${base}/v1/widgets`, { headers: auth });
+    const b = (await r.json()) as { data: unknown[]; total: number; model: string };
+    expect(b.total).toBe(2);
+    expect(b.model).toBe("Widget");
+    expect(b.data.length).toBe(2);
+  });
+});

@@ -28,7 +28,29 @@ export interface NativeModelSpec {
   idField: string;
   /** Seed rows for this model. */
   rows: Array<Record<string, unknown>>;
+  /**
+   * JSON key the row array appears under in a dialect's list envelope
+   * (e.g. Jira `issues`, Zendesk `tickets`, Shopify `products`). Defaults to a
+   * naive plural of the lowercased model. Ignored by the `default` dialect.
+   */
+  collectionKey?: string;
 }
+
+/**
+ * Response dialect — selects the list-envelope shape, the error-body shape and
+ * the pagination model so a provider's *real* SDK strict-parses the emulator.
+ *
+ *  - `default` — `{ data, total, model }` + `{ error, message }`; `?limit` /
+ *    `?page_size` truncation. Unchanged historical behaviour; the shape every
+ *    seed-derived provider used before per-provider parity existed.
+ *  - `jira`    — `{ startAt, maxResults, total, <key>: [...] }`; offset
+ *    pagination via `?startAt` / `?maxResults`; `{ errorMessages, errors }`.
+ *  - `zendesk` — `{ <key>: [...], count, next_page, previous_page }`; offset
+ *    pagination via `?page` / `?per_page`; `{ error, description }`.
+ *  - `shopify` — `{ <key>: [...] }` + a `Link` response header for cursor
+ *    pagination via `?limit` / `?page_info`; `{ errors }`.
+ */
+export type NativeDialectName = "default" | "jira" | "zendesk" | "shopify";
 
 export interface NativeSpec {
   /** Provider id, matches the seed `provider:` (e.g. "sendgrid"). */
@@ -39,6 +61,8 @@ export interface NativeSpec {
   tokenPrefix?: string;
   /** connection_config from the seed (instance_url, api_domain, …) — informational. */
   connectionConfig?: Record<string, unknown>;
+  /** Response dialect. Defaults to `"default"`. */
+  dialect?: NativeDialectName;
   models: NativeModelSpec[];
 }
 
@@ -78,9 +102,120 @@ const rowId = (row: Record<string, unknown>, idField: string): string | null => 
 /** Native APIs are bearer-gated; only the token's presence is enforced. */
 const authed = (c: Context): boolean => (c.req.header("Authorization") ?? "").toLowerCase().startsWith("bearer ");
 
-const unauthorized = (c: Context) => c.json({ error: "unauthorized", message: "Missing or invalid bearer token" }, 401);
+/** Naive English plural for the dialect collection-key fallback (mirrors the
+ *  pluraliser the standalone generator uses): Issue→issues, Project→projects,
+ *  Ticket→tickets, User→users, Product→products, Order→orders. */
+const plural = (model: string): string => {
+  const s = model.toLowerCase();
+  if (/(s|x|z|ch|sh)$/.test(s)) return /s$/.test(s) ? s : `${s}es`;
+  if (/[^aeiou]y$/.test(s)) return `${s.slice(0, -1)}ies`;
+  return `${s}s`;
+};
 
-const notFound = (c: Context, id: string) => c.json({ error: "not_found", message: `No such resource: ${id}` }, 404);
+const collectionKey = (m: NativeModelSpec): string => m.collectionKey ?? plural(m.model);
+
+/** A positive integer query param, else the fallback. */
+const intParam = (c: Context, name: string, fallback: number): number => {
+  const n = Number(c.req.query(name));
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+};
+
+interface Dialect {
+  /** Build the list response for one model (owns its own pagination model). */
+  list(c: Context, rows: Array<Record<string, unknown>>, m: NativeModelSpec): Response;
+  unauthorized(c: Context): Response;
+  notFound(c: Context, id: string): Response;
+}
+
+const DEFAULT_DIALECT: Dialect = {
+  list(c, rows, m) {
+    const limit = Number(c.req.query("limit") ?? c.req.query("page_size") ?? 0);
+    const out = limit > 0 ? rows.slice(0, limit) : rows;
+    return c.json({ data: out, total: rows.length, model: m.model });
+  },
+  unauthorized: (c) => c.json({ error: "unauthorized", message: "Missing or invalid bearer token" }, 401),
+  notFound: (c, id) => c.json({ error: "not_found", message: `No such resource: ${id}` }, 404),
+};
+
+// Jira (REST v3): search-style offset envelope; the official jira.js / Atlassian
+// SDKs read `issues`/`values`, `startAt`, `maxResults`, `total`. Errors are the
+// canonical `{ errorMessages: string[], errors: {} }`.
+const JIRA_DIALECT: Dialect = {
+  list(c, rows, m) {
+    const startAt = intParam(c, "startAt", 0);
+    const maxResults = intParam(c, "maxResults", 50);
+    const page = rows.slice(startAt, startAt + maxResults);
+    return c.json({ startAt, maxResults, total: rows.length, [collectionKey(m)]: page });
+  },
+  unauthorized: (c) =>
+    c.json({ errorMessages: ["Client must be authenticated to access this resource."], errors: {} }, 401),
+  notFound: (c, id) =>
+    c.json({ errorMessages: [`Issue does not exist or you do not have permission to see it: ${id}`], errors: {} }, 404),
+};
+
+// Zendesk (API v2): `{ <resource>: [...], count, next_page, previous_page }`
+// with absolute page URLs; offset pagination via `?page` / `?per_page`.
+const ZENDESK_DIALECT: Dialect = {
+  list(c, rows, m) {
+    const perPage = intParam(c, "per_page", 100);
+    const pageNo = intParam(c, "page", 1);
+    const start = (pageNo - 1) * perPage;
+    const slice = rows.slice(start, start + perPage);
+    const pageUrl = (p: number): string => {
+      const u = new URL(c.req.url);
+      u.searchParams.set("page", String(p));
+      u.searchParams.set("per_page", String(perPage));
+      return u.toString();
+    };
+    const hasNext = start + slice.length < rows.length;
+    return c.json({
+      [collectionKey(m)]: slice,
+      count: rows.length,
+      next_page: hasNext ? pageUrl(pageNo + 1) : null,
+      previous_page: pageNo > 1 ? pageUrl(pageNo - 1) : null,
+    });
+  },
+  unauthorized: (c) => c.json({ error: "Couldn't authenticate you" }, 401),
+  notFound: (c, id) => c.json({ error: "RecordNotFound", description: `Not found: ${id}` }, 404),
+};
+
+// Shopify (Admin REST 2024-01): `{ <resource>: [...] }` body, cursor pagination
+// via an opaque `page_info` token carried in a `Link` response header.
+const b64 = (n: number): string => Buffer.from(String(n)).toString("base64url");
+const unB64 = (s: string | undefined): number => {
+  if (!s) return 0;
+  const n = Number(Buffer.from(s, "base64url").toString());
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+};
+const SHOPIFY_DIALECT: Dialect = {
+  list(c, rows, m) {
+    const limit = Math.min(250, intParam(c, "limit", 50));
+    const start = unB64(c.req.query("page_info"));
+    const slice = rows.slice(start, start + limit);
+    const url = new URL(c.req.url);
+    const link = (offset: number, rel: string): string => {
+      const u = new URL(url);
+      u.searchParams.set("limit", String(limit));
+      u.searchParams.set("page_info", b64(offset));
+      return `<${u.toString()}>; rel="${rel}"`;
+    };
+    const links: string[] = [];
+    if (start + slice.length < rows.length) links.push(link(start + slice.length, "next"));
+    if (start > 0) links.push(link(Math.max(0, start - limit), "previous"));
+    const headers: Record<string, string> = links.length > 0 ? { Link: links.join(", ") } : {};
+    return c.json({ [collectionKey(m)]: slice }, 200, headers);
+  },
+  unauthorized: (c) =>
+    c.json({ errors: "[API] Invalid API key or access token (unrecognized login or wrong password)" }, 401),
+  notFound: (c, id) => c.json({ errors: `Not Found: ${id}` }, 404),
+};
+
+const DIALECTS: Record<NativeDialectName, Dialect> = {
+  default: DEFAULT_DIALECT,
+  jira: JIRA_DIALECT,
+  zendesk: ZENDESK_DIALECT,
+  shopify: SHOPIFY_DIALECT,
+};
 
 function loadSeed(store: Store, spec: NativeSpec, models: NativeModelSpec[]): void {
   for (const m of models) {
@@ -104,6 +239,7 @@ export function makeNativePlugin(spec: NativeSpec): {
 } {
   const tokenPath = spec.tokenPath ?? "/oauth/token";
   const tokenPrefix = spec.tokenPrefix ?? spec.name.replace(/[^a-z0-9]/gi, "").slice(0, 4);
+  const D = DIALECTS[spec.dialect ?? "default"];
 
   const modelByPath = new Map<string, NativeModelSpec>();
   for (const m of spec.models) modelByPath.set(m.collectionPath, m);
@@ -163,18 +299,16 @@ export function makeNativePlugin(spec: NativeSpec): {
       for (const m of spec.models) {
         const col = m.collectionPath;
 
-        // List collection.
+        // List collection (envelope + pagination per the provider's dialect).
         app.get(col, (c) => {
-          if (!authed(c)) return unauthorized(c);
+          if (!authed(c)) return D.unauthorized(c);
           const rows = [...bucket(store, spec.name, m.model).values()];
-          const limit = Number(c.req.query("limit") ?? c.req.query("page_size") ?? 0);
-          const out = limit > 0 ? rows.slice(0, limit) : rows;
-          return c.json({ data: out, total: rows.length, model: m.model });
+          return D.list(c, rows, m);
         });
 
         // Create.
         app.post(col, async (c) => {
-          if (!authed(c)) return unauthorized(c);
+          if (!authed(c)) return D.unauthorized(c);
           const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
           const id = rowId(body, m.idField) ?? nextId(store, spec.name);
           const row = { ...body, [m.idField]: id };
@@ -184,31 +318,31 @@ export function makeNativePlugin(spec: NativeSpec): {
 
         // Read one.
         app.get(`${col}/:id`, (c) => {
-          if (!authed(c)) return unauthorized(c);
+          if (!authed(c)) return D.unauthorized(c);
           const id = c.req.param("id");
           const row = bucket(store, spec.name, m.model).get(id);
-          if (!row) return notFound(c, id);
+          if (!row) return D.notFound(c, id);
           return c.json(row);
         });
 
         // Update.
         app.patch(`${col}/:id`, async (c) => {
-          if (!authed(c)) return unauthorized(c);
+          if (!authed(c)) return D.unauthorized(c);
           const id = c.req.param("id");
           const b = bucket(store, spec.name, m.model);
           const row = b.get(id);
-          if (!row) return notFound(c, id);
+          if (!row) return D.notFound(c, id);
           const patch = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
           const next = { ...row, ...patch, [m.idField]: id };
           b.set(id, next);
           return c.json(next);
         });
         app.put(`${col}/:id`, async (c) => {
-          if (!authed(c)) return unauthorized(c);
+          if (!authed(c)) return D.unauthorized(c);
           const id = c.req.param("id");
           const b = bucket(store, spec.name, m.model);
           const row = b.get(id);
-          if (!row) return notFound(c, id);
+          if (!row) return D.notFound(c, id);
           const patch = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
           const next = { ...row, ...patch, [m.idField]: id };
           b.set(id, next);
@@ -217,10 +351,10 @@ export function makeNativePlugin(spec: NativeSpec): {
 
         // Delete.
         app.delete(`${col}/:id`, (c) => {
-          if (!authed(c)) return unauthorized(c);
+          if (!authed(c)) return D.unauthorized(c);
           const id = c.req.param("id");
           const b = bucket(store, spec.name, m.model);
-          if (!b.has(id)) return notFound(c, id);
+          if (!b.has(id)) return D.notFound(c, id);
           b.delete(id);
           return c.body(null, 204);
         });
