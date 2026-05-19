@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "crypto";
-import { SignJWT } from "jose";
+import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import type { RouteContext } from "@emulators/core";
 import {
   escapeHtml,
@@ -16,7 +16,18 @@ import {
 import { getGoogleStore } from "../store.js";
 import type { GoogleUser } from "../entities.js";
 
-const JWT_SECRET = new TextEncoder().encode("emulate-google-jwt-secret");
+// Real RS256 keypair so id_tokens are verifiable against the JWKS endpoint —
+// the way real OIDC clients (Auth.js, google-auth-library) validate them.
+// Generated once per process; mirrors the Okta/Microsoft/WorkOS emulators.
+const keyPairPromise = generateKeyPair("RS256");
+const KID = "emulate-google-1";
+
+// Access-token lifetime. Real Google is 3600s; override with
+// EMULATE_GOOGLE_TOKEN_TTL (seconds) to demonstrate expiry → refresh quickly.
+// The TokenMap entry carries `expiresAt` so the shared auth middleware returns
+// 401 once it lapses (unless EMULATE_AUTH_LAX=1).
+const ACCESS_TOKEN_TTL_SEC = Math.max(1, Number(process.env.EMULATE_GOOGLE_TOKEN_TTL) || 3600);
+const accessTokenExpiry = () => Date.now() + ACCESS_TOKEN_TTL_SEC * 1000;
 
 type PendingCode = {
   email: string;
@@ -67,6 +78,7 @@ async function createIdToken(
   nonce: string | null,
   baseUrl: string,
 ): Promise<string> {
+  const { privateKey } = await keyPairPromise;
   const builder = new SignJWT({
     sub: user.uid,
     email: user.email,
@@ -79,13 +91,13 @@ async function createIdToken(
     ...(user.hd ? { hd: user.hd } : {}),
     ...(nonce ? { nonce } : {}),
   })
-    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setProtectedHeader({ alg: "RS256", kid: KID, typ: "JWT" })
     .setIssuer(baseUrl)
     .setAudience(clientId)
     .setIssuedAt()
     .setExpirationTime("1h");
 
-  return builder.sign(JWT_SECRET);
+  return builder.sign(privateKey);
 }
 
 export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): void {
@@ -103,7 +115,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
       jwks_uri: `${baseUrl}/oauth2/v3/certs`,
       response_types_supported: ["code"],
       subject_types_supported: ["public"],
-      id_token_signing_alg_values_supported: ["HS256"],
+      id_token_signing_alg_values_supported: ["RS256"],
       scopes_supported: ["openid", "email", "profile"],
       token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic"],
       claims_supported: [
@@ -121,10 +133,14 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     });
   });
 
-  // ---------- JWKS (stub) ----------
+  // ---------- JWKS ----------
 
-  app.get("/oauth2/v3/certs", (c) => {
-    return c.json({ keys: [] });
+  app.get("/oauth2/v3/certs", async (c) => {
+    const { publicKey } = await keyPairPromise;
+    const jwk = await exportJWK(publicKey);
+    return c.json({
+      keys: [{ ...jwk, kid: KID, use: "sig", alg: "RS256" }],
+    });
   });
 
   // ---------- Authorization page ----------
@@ -282,13 +298,13 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
       const scopes = record.scope ? record.scope.split(/\s+/).filter(Boolean) : [];
 
       if (tokenMap) {
-        tokenMap.set(accessToken, { login: user.email, id: user.id, scopes });
+        tokenMap.set(accessToken, { login: user.email, id: user.id, scopes, expiresAt: accessTokenExpiry() });
       }
 
       return c.json({
         access_token: accessToken,
         token_type: "Bearer",
-        expires_in: 3600,
+        expires_in: ACCESS_TOKEN_TTL_SEC,
         scope: record.scope || "openid email profile",
       });
     }
@@ -344,7 +360,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     const scopes = pending.scope ? pending.scope.split(/\s+/).filter(Boolean) : [];
 
     if (tokenMap) {
-      tokenMap.set(accessToken, { login: user.email, id: user.id, scopes });
+      tokenMap.set(accessToken, { login: user.email, id: user.id, scopes, expiresAt: accessTokenExpiry() });
     }
     getRefreshTokens(store).set(refreshToken, {
       email: user.email,
@@ -361,7 +377,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
       refresh_token: refreshToken,
       id_token: idToken,
       token_type: "Bearer",
-      expires_in: 3600,
+      expires_in: ACCESS_TOKEN_TTL_SEC,
       scope: pending.scope || "openid email profile",
     });
   });

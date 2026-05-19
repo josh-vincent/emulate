@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { decodeJwt } from "jose";
+import { decodeJwt, importJWK, jwtVerify, type JWK } from "jose";
 import {
   Store,
   WebhookDispatcher,
@@ -931,6 +931,48 @@ describe("Google plugin integration", () => {
     });
     expect(userinfoRes.status).toBe(200);
     expect(((await userinfoRes.json()) as { hd?: string }).hd).toBe("override.io");
+  });
+
+  it("issues an RS256 id_token verifiable against the JWKS endpoint", async () => {
+    const authorize = await formRequest(app, "/o/oauth2/v2/auth/callback", {
+      email: "testuser@example.com",
+      redirect_uri: "http://localhost:3000/api/auth/callback/google",
+      scope: "openid email profile",
+      client_id: "emu_google_client_id",
+      nonce: "n-0S6_WzA2Mj",
+    });
+    const code = new URL(authorize.headers.get("Location")!).searchParams.get("code")!;
+    const tokenRes = await formRequest(app, "/oauth2/token", {
+      code,
+      grant_type: "authorization_code",
+      redirect_uri: "http://localhost:3000/api/auth/callback/google",
+      client_id: "emu_google_client_id",
+      client_secret: "emu_google_client_secret",
+    });
+    const { id_token } = (await tokenRes.json()) as { id_token: string };
+
+    // Discovery advertises RS256 + the JWKS uri, exactly as a real OIDC client reads it.
+    const disc = (await (await app.request(`${base}/.well-known/openid-configuration`)).json()) as {
+      jwks_uri: string;
+      id_token_signing_alg_values_supported: string[];
+    };
+    expect(disc.id_token_signing_alg_values_supported).toEqual(["RS256"]);
+
+    const jwksPath = new URL(disc.jwks_uri).pathname;
+    const jwks = (await (await app.request(`${base}${jwksPath}`)).json()) as { keys: JWK[] };
+    expect(jwks.keys).toHaveLength(1);
+    expect(jwks.keys[0]!.kty).toBe("RSA");
+
+    // The crux: verify the id_token's signature against the published public key.
+    const key = await importJWK(jwks.keys[0]!, "RS256");
+    const { payload, protectedHeader } = await jwtVerify(id_token, key, {
+      issuer: base,
+      audience: "emu_google_client_id",
+    });
+    expect(protectedHeader.alg).toBe("RS256");
+    expect(protectedHeader.kid).toBe(jwks.keys[0]!.kid);
+    expect(payload.email).toBe("testuser@example.com");
+    expect(payload.nonce).toBe("n-0S6_WzA2Mj");
   });
 
   it("lists calendar resources, creates events, queries freebusy, and deletes events", async () => {
