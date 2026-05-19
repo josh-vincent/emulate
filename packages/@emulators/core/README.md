@@ -20,6 +20,19 @@ The core provides the shared infrastructure that every `@emulators/*` service pl
 - **UI** — shared authorization/consent page rendering with bundled fonts
 - **Persistence** — pluggable save/load adapters for state durability
 
+## Auth & isolation helpers
+
+All opt-in and non-breaking — the defaults leave existing behaviour unchanged.
+
+| Export | Purpose |
+| --- | --- |
+| `requireAuth()` | 401 unless an authenticated user is on the context. |
+| `requireScope(...scopes)` | 403 `insufficient_scope` (RFC 6750) unless the token holds every scope; `*` satisfies any. Bypassed by `EMULATE_AUTH_LAX=1`. |
+| `requireAuthWhen(...flags)` | Pass-through **unless** one of the named env flags is on (e.g. `EMULATE_STRIPE_REQUIRE_AUTH`, `EMULATE_REQUIRE_AUTH`); then behaves like `requireAuth()`. Lets a provider reject unauthenticated calls on demand. |
+| `authFlagEnabled(...flags)` | The `"1"`/`"true"` flag check behind `requireAuthWhen`. |
+| `buildIntrospectionResponse(tokenMap, token, opts?)` | RFC 7662 token-introspection body; unknown/empty/expired → `{ active: false }`. |
+| `TenantStore`, `withTenant(id, fn)`, `currentTenant()`, `DEFAULT_TENANT` | Per-tenant store isolation. Enable via `createServer(plugin, { multiTenant: true })` (or `EMULATE_MULTI_TENANT=1`); each request is scoped by the `X-Emulate-Tenant` header. |
+
 ## Persistence
 
 ### File persistence
