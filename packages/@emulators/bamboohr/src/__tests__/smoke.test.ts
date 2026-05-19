@@ -16,6 +16,12 @@ function mk() {
   return { app, store };
 }
 
+// The row array lives under a dialect-specific key (`data` for the default
+// envelope, `issues`/`tickets`/`products` for Jira/Zendesk/Shopify): take
+// the first array value so the assertion is dialect-agnostic.
+const rowsOf = (body: Record<string, unknown>): unknown[] =>
+  (Object.values(body).find(Array.isArray) as unknown[] | undefined) ?? [];
+
 describe("bamboohr standalone native (native-kit, seed-derived)", () => {
   for (const model of spec.models) {
     it(`serves seeded ${model.model} at ${model.collectionPath}`, async () => {
@@ -25,9 +31,8 @@ describe("bamboohr standalone native (native-kit, seed-derived)", () => {
         headers: { Authorization: "Bearer x" },
       });
       expect(r.status).toBe(200);
-      const body = (await r.json()) as { data: unknown[]; total: number; model: string };
-      expect(body.model).toBe(model.model);
-      expect(body.total).toBe(model.rows.length);
+      const body = (await r.json()) as Record<string, unknown>;
+      expect(rowsOf(body).length).toBe(model.rows.length);
     });
   }
 
@@ -54,7 +59,7 @@ describe("bamboohr standalone native (native-kit, seed-derived)", () => {
     const rr = await fresh.app.request(`${base}${m0.collectionPath}`, {
       headers: { Authorization: "Bearer x" },
     });
-    const reread = (await rr.json()) as { total: number };
-    expect(reread.total).toBe(m0.rows.length + 1);
+    const reread = (await rr.json()) as Record<string, unknown>;
+    expect(rowsOf(reread).length).toBe(m0.rows.length + 1);
   });
 });
