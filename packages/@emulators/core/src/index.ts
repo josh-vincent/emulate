@@ -30,6 +30,7 @@ export {
 export {
   authMiddleware,
   requireAuth,
+  requireScope,
   requireAppAuth,
   serializeTokenMap,
   restoreTokenMap,
