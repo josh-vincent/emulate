@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { Store } from "./store.js";
+import { TenantStore, withTenant } from "./tenant-store.js";
 import { WebhookDispatcher } from "./webhooks.js";
 import { createApiErrorHandler, createErrorHandler } from "./middleware/error-handler.js";
 import {
@@ -23,14 +24,25 @@ export interface ServerOptions {
   fallbackUser?: AuthFallback;
   /** Override the resolved provider rate-limit window (useful in tests). */
   rateLimit?: { limit?: number; windowSec?: number };
+  /**
+   * Opt-in multi-tenant isolation (Phase 4.2e). When true (or env
+   * `EMULATE_MULTI_TENANT=1|true`), each request is scoped to the tenant in
+   * the `X-Emulate-Tenant` header — every tenant gets its own backing store,
+   * so two orgs hitting the same emulator never see each other's data.
+   * Default false → a single shared store, byte-for-byte the prior behaviour.
+   */
+  multiTenant?: boolean;
 }
 
 export function createServer(plugin: ServicePlugin, options: ServerOptions = {}) {
   const port = options.port ?? 4000;
   const baseUrl = options.baseUrl ?? `http://localhost:${port}`;
 
+  const multiTenant =
+    options.multiTenant ?? (process.env.EMULATE_MULTI_TENANT === "1" || process.env.EMULATE_MULTI_TENANT === "true");
+
   const app = new Hono<AppEnv>();
-  const store = new Store();
+  const store: Store = multiTenant ? new TenantStore() : new Store();
   const webhooks = new WebhookDispatcher();
 
   const tokenMap: TokenMap = new Map();
@@ -52,6 +64,12 @@ export function createServer(plugin: ServicePlugin, options: ServerOptions = {})
   app.use("*", cors());
   app.use("*", createErrorHandler(docsUrl));
   app.use("*", authMiddleware(tokenMap, options.appKeyResolver, options.fallbackUser));
+
+  if (multiTenant) {
+    // Scope the whole downstream request (plugin handlers included) to the
+    // tenant from `X-Emulate-Tenant`; absent → the "default" tenant.
+    app.use("*", (c, next) => withTenant(c.req.header("X-Emulate-Tenant"), () => next()));
+  }
 
   const rlProfile = rateLimitProfile(plugin.name);
   const rlLimit = options.rateLimit?.limit ?? rlProfile.limit;

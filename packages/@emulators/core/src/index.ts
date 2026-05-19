@@ -12,6 +12,7 @@ export {
   serializeValue,
   deserializeValue,
 } from "./store.js";
+export { TenantStore, withTenant, currentTenant, DEFAULT_TENANT } from "./tenant-store.js";
 export { createServer, type ServerOptions } from "./server.js";
 export { type ServicePlugin, type RouteContext } from "./plugin.js";
 export { WebhookDispatcher, type WebhookSubscription, type WebhookDelivery } from "./webhooks.js";
