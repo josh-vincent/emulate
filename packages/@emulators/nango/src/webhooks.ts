@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import type { Store } from "@emulators/core";
+import { deliverWithRetry, type DeliverDeps, type Store } from "@emulators/core";
 
 // ---------------------------------------------------------------------------
 // Nango webhooks — faithful to the real https://api.nango.dev behaviour.
@@ -37,6 +37,8 @@ export interface NangoWebhookDelivery {
   signature: string | null;
   payload: unknown;
   delivered_at: string;
+  /** How many delivery attempts were made (>=1; >1 means a retry happened). */
+  attempts: number;
 }
 
 /** Hex HMAC-SHA256 of `body` keyed by `secret` — Nango's signature scheme. */
@@ -133,6 +135,7 @@ export async function dispatchNangoWebhook(
   store: Store,
   event: "sync" | "forward" | "auth",
   payload: unknown,
+  deps?: DeliverDeps,
 ): Promise<void> {
   const settings = getWebhookSettings(store);
   if (!settings.url) return;
@@ -149,10 +152,12 @@ export async function dispatchNangoWebhook(
     signature,
     payload,
     delivered_at: new Date().toISOString(),
+    attempts: 0,
   };
 
-  try {
-    const res = await fetch(settings.url, {
+  const outcome = await deliverWithRetry(
+    settings.url,
+    {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -160,13 +165,12 @@ export async function dispatchNangoWebhook(
         ...(signature ? { "X-Nango-Signature": signature } : {}),
       },
       body,
-      signal: AbortSignal.timeout(10000),
-    });
-    delivery.status_code = res.status;
-    delivery.success = res.ok;
-  } catch {
-    delivery.success = false;
-  }
+    },
+    deps,
+  );
+  delivery.status_code = outcome.status_code;
+  delivery.success = outcome.success;
+  delivery.attempts = outcome.attempts;
 
   recordDelivery(store, delivery);
 }
@@ -185,6 +189,7 @@ export async function dispatchNangoWebhook(
 export async function dispatchProviderWebhook(
   store: Store,
   opts: { signatureHeader: string; payload: unknown },
+  deps?: DeliverDeps,
 ): Promise<void> {
   const settings = getWebhookSettings(store);
   if (!settings.url) return;
@@ -201,23 +206,24 @@ export async function dispatchProviderWebhook(
     signature,
     payload: opts.payload,
     delivered_at: new Date().toISOString(),
+    attempts: 0,
   };
 
-  try {
-    const res = await fetch(settings.url, {
+  const outcome = await deliverWithRetry(
+    settings.url,
+    {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(signature ? { [opts.signatureHeader]: signature } : {}),
       },
       body,
-      signal: AbortSignal.timeout(10000),
-    });
-    delivery.status_code = res.status;
-    delivery.success = res.ok;
-  } catch {
-    delivery.success = false;
-  }
+    },
+    deps,
+  );
+  delivery.status_code = outcome.status_code;
+  delivery.success = outcome.success;
+  delivery.attempts = outcome.attempts;
 
   recordDelivery(store, delivery);
 }

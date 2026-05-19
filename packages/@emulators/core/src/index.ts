@@ -15,6 +15,7 @@ export {
 export { createServer, type ServerOptions } from "./server.js";
 export { type ServicePlugin, type RouteContext } from "./plugin.js";
 export { WebhookDispatcher, type WebhookSubscription, type WebhookDelivery } from "./webhooks.js";
+export { deliverWithRetry, webhookRetryConfig, type DeliverDeps, type RetryResult } from "./webhook-retry.js";
 export {
   errorHandler,
   createErrorHandler,
