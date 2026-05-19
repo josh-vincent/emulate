@@ -215,3 +215,57 @@ describe("native-kit response dialects", () => {
     expect(b.data.length).toBe(2);
   });
 });
+
+describe("native-kit token endpoint grant validation", () => {
+  const token = (body: string) =>
+    mk().app.request(`${base}/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+
+  it("keeps the lax happy path: no credentials still mints a token", async () => {
+    const r = await token("grant_type=client_credentials");
+    expect(r.status).toBe(200);
+    expect(((await r.json()) as { access_token: string }).access_token.startsWith("demo_at_")).toBe(true);
+  });
+
+  it("mints a token for a well-formed authorization_code / refresh_token / password grant", async () => {
+    expect((await token("grant_type=authorization_code&code=abc123")).status).toBe(200);
+    expect((await token("grant_type=refresh_token&refresh_token=demo_rt_x")).status).toBe(200);
+    expect((await token("grant_type=password&username=a&password=b")).status).toBe(200);
+  });
+
+  it("rejects an unknown grant_type with unsupported_grant_type (400)", async () => {
+    const r = await token("grant_type=magic");
+    expect(r.status).toBe(400);
+    expect(((await r.json()) as { error: string }).error).toBe("unsupported_grant_type");
+  });
+
+  it("requires code for authorization_code and refresh_token for refresh_token", async () => {
+    const a = await token("grant_type=authorization_code");
+    expect(a.status).toBe(400);
+    expect(((await a.json()) as { error: string }).error).toBe("invalid_request");
+    const b = await token("grant_type=refresh_token");
+    expect(b.status).toBe(400);
+    expect(((await b.json()) as { error: string }).error).toBe("invalid_request");
+  });
+
+  it("returns invalid_client (401) for a sentinel client credential", async () => {
+    const r = await token("grant_type=client_credentials&client_id=invalid&client_secret=x");
+    expect(r.status).toBe(401);
+    expect(((await r.json()) as { error: string }).error).toBe("invalid_client");
+  });
+
+  it("returns invalid_grant (400) for a sentinel code / refresh_token / password", async () => {
+    const c1 = await token("grant_type=authorization_code&code=invalid_code");
+    expect(c1.status).toBe(400);
+    expect(((await c1.json()) as { error: string }).error).toBe("invalid_grant");
+
+    const c2 = await token("grant_type=refresh_token&refresh_token=invalid-token");
+    expect(((await c2.json()) as { error: string }).error).toBe("invalid_grant");
+
+    const c3 = await token("grant_type=password&username=u&password=invalid");
+    expect(((await c3.json()) as { error: string }).error).toBe("invalid_grant");
+  });
+});

@@ -102,6 +102,58 @@ const rowId = (row: Record<string, unknown>, idField: string): string | null => 
 /** Native APIs are bearer-gated; only the token's presence is enforced. */
 const authed = (c: Context): boolean => (c.req.header("Authorization") ?? "").toLowerCase().startsWith("bearer ");
 
+const KNOWN_GRANTS = new Set(["client_credentials", "authorization_code", "password", "refresh_token"]);
+
+/** RFC 6749 §5.2 error body. invalid_client is 401, everything else 400. */
+const oauthError = (c: Context, error: string, description: string): Response =>
+  c.json({ error, error_description: description }, error === "invalid_client" ? 401 : 400);
+
+/** A value is a deterministic "make this fail" sentinel if it is exactly
+ *  `invalid` or begins with `invalid_` / `invalid-` (case-insensitive). This
+ *  lets consumers exercise unhappy paths with zero per-spec client config. */
+const isInvalidSentinel = (v: string | null): boolean => v != null && /^invalid([_-]|$)/i.test(v);
+
+/**
+ * Validate an OAuth2 token request the way a real provider would, *without*
+ * breaking the deliberately-lax happy path: a request that simply omits
+ * credentials still succeeds (these emulators only enforce token presence on
+ * data routes). What this adds is testable failure: an unknown grant, a
+ * required-but-absent `code`/`refresh_token`, or any credential set to the
+ * reserved `invalid…` sentinel returns the canonical RFC 6749 error. Returns
+ * an error Response, or null when the request should mint a token.
+ */
+function validateGrant(c: Context, params: URLSearchParams): Response | null {
+  const grant = params.get("grant_type") ?? "client_credentials";
+  if (!KNOWN_GRANTS.has(grant)) {
+    return oauthError(c, "unsupported_grant_type", `Unsupported grant_type: ${grant}`);
+  }
+  const clientId = params.get("client_id");
+  const clientSecret = params.get("client_secret");
+  if (isInvalidSentinel(clientId) || isInvalidSentinel(clientSecret)) {
+    return oauthError(c, "invalid_client", "Client authentication failed");
+  }
+  if (grant === "authorization_code") {
+    const code = params.get("code");
+    if (!code) return oauthError(c, "invalid_request", "Missing required parameter: code");
+    if (isInvalidSentinel(code)) {
+      return oauthError(c, "invalid_grant", "Authorization code is invalid or expired");
+    }
+  }
+  if (grant === "refresh_token") {
+    const rt = params.get("refresh_token");
+    if (!rt) return oauthError(c, "invalid_request", "Missing required parameter: refresh_token");
+    if (isInvalidSentinel(rt)) return oauthError(c, "invalid_grant", "Refresh token is invalid or expired");
+  }
+  if (grant === "password") {
+    const u = params.get("username");
+    const pw = params.get("password");
+    if (isInvalidSentinel(u) || isInvalidSentinel(pw)) {
+      return oauthError(c, "invalid_grant", "Invalid resource owner credentials");
+    }
+  }
+  return null;
+}
+
 /** Naive English plural for the dialect collection-key fallback (mirrors the
  *  pluraliser the standalone generator uses): Issue→issues, Project→projects,
  *  Ticket→tickets, User→users, Product→products, Order→orders. */
@@ -281,9 +333,14 @@ export function makeNativePlugin(spec: NativeSpec): {
         }),
       );
 
-      // OAuth2 token endpoint — every grant succeeds, returns a bearer token.
+      // OAuth2 token endpoint. The happy path stays lax (missing credentials
+      // still mint a token), but unknown grants, an absent required
+      // code/refresh_token, or a reserved `invalid…` credential return the
+      // canonical RFC 6749 error so failure flows are testable.
       app.post(tokenPath, async (c) => {
         const params = new URLSearchParams(await c.req.text().catch(() => ""));
+        const grantError = validateGrant(c, params);
+        if (grantError) return grantError;
         const grant = params.get("grant_type") ?? "client_credentials";
         const rnd = () => Math.random().toString(16).slice(2).padEnd(24, "0").slice(0, 24);
         return c.json({
