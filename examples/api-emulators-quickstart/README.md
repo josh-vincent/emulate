@@ -45,6 +45,10 @@ pnpm --filter api-emulators-quickstart workos-dashboard-live
 # (needs `pnpm -w build` first; Ctrl-C to stop)
 pnpm --filter api-emulators-quickstart live-feed
 
+# Same, but pre-loaded with the FULL comprehensive 90-day SimPro + Uptick
+# quarter (every endpoint) — your app reads it over HTTP; it persists
+pnpm --filter api-emulators-quickstart seeded-server
+
 # Everything
 pnpm --filter api-emulators-quickstart all
 ```
@@ -271,6 +275,40 @@ Your app's existing flows then run unchanged against emulate:
   growing** as the unbounded simulator streams new records in. Watch the
   `[emulate-sim] … #seq` lines in the terminal and re-poll from your app.
 
+## Comprehensive seeded server — `seeded-server`
+
+`live-feed` seeds a light SimPro fixture; `seeded-server` boots the same
+per-port server **pre-loaded with the full comprehensive 90-day quarter** for
+**both SimPro and Uptick** — every endpoint, dated across the quarter, the same
+data `simpro-sim` / `uptick-sim` build and assert. It exists because those sims
+run in-process and **exit**: the quarter never reaches a server otherwise.
+
+```bash
+pnpm -w build
+pnpm --filter api-emulators-quickstart seeded-server          # or: -- --seconds 8
+```
+
+What it does, in order:
+
+1. **Factory** — runs `simpro-sim` + `uptick-sim` with their `SIMPRO_SIM_EXPORT`
+   / `UPTICK_SIM_EXPORT` hooks so each writes its round-trippable seed config to
+   disk (the durable artifact that outlives the sim process — _that_ is how the
+   data gets out of an in-process sim).
+2. **Merge** — combines both quarters with WorkOS (login) and Nango
+   (already-linked Google connections + 90d history) into one seed.
+3. **Serve** — boots the per-port `emulate` CLI seeded from it. The quarter now
+   lives behind real HTTP and **persists until you Ctrl-C** — nothing disappears
+   when you read it.
+4. **Stream** — layers the unbounded simulator on top, so the Nango feed keeps
+   growing while the SimPro/Uptick backfill stays put.
+
+Point your app at the printed env block and read the quarter like the real
+providers (verified end-to-end — SimPro standard OAuth auth-code → `GET
+…:4003/api/v1.0/companies/0/jobs` returns the 14-job linked quarter; Uptick
+password grant → `GET …:4004/api/v2/defects/` returns 24 dated defects; browse
+`…:4003/inspector/jobs` and `…:4004/?tab=defects`). The data does **not** vanish
+between requests — it is a live in-memory store on a long-lived server.
+
 ## How it works
 
 Every emulator is a `ServicePlugin` registered onto a [Hono](https://hono.dev)
@@ -300,6 +338,7 @@ src/
   external-consumer.ts      Separate-process OIDC + refresh + proxy proof over real HTTP
   workos-dashboard-live.ts  Composed story: WorkOS → connect Google+SimPro → unified reads → live webhook stream
   live-feed.ts              "Leave it running": per-port server + 90d seed + unbounded sim, env for your app
+  seeded-server.ts          live-feed pre-loaded with the full SimPro+Uptick 90-day quarter (every endpoint)
 scenarios/
   single-gmail.yaml         One stream, realtime cadence
   all-streams.yaml          All 6 inbox providers at once, capped + deterministic

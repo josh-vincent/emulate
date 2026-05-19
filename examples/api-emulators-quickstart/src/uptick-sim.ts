@@ -10,6 +10,7 @@
 // quarter of activity, not a toy fixture.
 //
 //   pnpm --filter api-emulators-quickstart uptick-sim
+import { writeFileSync } from "node:fs";
 import { uptickPlugin, seedFromConfig, storeToSeedConfig } from "@emulators/uptick";
 import { heading, mount } from "./harness.js";
 
@@ -241,6 +242,16 @@ async function main(): Promise<void> {
   heading("Uptick sim — round-trip + coverage report");
 
   const exported = storeToSeedConfig(emu.store, BASE);
+
+  // Optional: dump the round-trippable seed config so a *running* `emulate`
+  // server can boot this 90-day quarter (parity with SIMPRO_SIM_EXPORT). This
+  // sim runs in-process, so without this the quarter never reaches a server.
+  const exportPath = process.env.UPTICK_SIM_EXPORT;
+  if (exportPath) {
+    writeFileSync(exportPath, JSON.stringify({ uptick: exported }, null, 2));
+    console.log(`\n  📦 exported 90-day quarter → ${exportPath} (boot: EMULATE_CONFIG_PATH=${exportPath})`);
+  }
+
   const fresh = mount(uptickPlugin, BASE);
   seedFromConfig(fresh.store, BASE, exported);
   const ft = (await (

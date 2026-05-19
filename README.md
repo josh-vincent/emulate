@@ -814,6 +814,16 @@ pnpm -w build
 pnpm --filter api-emulators-quickstart live-feed          # or: -- --seconds 8
 ```
 
+For the **full comprehensive 90-day SimPro + Uptick quarter** (every endpoint,
+not a light fixture) on the same long-lived per-port server, use `seeded-server`
+— it runs the `simpro-sim`/`uptick-sim` factories, merges their exported
+quarters, and serves them so your app reads a real quarter that persists until
+Ctrl-C:
+
+```bash
+pnpm --filter api-emulators-quickstart seeded-server      # or: -- --seconds 8
+```
+
 ### Font files in serverless
 
 Emulator UI pages use bundled fonts. Wrap your Next.js config to include them in the serverless trace:
