@@ -423,6 +423,9 @@ function seedCalendars(store: Store, calendars: GoogleSeedCalendar[], fallbackEm
 
   for (const calendar of calendars) {
     const userEmail = calendar.user_email ?? fallbackEmail;
+    if (calendar.id && gs.calendars.findBy("google_id", calendar.id).some((c) => c.user_email === userEmail)) {
+      continue;
+    }
     createCalendarRecord(gs, {
       google_id: calendar.id,
       user_email: userEmail,
@@ -441,6 +444,9 @@ function seedCalendarEvents(store: Store, events: GoogleSeedCalendarEvent[], fal
 
   for (const event of events) {
     const userEmail = event.user_email ?? fallbackEmail;
+    if (event.id && gs.calendarEvents.findBy("google_id", event.id).some((e) => e.user_email === userEmail)) {
+      continue;
+    }
     createCalendarEventRecord(gs, {
       google_id: event.id,
       user_email: userEmail,

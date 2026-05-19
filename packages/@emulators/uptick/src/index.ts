@@ -164,6 +164,16 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: UptickSee
         ? (us.clients.get(property.client_id) ?? null)
         : null;
 
+    const duplicate = us.defects
+      .all()
+      .find(
+        (def) =>
+          def.description === d.description &&
+          def.asset_id === (asset?.id ?? null) &&
+          def.property_id === (property?.id ?? null),
+      );
+    if (duplicate) continue;
+
     us.defects.insert({
       description: d.description,
       notes: d.notes ?? "",
