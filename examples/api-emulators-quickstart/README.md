@@ -40,6 +40,11 @@ pnpm --filter api-emulators-quickstart external-consumer
 # proxy reads → live events streamed into the app's webhook sink
 pnpm --filter api-emulators-quickstart workos-dashboard-live
 
+# "Just leave it running": per-port server + quarter of seeded history +
+# UNBOUNDED live activity, with a paste-ready env block for your own app
+# (needs `pnpm -w build` first; Ctrl-C to stop)
+pnpm --filter api-emulators-quickstart live-feed
+
 # Everything
 pnpm --filter api-emulators-quickstart all
 ```
@@ -221,6 +226,51 @@ verification, refresh — all resolve against emulate. Shorten the token lifetim
 with `EMULATE_GOOGLE_TOKEN_TTL` to exercise refresh in tests; flip
 `EMULATE_AUTH_LAX=1` to disable expiry when you don't care.
 
+## Leave it running — `live-feed` (per-port, point your app at it)
+
+`external-consumer` proves the wiring once and exits. `live-feed` is the
+**keep-it-running** version: one command boots the **per-port** `emulate` CLI
+(each provider on its **own origin** — the faithful topology, _not_ the
+single-port `/provider` dispatcher), seeds the org's connections plus **~90
+days of history**, and then runs `emulate-sim` **unbounded** so new activity
+keeps arriving until you Ctrl-C.
+
+```bash
+pnpm -w build   # builds the emulate + emulate-sim binaries it spawns
+pnpm --filter api-emulators-quickstart live-feed
+# bounded sanity run instead of forever:
+pnpm --filter api-emulators-quickstart live-feed -- --seconds 8
+```
+
+Why per-port and not the single-port dispatcher? Real SaaS APIs are **distinct
+origins** (`api.workos.com`, `api.nango.dev`, …), differing by host, not path.
+`emulate start` mirrors that — `createServer` + `serve` **once per service**,
+`port = basePort + index` — so an SDK configured host-only appends its own
+canonical paths (`/v1/...`, `/oauth2/...`) and they land correctly, with
+per-origin cookies/CORS/OIDC issuer. (`emulate start --portless` goes further:
+each provider gets a real hostname `https://<svc>.emulate.localhost` over 443.)
+
+On boot it prints a paste-ready env block. Point **your own app** (e.g.
+taskrs-convex) at it — host-only, no path prefix:
+
+```bash
+WORKOS_BASE_URL=http://localhost:4000   WORKOS_CLIENT_ID=client_app_01
+GOOGLE_BASE_URL=http://localhost:4001
+NANGO_HOST=http://localhost:4002
+SIMPRO_BASE_URL=http://localhost:4003
+```
+
+Your app's existing flows then run unchanged against emulate:
+
+- **Login** — redirect to `…:4000/user_management/authorize`, callback →
+  `POST …:4000/user_management/authenticate` → `{ user, organization }`.
+- **Connections** — `POST …:4002/connect/sessions` → link → `GET …:4002/connection`
+  lists the org's linked providers (gm-acme/dr-acme/cal-acme, pre-seeded).
+- **Proxied reads** — `GET …:4002/records?model=messages` (with `Connection-Id`
+  / `Provider-Config-Key` headers) returns the quarter of history, and **keeps
+  growing** as the unbounded simulator streams new records in. Watch the
+  `[emulate-sim] … #seq` lines in the terminal and re-poll from your app.
+
 ## How it works
 
 Every emulator is a `ServicePlugin` registered onto a [Hono](https://hono.dev)
@@ -249,9 +299,11 @@ src/
   business-streams.ts       Phase 2.1 — Xero/Jira/Salesforce/GitHub/Slack streams, scenario-only
   external-consumer.ts      Separate-process OIDC + refresh + proxy proof over real HTTP
   workos-dashboard-live.ts  Composed story: WorkOS → connect Google+SimPro → unified reads → live webhook stream
+  live-feed.ts              "Leave it running": per-port server + 90d seed + unbounded sim, env for your app
 scenarios/
   single-gmail.yaml         One stream, realtime cadence
   all-streams.yaml          All 6 inbox providers at once, capped + deterministic
   quarter-drip.yaml         Slow drip spanning a simulated quarter
   business-streams.yaml     5 business providers (Xero/Jira/Salesforce/GitHub/Slack)
+  live-feed.yaml            Uncapped gmail/drive/calendar — runs until Ctrl-C
 ```

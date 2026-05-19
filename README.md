@@ -803,6 +803,17 @@ For the whole picture end to end — WorkOS sign-in → connect Google + SimPro 
 pnpm --filter api-emulators-quickstart workos-dashboard-live
 ```
 
+To **leave a server running** and point your own app at it, use `live-feed`: it
+boots the **per-port** CLI (each provider its own origin — the faithful
+topology), seeds the org's connections plus ~90 days of history, prints a
+paste-ready host-only env block, and streams new activity **unbounded** until
+Ctrl-C.
+
+```bash
+pnpm -w build
+pnpm --filter api-emulators-quickstart live-feed          # or: -- --seconds 8
+```
+
 ### Font files in serverless
 
 Emulator UI pages use bundled fonts. Wrap your Next.js config to include them in the serverless trace:
