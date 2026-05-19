@@ -2,10 +2,18 @@ import { describe, it, expect, afterEach } from "vitest";
 import { createHmac } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
+import { Store } from "@emulators/core";
 import { BASE, createTestApp, json } from "./helpers.js";
 import type { NangoSeedConfig } from "../index.js";
 import { storeToSeedConfig } from "../index.js";
-import { buildSyncWebhook, buildForwardWebhook, signBody } from "../webhooks.js";
+import {
+  buildSyncWebhook,
+  buildForwardWebhook,
+  signBody,
+  setWebhookSettings,
+  dispatchNangoWebhook,
+  getDeliveries,
+} from "../webhooks.js";
 
 // ---------------------------------------------------------------------------
 // Faithful Nango webhook contract.
@@ -246,6 +254,42 @@ describe("Nango webhooks — forward (inbound provider webhook)", () => {
     };
     expect(list.deliveries).toHaveLength(1);
     expect(list.deliveries[0]).toMatchObject({ event: "forward", url: rcv.url, success: true });
+  });
+});
+
+describe("Nango webhooks — bounded delivery retry", () => {
+  it("a briefly-unavailable consumer still receives the event; delivery shows the attempts", async () => {
+    const store = new Store();
+    setWebhookSettings(store, { url: "https://app.test/hook", secret: "whsec_test" });
+
+    const seq = [
+      () => Promise.reject(new Error("ECONNREFUSED")),
+      () => Promise.resolve({ ok: false, status: 502 } as Response),
+      () => Promise.resolve({ ok: true, status: 200 } as Response),
+    ];
+    let i = 0;
+
+    await dispatchNangoWebhook(store, "sync", { type: "sync" }, { fetch: () => seq[i++]!(), sleep: async () => {} });
+
+    const all = getDeliveries(store);
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({ event: "sync", success: true, status_code: 200, attempts: 3 });
+    expect(i).toBe(3);
+  });
+
+  it("records the last failure + attempt count when the budget is exhausted", async () => {
+    const store = new Store();
+    setWebhookSettings(store, { url: "https://down.test/hook" });
+
+    await dispatchNangoWebhook(
+      store,
+      "sync",
+      { type: "sync" },
+      { fetch: async () => ({ ok: false, status: 500 }) as Response, sleep: async () => {} },
+    );
+
+    const [d] = getDeliveries(store);
+    expect(d).toMatchObject({ success: false, status_code: 500, attempts: 3 });
   });
 });
 

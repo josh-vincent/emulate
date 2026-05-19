@@ -296,6 +296,55 @@ describe("WebhookDispatcher", () => {
     });
   });
 
+  describe("dispatch retry", () => {
+    it("retries a briefly-unavailable endpoint and the delivery log shows the attempts", async () => {
+      const seq = [
+        () => Promise.reject(new Error("ECONNREFUSED")),
+        () => Promise.resolve({ ok: false, status: 503 } as Response),
+        () => Promise.resolve({ ok: true, status: 200 } as Response),
+      ];
+      let i = 0;
+      const d = new WebhookDispatcher({
+        fetch: () => seq[i++]!(),
+        sleep: async () => {},
+      });
+      d.register({
+        url: "https://flaky.example/hook",
+        events: ["push"],
+        active: true,
+        owner: "o",
+      });
+
+      await d.dispatch("push", undefined, { ref: "main" }, "o");
+
+      const [delivery] = d.getDeliveries();
+      expect(delivery!.success).toBe(true);
+      expect(delivery!.status_code).toBe(200);
+      expect(delivery!.attempts).toBe(3);
+      expect(i).toBe(3);
+    });
+
+    it("surfaces attempt count and last failure when the budget is exhausted", async () => {
+      const d = new WebhookDispatcher({
+        fetch: async () => ({ ok: false, status: 500 }) as Response,
+        sleep: async () => {},
+      });
+      d.register({
+        url: "https://down.example/hook",
+        events: ["push"],
+        active: true,
+        owner: "o",
+      });
+
+      await d.dispatch("push", undefined, {}, "o");
+
+      const [delivery] = d.getDeliveries();
+      expect(delivery!.success).toBe(false);
+      expect(delivery!.status_code).toBe(500);
+      expect(delivery!.attempts).toBe(3);
+    });
+  });
+
   describe("getDeliveries", () => {
     it("returns all deliveries or filters by hook id", async () => {
       const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });

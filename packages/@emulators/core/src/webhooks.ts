@@ -1,4 +1,5 @@
 import { createHmac } from "crypto";
+import { deliverWithRetry, type DeliverDeps } from "./webhook-retry.js";
 
 export interface WebhookSubscription {
   id: number;
@@ -20,6 +21,8 @@ export interface WebhookDelivery {
   delivered_at: string;
   duration: number | null;
   success: boolean;
+  /** How many delivery attempts were made (>=1; >1 means a retry happened). */
+  attempts: number;
 }
 
 const MAX_DELIVERIES = 1000;
@@ -29,6 +32,9 @@ export class WebhookDispatcher {
   private deliveries: WebhookDelivery[] = [];
   private subscriptionIdCounter = 1;
   private deliveryIdCounter = 1;
+
+  /** `fetch`/`sleep` are injectable so retry behaviour is testable fast. */
+  constructor(private readonly deps?: DeliverDeps) {}
 
   register(sub: Omit<WebhookSubscription, "id"> & { id?: number }): WebhookSubscription {
     const { id: explicitId, ...rest } = sub;
@@ -99,6 +105,7 @@ export class WebhookDispatcher {
         delivered_at: new Date().toISOString(),
         duration: null,
         success: false,
+        attempts: 0,
       };
 
       const body = JSON.stringify(payload);
@@ -109,9 +116,10 @@ export class WebhookDispatcher {
         signatureHeaders["X-Hub-Signature-256"] = `sha256=${hmac}`;
       }
 
-      try {
-        const start = Date.now();
-        const response = await fetch(sub.url, {
+      const start = Date.now();
+      const outcome = await deliverWithRetry(
+        sub.url,
+        {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -120,15 +128,13 @@ export class WebhookDispatcher {
             ...signatureHeaders,
           },
           body,
-          signal: AbortSignal.timeout(10000),
-        });
-        delivery.duration = Date.now() - start;
-        delivery.status_code = response.status;
-        delivery.success = response.ok;
-      } catch {
-        delivery.duration = 0;
-        delivery.success = false;
-      }
+        },
+        this.deps,
+      );
+      delivery.duration = Date.now() - start;
+      delivery.status_code = outcome.status_code;
+      delivery.success = outcome.success;
+      delivery.attempts = outcome.attempts;
 
       this.deliveries.push(delivery);
       if (this.deliveries.length > MAX_DELIVERIES) {
