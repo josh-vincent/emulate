@@ -68,3 +68,4 @@ export {
   snapshotBundle,
   restoreBundle,
 } from "./persistence.js";
+export { type RootFallbackRoute, ROOT_FALLBACK_ROUTES, matchRootFallback } from "./root-fallback.js";

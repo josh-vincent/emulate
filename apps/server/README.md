@@ -64,6 +64,44 @@ still boots from seed), so it is safe to delete the file to reset.
 
 ---
 
+## Pointing an SDK at the server
+
+Every emulator is path-routed at `/<service>/*`, so the canonical base URL is
+`http://localhost:4000/<service>`. That works for any SDK whose client lets you
+set a full base URL **including a path** (Google, Microsoft, GitHub, Slack,
+Okta, Clerk, …):
+
+```
+WORKOS_API_HOSTNAME=localhost:4000/workos
+GITHUB_API_URL=http://localhost:4000/github
+```
+
+Some vendor SDKs only accept a **host** (no path component) — Stripe's
+`apiBase`, Salesforce's instance URL, Xero's `https://api.xero.com`,
+QuickBooks' Intuit hosts, WorkOS' `https://api.workos.com`. Pointed at a bare
+origin (`http://localhost:4000`) these hit absolute root paths. The server
+recognises those well-known root paths and forwards them to the owning service
+unchanged (no prefix rewrite — the caller is treating the server as the vendor
+root). The routing table + matcher live in `@emulators/core`
+(`matchRootFallback`, unit-tested) and resolve by longest path prefix.
+
+### Base-URL matrix
+
+| SDK | Configure base as | Root paths auto-forwarded when pointed at bare origin |
+|---|---|---|
+| Path-routed (Google, GitHub, Slack, Okta, Clerk, …) | `http://localhost:4000/<service>` | — (use the prefix) |
+| **Stripe** | `http://localhost:4000` (`apiBase`) | `/v1/*`, `/checkout/*` |
+| **WorkOS** | `http://localhost:4000` or `…/workos` | `/user_management`, `/sso`, `/organizations`, `/directory`, `/directory_users`, `/directory_groups`, `/audit_logs`, `/events`, `/portal` |
+| **Xero** | `http://localhost:4000` | `/api.xro/2.0/*`, `/connections`, `/connect/token` |
+| **QuickBooks** | `http://localhost:4000` | `/v3/company/*`, `/oauth2/v1/*` |
+| **Salesforce** | `http://localhost:4000` (instance URL) | `/services/data/*`, `/services/oauth2/*` |
+
+Path routing always works too — `/<service>/v1/...` is unambiguous and never
+depends on the fallback. The fallback only fires when the first path segment
+is not a known service name.
+
+---
+
 ## Admin API
 
 ```bash

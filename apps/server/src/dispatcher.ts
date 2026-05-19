@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   createServer,
+  matchRootFallback,
   type AppKeyResolver,
   type CollectionSnapshot,
   type ServicePlugin,
@@ -171,24 +172,6 @@ export function reseedApps(
   }
 }
 
-// Paths that some vendor SDKs hit at root because they don't support a
-// path-prefix in their hostname config. We forward these to the matching
-// service so callers configured with HOST=localhost PORT=4000 still work
-// alongside path-routed access at /<service>/*.
-//
-// Order matters: longer / more specific prefixes first.
-const ROOT_FALLBACK_ROUTES: Array<{ prefix: string; service: ServiceName }> = [
-  { prefix: "/user_management", service: "workos" },
-  { prefix: "/sso", service: "workos" },
-  { prefix: "/organizations", service: "workos" },
-  { prefix: "/directory", service: "workos" },
-  { prefix: "/directory_users", service: "workos" },
-  { prefix: "/directory_groups", service: "workos" },
-  { prefix: "/audit_logs", service: "workos" },
-  { prefix: "/events", service: "workos" },
-  { prefix: "/portal", service: "workos" },
-];
-
 async function forwardToService(sa: ServiceApp, raw: Request, pathOverride?: string): Promise<Response> {
   const url = new URL(raw.url);
   const path = pathOverride ?? url.pathname;
@@ -218,17 +201,15 @@ export function mountDispatcher(parent: Hono<AppEnv>, apps: Map<ServiceName, Ser
     return response;
   });
 
-  // Root-level fallback for SDKs that don't support a path prefix. Matches
-  // a small allowlist of well-known vendor paths and forwards them to the
-  // service unchanged (no prefix rewrite, since the caller is treating the
-  // server as if it were the vendor's root).
+  // Root-level fallback for prefix-less SDKs (Stripe/Xero/QuickBooks/
+  // Salesforce/WorkOS). The route table + matcher live in @emulators/core
+  // (unit-tested there; apps/server has no test harness). Forward unchanged —
+  // no prefix rewrite, since the caller treats the server as the vendor root.
   parent.all("*", async (c, next) => {
     const url = new URL(c.req.url);
-    const match = ROOT_FALLBACK_ROUTES.find(
-      (r) => url.pathname === r.prefix || url.pathname.startsWith(`${r.prefix}/`),
-    );
-    if (!match) return next();
-    const sa = apps.get(match.service);
+    const service = matchRootFallback(url.pathname);
+    if (!service) return next();
+    const sa = apps.get(service as ServiceName);
     if (!sa) return next();
     return forwardToService(sa, c.req.raw);
   });
