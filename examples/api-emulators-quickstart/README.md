@@ -136,12 +136,17 @@ contract tests.
 | Script                     | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `uptick-sim`               | 12 weekly client onboardings + defect lifecycle across 90 days; **24/24** uptick routes; round-trip verified                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `simpro-sim`               | ~30 dated jobs (+ schedules/invoices/payments) across 90 days; a generic crawler resolves every `:param` transitively and exercises **all 372** (method, path) endpoints (≥97 % 2xx, 0 × 5xx); **29/29** shape + relational-integrity checks (every entity's full shape + every FK resolved to a real linked record)                                                                                                                                                                                                                                                                                                                                                                    |
+| `simpro-sim`               | ~30 dated jobs (+ schedules/invoices/payments) across 90 days; a generic crawler resolves every `:param` transitively and exercises **all 1,435 SimPro Swagger operations** plus local OAuth/inspector routes; spec-only writes persist through generic `swagger_records`; **29/29** shape + relational-integrity checks (every stateful entity's full shape + every FK resolved to a real linked record)                                                                                                                                                                                                                                                                                                               |
 | `nango-providers-sim`      | **10 connections**, 90 days of dated records each. Four (xero, quickbooks, google-drive, onedrive) drive every provider-native `/proxy/*` path; the rest form a **cross-provider graph** — Slack/Gmail/Jira/Salesforce records link into Google Drive by file id + share URL, Jira links into GitHub PRs. **Each connection is independently verified** (resolves through the emulator, records are emulator-served, a live append round-trips back through `GET /records`, ≥75-day span), then a cross-provider integrity phase resolves **all 95** references to real linked records; **18/18** Nango routes                                                                          |
 | `direct-sim`               | **No Nango layer at all** — 5 emulators (GitHub, Slack, Stripe, Resend, Vercel) each spoken to through their _own_ native API. A 90-day DevOps quarter: 12 weekly cycles of incident → deploy notice → invoice payment → customer mail → service ship, then a third of incidents resolved via PATCH. Every created entity is **round-tripped back through that provider's own GET**; **24/24** native route patterns across 5 providers, **11/11** assertion checks, 0 × non-2xx                                                                                                                                                                                                        |
 | `business-streams`         | **Phase 2.1 — scenario-declared provider streams, zero simulator source edits.** Xero invoices, Jira issues, Salesforce opportunities, GitHub PRs and Slack messages streamed into a running Nango emulator purely from [`scenarios/business-streams.yaml`](./scenarios/business-streams.yaml) via the open generator registry; every stream's records asserted queryable through `GET /records` and each sync asserted to have fired a webhook delivery                                                                                                                                                                                                                                |
 | `native-driver`            | **Phase 2.2 — native-provider activity driver, zero simulator source edits.** The simulator performs scheduled real API writes against native emulators (open GitHub issues, create Stripe payment intents) so each emulator's _own_ retry-backed webhook dispatch fires; a real downstream HTTP consumer asserts it received the full **6× `issues.opened` + 4× `payment_intent.created`** stream — declared only via the `kind: native` streams in the script's inline scenarios                                                                                                                                                                                                      |
 | `xero-quickbooks-webhooks` | **Full create → provider → signed webhook → our destination chain**, no Nango envelope. Stands up a real listening socket, registers it via `POST /webhook-settings`, then for **Xero** and **QuickBooks**: OAuth2 token → create invoice through the native write API → the emulator POSTs our destination the provider's _own_ webhook shape (Xero `events[]` under `x-xero-signature`, QuickBooks `eventNotifications[]` under `intuit-signature`), each signed **base64-HMAC-SHA256 re-derived locally and compared byte-for-byte**, then follows the webhook's resource pointer back to GET the new invoice. **11/11** assertions; both deliveries logged in `/webhook-deliveries` |
+
+Set `SIMPRO_SIM_EXPORT=/path/to/seed.json` when running `simpro-sim` to write a
+bootable seed after the full Swagger crawl. Export mode skips destructive
+DELETE calls so spec-only rows created by the crawler survive into
+`simpro.swagger_records`.
 
 ## Nango provider library
 
@@ -279,7 +284,8 @@ Your app's existing flows then run unchanged against emulate:
 
 `live-feed` seeds a light SimPro fixture; `seeded-server` boots the same
 per-port server and then **builds the full comprehensive 90-day quarter inside
-it** for **both SimPro and Uptick** — every endpoint, dated across the quarter,
+it** for **both SimPro and Uptick** — every SimPro Swagger operation and every
+Uptick endpoint, dated across the quarter,
 including job → section → cost center → **line items** (catalog/labour/one-off/
 prebuild), invoices → payments, quotes, recurring jobs/invoices, vendor orders,
 leads, credit notes and the 79 `setup/*` collections.
@@ -297,8 +303,11 @@ What it does, in order:
    asset types, technicians). Nothing comprehensive yet.
 2. **Build** — drives `simpro-sim` + `uptick-sim` in **REMOTE mode** against the
    running server over real HTTP (`SIMPRO_SIM_REMOTE` / `UPTICK_SIM_REMOTE`).
-   They build the full linked quarter — and SimPro additionally crawls all 372
-   endpoints — writing every row _into the long-lived server_.
+   They build the full linked quarter — and SimPro additionally crawls all
+   1,435 Swagger operations plus local OAuth/inspector routes — writing every
+   stateful row _into the long-lived server_. SimPro routes that are covered by
+   the Swagger fallback, but do not have bespoke typed handlers yet, store their
+   rows under `simpro.swagger_records` and export through `swagger_records`.
 3. **Persist** — because the data was written into the running server (not an
    in-process store that exits), it stays there until you Ctrl-C. Nothing
    disappears when you read it.
@@ -334,7 +343,7 @@ src/
   crm.ts                    HubSpot CRM + Salesforce REST/SOQL end-to-end
   simpro.ts / uptick.ts     Deep narrated walkthroughs (+ round-trip)
   uptick-sim.ts             Uptick 3-month sim, 24/24 route coverage
-  simpro-sim.ts             Simpro 3-month sim, 372/372 route coverage
+  simpro-sim.ts             Simpro 3-month sim, Swagger route coverage
   simpro-routes.generated.ts  Auto-generated simpro route table (driver input)
   nango-providers-sim.ts    Nango 10-connection cross-provider 3-month sim
   direct-sim.ts             Direct (no-Nango) 5-provider native-API 3-month sim
@@ -344,7 +353,7 @@ src/
   external-consumer.ts      Separate-process OIDC + refresh + proxy proof over real HTTP
   workos-dashboard-live.ts  Composed story: WorkOS → connect Google+SimPro → unified reads → live webhook stream
   live-feed.ts              "Leave it running": per-port server + 90d seed + unbounded sim, env for your app
-  seeded-server.ts          per-port server with the full SimPro+Uptick 90-day quarter built in via REMOTE crawl (every endpoint)
+  seeded-server.ts          per-port server with the full SimPro+Uptick 90-day quarter built in via REMOTE crawl
 scenarios/
   single-gmail.yaml         One stream, realtime cadence
   all-streams.yaml          All 6 inbox providers at once, capped + deterministic

@@ -1,6 +1,6 @@
 ---
 name: emulate
-description: Local drop-in API emulator for Vercel, GitHub, Google, Slack, Apple, Microsoft, and AWS. Use when the user needs to start emulated services, configure seed data, write tests against local APIs, set up CI without network access, or work with the emulate CLI or programmatic API. Triggers include "start the emulator", "emulate services", "mock API locally", "create emulator config", "test against local API", "npx emulate", or any task requiring local service emulation.
+description: Local drop-in API emulator for Vercel, GitHub, Google, Slack, Apple, Microsoft, AWS, SimPro, Uptick, and other services. Use when the user needs to start emulated services, configure seed data, write tests against local APIs, set up CI without network access, or work with the emulate CLI or programmatic API. Triggers include "start the emulator", "emulate services", "mock API locally", "create emulator config", "test against local API", "npx emulate", or any task requiring local service emulation.
 allowed-tools: Bash(npx emulate:*), Bash(emulate:*)
 ---
 
@@ -25,6 +25,8 @@ All services start with sensible defaults:
 | Apple     | 4004        |
 | Microsoft | 4005        |
 | AWS       | 4006        |
+| SimPro    | auto        |
+| Uptick    | auto        |
 
 ## CLI
 
@@ -248,7 +250,19 @@ aws:
         create_access_key: true
     roles:
       - role_name: lambda-execution-role
+
+simpro:
+  swagger_records:
+    /api/v1.0/companies/0/catalogGroups/:
+      - ID: 77
+        Name: Seeded catalog group
+        DisplayOrder: 2
 ```
+
+SimPro `swagger_records` seeds spec-only collections from the bundled Swagger
+surface. Use the concrete API collection path as the key. Mutating spec-only
+routes persist to this store and `storeToSeedConfig` exports them in the same
+shape.
 
 ### Auth
 

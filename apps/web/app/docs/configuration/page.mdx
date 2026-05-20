@@ -190,6 +190,26 @@ Google Workspace accounts include an `hd` claim in ID tokens and userinfo respon
 
 To override the derived value, set `hd` on a seeded user. To suppress the claim entirely, set `hd` to an empty string.
 
+## SimPro Swagger Records
+
+SimPro includes typed seed fields for the high-use entities and a generic
+`swagger_records` section for any collection covered by the bundled Swagger
+spec. Use the concrete API collection path as the key, including parent ids.
+
+```yaml
+simpro:
+  swagger_records:
+    /api/v1.0/companies/0/catalogGroups/:
+      - ID: 77
+        Name: Seeded catalog group
+        DisplayOrder: 2
+```
+
+Spec-only `POST`, `PATCH`, `PUT`, and `DELETE` routes persist into this generic
+store. `storeToSeedConfig` exports those rows back into `swagger_records`, so
+large SimPro sims can round-trip the full Swagger surface without adding one
+seed field per endpoint.
+
 ## Slack Seed Config
 
 ```yaml

@@ -16,8 +16,8 @@
 //      Every row is dated to its week, so the data genuinely spans 90 days —
 //      asserted, along with 12 nested relationships returning related rows.
 //
-//   2. Phase B — a generic crawler then drives EVERY one of the 372
-//      (method, path) endpoints the emulator registers. It resolves every
+//   2. Phase B — a generic crawler then drives EVERY Swagger operation plus
+//      local OAuth and inspector routes. It resolves every
 //      `:param` transitively (reading parent collections, so deep routes like
 //      /jobs/:jid/sections/:sid/costCenters/:ccid resolve), sends a superset
 //      JSON body for writes, and runs POST → GET → PATCH/PUT → DELETE. The
@@ -34,7 +34,7 @@ import {
   type SimproSeedConfig,
 } from "@emulators/simpro";
 import { heading, mount } from "./harness.js";
-import { SIMPRO_ROUTES } from "./simpro-routes.generated.js";
+import { SIMPRO_ROUTES, SIMPRO_SWAGGER_OPERATION_COUNT } from "./simpro-routes.generated.js";
 
 const BASE = "http://localhost:4010";
 const CID = "0";
@@ -52,6 +52,7 @@ const day = (n: number): string => new Date(START.getTime() + n * DAY).toISOStri
 // upsert endpoint. Default (unset) keeps the fast in-process behaviour.
 const TARGET = process.env.SIMPRO_SIM_TARGET?.replace(/\/+$/, "");
 const LIVE = Boolean(TARGET);
+const EXPORT_PATH = process.env.SIMPRO_SIM_EXPORT;
 const liveApp = {
   request: (u: string, init?: RequestInit): Promise<Response> =>
     fetch(u.startsWith(BASE) ? `${TARGET}/simpro${u.slice(BASE.length)}` : u, init),
@@ -122,9 +123,9 @@ function bodyFor(date = day(45)): string {
 async function call(method: string, rawPath: string): Promise<void> {
   const key = `${method} ${rawPath}`;
   covered.add(key);
-  // REMOTE mode crawls a *long-lived* server whose data must persist, so the
+  // REMOTE mode and export mode need the built dataset to persist, so the
   // route is counted as covered but the destructive DELETE is not executed.
-  if (REMOTE && method === "DELETE") return;
+  if ((REMOTE || EXPORT_PATH) && method === "DELETE") return;
   calls++;
 
   const url = await resolve(rawPath);
@@ -158,7 +159,7 @@ async function resolve(path: string): Promise<string> {
       continue;
     }
     const name = s.slice(1);
-    if (name === "cid") out.push(CID);
+    if (name === "cid" || name === "companyID") out.push(CID);
     else if (name === "ignore") out.push("v1.0");
     else if (name === "entity" || name === "entityType") out.push("customers");
     else {
@@ -304,6 +305,9 @@ async function main(): Promise<void> {
     assets: [{ id: 410, customer_id: 200, site_id: 55, name: "Pump A1", asset_type: "Pump" }],
     contacts: [{ id: 600, type: "Customer", customer_id: 200, given_name: "Cara", family_name: "Contact" }],
     stock_items: [{ id: 700, name: "Pipe 50mm", part_no: "P-50" }],
+    swagger_records: {
+      [`/api/v1.0/companies/${CID}/catalogGroups/`]: [{ ID: 77, Name: "Seeded catalog group", DisplayOrder: 2 }],
+    },
   };
   if (REMOTE) {
     // Roots (oauth client + baseline customer/site/job/… with the exact ids
@@ -817,22 +821,6 @@ async function main(): Promise<void> {
     `\n  ${passedShapes}/${checks.length} shape + relational-integrity checks — ${shapesOk ? "✅ all shapes accounted for, FKs resolved" : "❌ gaps"}`,
   );
 
-  // ── Optional: export the clean linked quarter as a bootable seed config ──
-  // This sim runs entirely in-process (its own Store), so the quarter never
-  // reaches a running `emulate` server. Set SIMPRO_SIM_EXPORT=<path> to dump
-  // the round-trippable seed config; boot the server with
-  // `EMULATE_CONFIG_PATH=<path>` and the dashboard at /simpro shows this data.
-  const exportPath = process.env.SIMPRO_SIM_EXPORT;
-  if (exportPath && (LIVE || REMOTE)) {
-    console.log(
-      `\n  ⓘ export skipped in remote/live mode — the quarter lives in the running server (${REMOTE ?? TARGET}); no static dump needed`,
-    );
-  } else if (exportPath) {
-    const seed = storeToSeedConfig(emu.store, BASE);
-    writeFileSync(exportPath, JSON.stringify({ simpro: seed }, null, 2));
-    console.log(`\n  📦 exported linked quarter → ${exportPath} (boot: EMULATE_CONFIG_PATH=${exportPath})`);
-  }
-
   // ── Phase B: crawl EVERY endpoint, repeated for several passes ──────────
   const order: Record<string, number> = { POST: 0, GET: 1, PATCH: 2, PUT: 2, DELETE: 3 };
   const routes = [...SIMPRO_ROUTES].sort((a, b) => {
@@ -885,7 +873,10 @@ async function main(): Promise<void> {
   console.log(`\n  ${calls} endpoint calls across ${PASSES} passes`);
   console.log(`  status distribution: ${dist}`);
   console.log(`  success (2xx/3xx): ${twoxx}/${calls} (${ratio}%)`);
-  console.log(`  route-pattern coverage: ${covered.size}/${SIMPRO_ROUTES.length} (oauth + inspector included)`);
+  console.log(
+    `  route-pattern coverage: ${covered.size}/${SIMPRO_ROUTES.length} ` +
+      `(${SIMPRO_SWAGGER_OPERATION_COUNT} Swagger operations + local OAuth/inspector routes)`,
+  );
   for (const line of passReports) console.log(line);
   if (missing.length) console.log(`  ❌ MISSING (${missing.length}): ${missing.map((r) => r.join(" ")).join(" | ")}`);
 
@@ -897,8 +888,21 @@ async function main(): Promise<void> {
     shapesOk &&
     dense === weeklyKeys.length &&
     Number(ratio) >= 80;
+  // ── Optional: export the complete linked quarter as a bootable seed config ──
+  // This runs after the Swagger crawl so generic spec-only records are captured
+  // under simpro.swagger_records. DELETE routes are skipped in export mode so
+  // crawler-created rows survive into the file.
+  if (EXPORT_PATH && (LIVE || REMOTE)) {
+    console.log(
+      `\n  ⓘ export skipped in remote/live mode — the quarter lives in the running server (${REMOTE ?? TARGET}); no static dump needed`,
+    );
+  } else if (EXPORT_PATH && ok) {
+    const seed = storeToSeedConfig(emu.store, BASE);
+    writeFileSync(EXPORT_PATH, JSON.stringify({ simpro: seed }, null, 2));
+    console.log(`\n  📦 exported linked quarter → ${EXPORT_PATH} (boot: EMULATE_CONFIG_PATH=${EXPORT_PATH})`);
+  }
   console.log(
-    `\n${ok ? "✅" : "❌"} Simpro 3-month simulation ${ok ? "complete — 372 endpoints, a linked quarter of data, all relationships populated" : "INCOMPLETE"}.\n`,
+    `\nSimpro 3-month simulation ${ok ? `complete — ${SIMPRO_SWAGGER_OPERATION_COUNT} Swagger operations, a linked quarter of data, all relationships populated` : "INCOMPLETE"}.\n`,
   );
   if (!ok) process.exit(1);
 }

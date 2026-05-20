@@ -7,6 +7,7 @@ const copyFonts = async () => {
   const dest = resolve(__dirname, "dist/fonts");
   mkdirSync(dest, { recursive: true });
   cpSync(src, dest, { recursive: true });
+  cpSync(resolve(__dirname, "../../../documentation/simpro-swagger.json"), resolve(__dirname, "dist/simpro-swagger.json"));
 };
 
 export default defineConfig({

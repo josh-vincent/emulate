@@ -311,7 +311,19 @@ aws:
     roles:
       - role_name: lambda-execution-role
         description: Role for Lambda function execution
+
+simpro:
+  swagger_records:
+    /api/v1.0/companies/0/catalogGroups/:
+      - ID: 77
+        Name: Seeded catalog group
+        DisplayOrder: 2
 ```
+
+SimPro `swagger_records` seeds any spec-only collection covered by the bundled
+Swagger file. Use the concrete API collection path as the key, including parent
+ids, and the emulator will serve those rows from list and detail routes. Writes
+to spec-only routes are exported back into the same shape by `storeToSeedConfig`.
 
 ## OAuth & Integrations
 
@@ -814,16 +826,23 @@ pnpm -w build
 pnpm --filter api-emulators-quickstart live-feed          # or: -- --seconds 8
 ```
 
-For the **full comprehensive 90-day SimPro + Uptick quarter** (every endpoint,
-including line items, payments, leads, vendor orders and the 79 `setup/*`
-collections — not a light fixture) on the same long-lived per-port server, use
+For the **full comprehensive 90-day SimPro + Uptick quarter** (all 1,435
+SimPro Swagger operations plus local OAuth/inspector routes, including line
+items, payments, leads, vendor orders and the 79 `setup/*` collections — not a light fixture) on the same long-lived per-port server, use
 `seeded-server` — it boots the per-port server with roots only, then drives
 `simpro-sim`/`uptick-sim` in REMOTE mode to build the quarter _inside the
-running server_ so your app reads a real quarter that persists until Ctrl-C:
+running server_ so your app reads a real quarter that persists until Ctrl-C.
+Spec-only SimPro endpoints use the generic `swagger_records` seed/export store,
+so the comprehensive crawl can retain data for routes that do not have bespoke
+typed handlers yet:
 
 ```bash
 pnpm --filter api-emulators-quickstart seeded-server      # or: -- --seconds 8
 ```
+
+For an in-process, bootable SimPro seed file, run `simpro-sim` with
+`SIMPRO_SIM_EXPORT=/path/to/seed.json`. The export is written after the full
+Swagger crawl and includes generic spec-only rows under `simpro.swagger_records`.
 
 ### Font files in serverless
 

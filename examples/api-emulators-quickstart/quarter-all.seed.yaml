@@ -9,7 +9,7 @@
 # Apply with either:
 #   1) Append the two blocks to your emulate.config.yaml (replace any existing
 #      simpro: / uptick: sections), or
-#   2) Pass this file directly:  emulate start --seed quarter-all.seed.yaml
+#   2) Pass this file directly:  npx emulate start --seed quarter-all.seed.yaml
 #
 # Pairs with `src/quarter-all.ts` (the wrapper) and
 # `scenarios/quarter-all10-90min.yaml` (the 10-Nango-stream compressed run).
@@ -104,6 +104,14 @@ simpro:
     - id: 700
       name: Pipe 50mm
       part_no: P-50
+  # Generic records for SimPro Swagger endpoints that are covered by the
+  # spec fallback before they get a bespoke typed handler. Keys are concrete
+  # API collection paths, including company and parent ids.
+  swagger_records:
+    /api/v1.0/companies/0/catalogGroups/:
+      - ID: 77
+        Name: Seeded catalog group
+        DisplayOrder: 2
 
 uptick:
   asset_types:

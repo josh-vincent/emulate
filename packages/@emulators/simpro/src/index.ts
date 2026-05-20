@@ -42,6 +42,12 @@ import { quoteSectionRoutes } from "./routes/quoteSections.js";
 import { stockRoutes } from "./routes/stock.js";
 import { timesheetRoutes } from "./routes/timesheets.js";
 import { vendorSubResourceRoutes } from "./routes/vendorSubResources.js";
+import {
+  exportSimproSwaggerRecords,
+  seedSimproSwaggerRecords,
+  simproSpecFallbackRoutes,
+  type SimproSwaggerRecords,
+} from "./routes/specFallback.js";
 import type { SimproAttachmentParentType } from "./entities.js";
 
 export { getSimproStore, type SimproStore } from "./store.js";
@@ -228,6 +234,35 @@ export interface SimproSeedConfig {
     taxable?: boolean;
     archived?: boolean;
   }>;
+  vendors?: Array<{
+    id: number;
+    company_id?: number;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    archived?: boolean;
+  }>;
+  vendor_orders?: Array<{
+    id: number;
+    company_id?: number;
+    vendor_id?: number | null;
+    job_id?: number | null;
+    stage?: "Draft" | "Sent" | "PartReceived" | "Received";
+    description?: string | null;
+    total_ex_tax?: number;
+    total_inc_tax?: number;
+    date_issued?: string | null;
+  }>;
+  customer_payments?: Array<{
+    id: number;
+    company_id?: number;
+    customer_id: number;
+    invoice_id?: number | null;
+    amount: number;
+    date?: string | null;
+    payment_method?: string | null;
+    notes?: string | null;
+  }>;
   attachments?: Array<{
     id: number;
     company_id?: number;
@@ -240,6 +275,7 @@ export interface SimproSeedConfig {
     url?: string;
     date_added?: string;
   }>;
+  swagger_records?: SimproSwaggerRecords;
 }
 
 const DEFAULT_COMPANY_ID = 0;
@@ -600,6 +636,62 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: SimproSee
     if (existing) ss.stockItems.update(existing.id, row);
     else ss.stockItems.insert(row);
   }
+
+  for (const v of config.vendors ?? []) {
+    const row = {
+      company_id: v.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: v.id,
+      name: v.name,
+      ein: null,
+      company_no: null,
+      website: null,
+      email: v.email ?? null,
+      phone: v.phone ?? null,
+      fax: null,
+      address: null,
+      archived: v.archived ?? false,
+    };
+    const existing = ss.vendors.findOneBy("external_id", v.id);
+    if (existing) ss.vendors.update(existing.id, row);
+    else ss.vendors.insert(row);
+  }
+
+  for (const vo of config.vendor_orders ?? []) {
+    const row = {
+      company_id: vo.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: vo.id,
+      vendor_id: vo.vendor_id ?? null,
+      job_id: vo.job_id ?? null,
+      stage: vo.stage ?? "Draft",
+      description: vo.description ?? null,
+      total_ex_tax: vo.total_ex_tax ?? 0,
+      total_inc_tax: vo.total_inc_tax ?? vo.total_ex_tax ?? 0,
+      date_issued: vo.date_issued ?? null,
+    };
+    const existing = ss.vendorOrders.findOneBy("external_id", vo.id);
+    if (existing) ss.vendorOrders.update(existing.id, row);
+    else ss.vendorOrders.insert(row);
+  }
+
+  for (const cp of config.customer_payments ?? []) {
+    const row = {
+      company_id: cp.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: cp.id,
+      customer_id: cp.customer_id,
+      invoice_id: cp.invoice_id ?? null,
+      amount: cp.amount,
+      date: cp.date ?? now.slice(0, 10),
+      payment_method: cp.payment_method ?? null,
+      notes: cp.notes ?? null,
+      date_created: now,
+      date_modified: now,
+    };
+    const existing = ss.customerPayments.findOneBy("external_id", cp.id);
+    if (existing) ss.customerPayments.update(existing.id, row);
+    else ss.customerPayments.insert(row);
+  }
+
+  if (config.swagger_records) seedSimproSwaggerRecords(store, config.swagger_records);
 }
 
 /**
@@ -868,6 +960,9 @@ export function storeToSeedConfig(store: Store, _baseUrl: string): SimproSeedCon
       archived: si.archived,
     }));
 
+  const swaggerRecords = exportSimproSwaggerRecords(store);
+  if (swaggerRecords) out.swagger_records = swaggerRecords;
+
   return out;
 }
 
@@ -994,6 +1089,7 @@ export const simproPlugin: ServicePlugin = {
     vendorSubResourceRoutes(ctx);
     logsAndMiscRoutes(ctx);
     webhookRoutes(ctx);
+    simproSpecFallbackRoutes(ctx);
     inspectorRoutes(ctx);
   },
   seed(store: Store, baseUrl: string): void {
