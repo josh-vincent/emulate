@@ -11,6 +11,29 @@ type ListBody = { data: JsonApiResource[]; links: { next: string | null; prev: s
 type SingleBody = { data: JsonApiResource };
 
 describe("Uptick JSON:API envelope + resource CRUD", () => {
+  it("OPTIONS exposes self-describing endpoint metadata", async () => {
+    const { app } = createTestApp();
+
+    const root = await app.request(`${BASE}/api/${VER}/`, { method: "OPTIONS" });
+    expect(root.status).toBe(200);
+    expect(root.headers.get("Allow")).toBe("GET, OPTIONS");
+    expect(await root.json()).toMatchObject({
+      version: VER,
+      endpoints: {
+        clients: `/api/${VER}/clients/`,
+        properties: `/api/${VER}/properties/`,
+      },
+    });
+
+    const clients = await app.request(`${BASE}/api/${VER}/clients/`, { method: "OPTIONS" });
+    expect(clients.status).toBe(200);
+    expect(clients.headers.get("Allow")).toBe("GET, POST, PATCH, DELETE, OPTIONS");
+    expect(await clients.json()).toMatchObject({
+      type: "Client",
+      fields: { name: { type: "string", required: true } },
+    });
+  });
+
   it("list clients: { data: [...], links } with string ids and Client type", async () => {
     const { app } = createTestApp();
     const token = await getAccessToken(app);

@@ -325,6 +325,35 @@ Swagger file. Use the concrete API collection path as the key, including parent
 ids, and the emulator will serve those rows from list and detail routes. Writes
 to spec-only routes are exported back into the same shape by `storeToSeedConfig`.
 
+### Source parity audits
+
+Provider source tracking lives in
+[`documentation/emulator-source-map.json`](./documentation/emulator-source-map.json).
+Run `pnpm audit:sources` to see which emulators are backed by a vendored spec,
+official machine-readable docs, official human docs, or seed-derived native
+paths. SimPro is currently the only full vendored Swagger fallback. Uptick is
+checked against the official v2 JSON:API docs and now exposes self-describing
+`OPTIONS` metadata for its supported resources.
+
+For Uptick, the exact endpoint catalogue must come from an authorized tenant
+because their public docs say the live API root and `OPTIONS` metadata are the
+documentation. Use:
+
+```bash
+pnpm discover:uptick -- --base-url https://tenant.onuptick.com --token "$UPTICK_ACCESS_TOKEN" --out documentation/uptick-discovery.json
+```
+
+or set `UPTICK_USERNAME`, `UPTICK_PASSWORD`, `UPTICK_CLIENT_ID`, and
+`UPTICK_CLIENT_SECRET` to have the script request a token first. Only run this
+against a tenant you are authorized to access.
+
+Public GitHub code can provide hints, but it is not authoritative. With a
+GitHub token, run:
+
+```bash
+GITHUB_TOKEN=ghp_... pnpm search:uptick-public-code -- --out documentation/uptick-public-code-search.json
+```
+
 ## OAuth & Integrations
 
 The emulator supports configurable OAuth apps and integrations with strict client validation.
@@ -826,9 +855,9 @@ pnpm -w build
 pnpm --filter api-emulators-quickstart live-feed          # or: -- --seconds 8
 ```
 
-For the **full comprehensive 90-day SimPro + Uptick quarter** (all 1,435
+For the **full comprehensive SimPro + Uptick workflow dataset** (all 1,435
 SimPro Swagger operations plus local OAuth/inspector routes, including line
-items, payments, leads, vendor orders and the 79 `setup/*` collections — not a light fixture) on the same long-lived per-port server, use
+items, payments, leads, vendor orders and the 79 `setup/*` collections) on the same long-lived per-port server, use
 `seeded-server` — it boots the per-port server with roots only, then drives
 `simpro-sim`/`uptick-sim` in REMOTE mode to build the quarter _inside the
 running server_ so your app reads a real quarter that persists until Ctrl-C.
@@ -843,6 +872,142 @@ pnpm --filter api-emulators-quickstart seeded-server      # or: -- --seconds 8
 For an in-process, bootable SimPro seed file, run `simpro-sim` with
 `SIMPRO_SIM_EXPORT=/path/to/seed.json`. The export is written after the full
 Swagger crawl and includes generic spec-only rows under `simpro.swagger_records`.
+
+SimPro workflow seed profiles:
+
+```bash
+pnpm --filter api-emulators-quickstart simpro-sim:90d
+pnpm --filter api-emulators-quickstart simpro-sim:180d
+pnpm --filter api-emulators-quickstart simpro-sim:1y-plus-6m
+
+SIMPRO_SIM_EXPORT=./tmp/simpro-90d.seed.json pnpm --filter api-emulators-quickstart simpro-sim:90d
+```
+
+The `90d`, `180d`, and `1y-plus-6m` profiles all include six months of future
+scheduled work. In export mode, SimPro also fills generic Swagger-backed
+collections from the vendored spec so seed files contain schema-complete
+records for spec-only endpoints as well as the linked workflow graph.
+
+To test one app against all three SimPro datasets side by side, run:
+
+```bash
+pnpm --filter api-emulators-quickstart simpro-profiles
+```
+
+It exports the three profile seeds, starts three local SimPro endpoints, and
+prints environment variables:
+
+```bash
+SIMPRO_90D_BASE_URL=http://localhost:4030
+SIMPRO_180D_BASE_URL=http://localhost:4031
+SIMPRO_1Y_PLUS_6M_BASE_URL=http://localhost:4032
+```
+
+The SimPro inspector at `/inspector` shows an overview plus a left sidebar for
+every seeded endpoint group, including schedules, quotes, invoices, payments,
+vendor orders, assets, inventory, recurring work, setup records and webhook
+activity.
+
+Use `--seconds 30` for a bounded smoke run, or `--base-port 4100` if those ports
+are already in use.
+
+To test the same profile windows across the core provider matrix, run:
+
+```bash
+pnpm --filter api-emulators-quickstart core-profiles
+```
+
+This starts Nango endpoints for 39 providers. Every provider gets the same
+per-profile record count: 40 records for `90d`, 52 for `180d`, and 79 for
+`1y-plus-6m`.
+
+```bash
+CORE_90D_NANGO_URL=http://localhost:4040
+CORE_180D_NANGO_URL=http://localhost:4041
+CORE_1Y_PLUS_6M_NANGO_URL=http://localhost:4042
+```
+
+Seeded connection IDs:
+
+```text
+crm        salesforce-acme, hubspot-acme, pipedrive-acme, zoho-crm-acme
+accounting freshbooks-acme, wave-acme
+chat       slack-acme, discord-acme, microsoft-teams-acme
+email      gmail-acme, outlook-mail-acme, mailchimp-acme, sendgrid-acme, klaviyo-acme
+storage    google-drive-acme, onedrive-acme, dropbox-acme, box-acme
+calendar   google-calendar-acme, outlook-calendar-acme
+projects   jira-acme, linear-acme, asana-acme, notion-acme, clickup-acme, monday-acme, trello-acme
+code       github-acme, gitlab-acme
+support    zendesk-acme, intercom-acme
+hr         bamboohr-acme, greenhouse-acme, lever-acme
+commerce   shopify-acme
+analytics  mixpanel-acme
+forms      typeform-acme
+database   airtable-acme
+scheduling calendly-acme
+```
+
+Use those connection IDs with the usual Nango headers:
+
+```bash
+curl -H "Connection-Id: gmail-acme" \
+  -H "Provider-Config-Key: gmail" \
+  "$CORE_90D_NANGO_URL/records?model=Message"
+```
+
+Validate the Nango record, cursor, ids/filter, sync webhook, and forwarded
+webhook contracts against any running profile endpoint:
+
+```bash
+pnpm --filter api-emulators-quickstart core-profiles:validate -- --base-url http://localhost:4040
+pnpm --filter api-emulators-quickstart core-profiles:validate -- --base-url http://localhost:4041
+pnpm --filter api-emulators-quickstart core-profiles:validate -- --base-url http://localhost:4042
+```
+
+Nango realtime data flow is webhook-driven, not WebSocket-driven. Providers
+send webhooks to Nango, Nango updates its records cache or forwards the raw
+provider event, and your app reads changed records from `GET /records` with
+the cursor in `_nango_metadata.cursor`.
+
+To compare a real Nango connection against the emulator, fetch the underlying
+records with the same endpoint shape:
+
+```bash
+curl -G "https://api.nango.dev/records" \
+  -H "Authorization: Bearer $NANGO_SECRET_KEY" \
+  -H "Connection-Id: $NANGO_CONNECTION_ID" \
+  -H "Provider-Config-Key: $NANGO_PROVIDER_CONFIG_KEY" \
+  --data-urlencode "model=$NANGO_MODEL" \
+  --data-urlencode "limit=100"
+```
+
+The validator can run against one real Nango connection too:
+
+```bash
+NANGO_SECRET_KEY=... pnpm --filter api-emulators-quickstart core-profiles:validate -- \
+  --base-url https://api.nango.dev \
+  --connection-id "$NANGO_CONNECTION_ID" \
+  --provider-config-key "$NANGO_PROVIDER_CONFIG_KEY" \
+  --model "$NANGO_MODEL"
+```
+
+The Nango emulator tracks the current backend API routes used by sync
+workflows:
+
+```text
+GET/POST /connections
+GET/PATCH/DELETE /connections/{connectionId}
+POST/PATCH /connections/metadata
+GET /records
+PATCH /records/prune
+POST /sync/start
+POST /sync/pause
+POST /sync/trigger
+GET /sync/status
+POST/DELETE /sync/{name}/variant/{variant}
+```
+
+Deprecated `/connection` aliases are kept for older clients.
 
 ### Font files in serverless
 

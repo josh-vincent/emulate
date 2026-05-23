@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { seedFromConfig, storeToSeedConfig } from "../index.js";
+import { fillSimproSwaggerRecordsFromSpec, seedFromConfig, storeToSeedConfig } from "../index.js";
 import { BASE, auth, createTestApp, getAccessToken } from "./helpers.js";
 
 describe("Simpro Swagger fallback", () => {
@@ -90,6 +90,28 @@ describe("Simpro Swagger fallback", () => {
     expect(storeToSeedConfig(store, BASE).swagger_records).toEqual({
       "/api/v1.0/companies/0/catalogGroups/": [{ ID: 77, Name: "Seed file group", DisplayOrder: 2 }],
     });
+  });
+
+  it("can generate schema-complete Swagger records for profile seed exports", async () => {
+    const { app, store } = createTestApp({ seed: false });
+    fillSimproSwaggerRecordsFromSpec(store, {
+      baseDate: "2026-05-20",
+      pastDays: 14,
+      futureDays: 14,
+      frequencyDays: 7,
+    });
+    const token = await getAccessToken(app);
+
+    const res = await app.request(`${BASE}/api/v1.0/companies/0/catalogGroups/?columns=ID,Name`, {
+      headers: auth(token),
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Result-Total")).toBe("5");
+    const rows = (await res.json()) as Array<{ ID?: number; Name?: string }>;
+    expect(rows).toHaveLength(5);
+    expect(rows.every((row) => typeof row.ID === "number" && typeof row.Name === "string")).toBe(true);
+    expect(storeToSeedConfig(store, BASE).swagger_records?.["/api/v1.0/companies/0/catalogGroups/"]).toHaveLength(5);
   });
 
   it("keeps undocumented routes as 404s", async () => {

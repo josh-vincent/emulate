@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { AppEnv, RouteContext, ServicePlugin, Store, TokenMap, WebhookDispatcher } from "@emulators/core";
 import { getSimproStore } from "./store.js";
-import type { BillingType, CostCenterStage, JobStage, JobType } from "./entities.js";
+import type { BillingType, CostCenterStage, JobStage, JobType, SimproAddress } from "./entities.js";
 import { nowIso } from "./helpers.js";
 import { oauthRoutes } from "./routes/oauth.js";
 import { jobRoutes } from "./routes/jobs.js";
@@ -44,6 +44,7 @@ import { timesheetRoutes } from "./routes/timesheets.js";
 import { vendorSubResourceRoutes } from "./routes/vendorSubResources.js";
 import {
   exportSimproSwaggerRecords,
+  fillSimproSwaggerRecordsFromSpec,
   seedSimproSwaggerRecords,
   simproSpecFallbackRoutes,
   type SimproSwaggerRecords,
@@ -52,6 +53,7 @@ import type { SimproAttachmentParentType } from "./entities.js";
 
 export { getSimproStore, type SimproStore } from "./store.js";
 export { fireWebhook } from "./routes/webhooks.js";
+export { fillSimproSwaggerRecordsFromSpec } from "./routes/specFallback.js";
 export * from "./entities.js";
 
 export interface SimproSeedConfig {
@@ -91,7 +93,15 @@ export interface SimproSeedConfig {
     given_name?: string | null;
     family_name?: string | null;
     email?: string | null;
-    sites?: Array<{ id: number; name: string }>;
+    phone_primary?: string | null;
+    website?: string | null;
+    ein?: string | null;
+    address?: SimproAddress | null;
+    tax_code_id?: number | null;
+    payment_terms?: number | null;
+    archived?: boolean;
+    tags?: string[];
+    sites?: Array<{ id: number; name: string; address?: SimproAddress | null }>;
   }>;
   jobs?: Array<{
     id: number;
@@ -125,6 +135,47 @@ export interface SimproSeedConfig {
         stage?: CostCenterStage;
         ex_tax?: number;
         inc_tax?: number;
+        catalog_items?: Array<{
+          id: number;
+          stock_item_id?: number | null;
+          name: string;
+          part_no?: string | null;
+          quantity?: number;
+          base_price?: number;
+          markup?: number;
+          sell_price?: number;
+          ex_tax?: number;
+        }>;
+        labour_items?: Array<{
+          id: number;
+          labour_id: number;
+          name: string;
+          hours?: number;
+          labour_rate?: number;
+          markup?: number;
+          sell_price?: number;
+          ex_tax?: number;
+        }>;
+        one_off_items?: Array<{
+          id: number;
+          description: string;
+          quantity?: number;
+          est_cost?: number;
+          act_cost?: number;
+          markup?: number;
+          sell_price?: number;
+          ex_tax?: number;
+        }>;
+        prebuild_items?: Array<{
+          id: number;
+          prebuild_id: number;
+          name: string;
+          quantity?: number;
+          cost_price?: number;
+          markup?: number;
+          sell_price?: number;
+          ex_tax?: number;
+        }>;
       }>;
     }>;
   }>;
@@ -147,6 +198,63 @@ export interface SimproSeedConfig {
     due_date?: string | null;
     tags?: string[];
     converted_job_id?: number | null;
+    sections?: Array<{
+      id: number;
+      name: string;
+      description?: string | null;
+      cost_centers?: Array<{
+        id: number;
+        master_cost_center_id?: number | null;
+        tax_code_id?: number | null;
+        name?: string;
+        description?: string | null;
+        billing_type?: BillingType;
+        stage?: CostCenterStage;
+        ex_tax?: number;
+        inc_tax?: number;
+        catalog_items?: Array<{
+          id: number;
+          stock_item_id?: number | null;
+          name: string;
+          part_no?: string | null;
+          quantity?: number;
+          base_price?: number;
+          markup?: number;
+          sell_price?: number;
+          ex_tax?: number;
+        }>;
+        labour_items?: Array<{
+          id: number;
+          labour_id: number;
+          name: string;
+          hours?: number;
+          labour_rate?: number;
+          markup?: number;
+          sell_price?: number;
+          ex_tax?: number;
+        }>;
+        one_off_items?: Array<{
+          id: number;
+          description: string;
+          quantity?: number;
+          est_cost?: number;
+          act_cost?: number;
+          markup?: number;
+          sell_price?: number;
+          ex_tax?: number;
+        }>;
+        prebuild_items?: Array<{
+          id: number;
+          prebuild_id: number;
+          name: string;
+          quantity?: number;
+          cost_price?: number;
+          markup?: number;
+          sell_price?: number;
+          ex_tax?: number;
+        }>;
+      }>;
+    }>;
   }>;
   assets?: Array<{
     id: number;
@@ -202,6 +310,16 @@ export interface SimproSeedConfig {
     phone?: string | null;
     cell_phone?: string | null;
     fax?: string | null;
+    archived?: boolean;
+  }>;
+  employees?: Array<{
+    id: number;
+    company_id?: number;
+    given_name: string;
+    family_name: string;
+    email?: string | null;
+    phone?: string | null;
+    active?: boolean;
     archived?: boolean;
   }>;
   schedules?: Array<{
@@ -275,10 +393,207 @@ export interface SimproSeedConfig {
     url?: string;
     date_added?: string;
   }>;
+  labour_rates?: Array<{
+    id: number;
+    company_id?: number;
+    name: string;
+    rate: number;
+    cost_rate?: number;
+    archived?: boolean;
+  }>;
+  zones?: Array<{
+    id: number;
+    company_id?: number;
+    name: string;
+  }>;
+  custom_fields?: Array<{
+    id: number;
+    company_id?: number;
+    name: string;
+    entity: "job" | "customer" | "site" | "asset";
+    field_type?: "text" | "number" | "date" | "dropdown";
+  }>;
+  prebuilds?: Array<{
+    id: number;
+    company_id?: number;
+    name: string;
+    description?: string | null;
+    archived?: boolean;
+    date_modified?: string;
+  }>;
+  plant_types?: Array<{
+    id: number;
+    company_id?: number;
+    name: string;
+    description?: string | null;
+    archived?: boolean;
+  }>;
+  plants?: Array<{
+    id: number;
+    company_id?: number;
+    plant_type_id: number;
+    name: string;
+    serial_number?: string | null;
+    description?: string | null;
+    archived?: boolean;
+    date_modified?: string;
+  }>;
+  credit_notes?: Array<{
+    id: number;
+    company_id?: number;
+    customer_id: number;
+    invoice_id?: number | null;
+    job_id?: number | null;
+    total_ex_tax?: number;
+    total_inc_tax?: number;
+    date_issued?: string;
+    stage?: 2 | 5;
+    notes?: string | null;
+  }>;
+  leads?: Array<{
+    id: number;
+    company_id?: number;
+    name: string;
+    description?: string | null;
+    customer_id?: number | null;
+    site_id?: number | null;
+    stage?: "New" | "InProgress" | "Won" | "Lost";
+    salesperson_id?: number | null;
+    date_issued?: string | null;
+    date_modified?: string;
+    tags?: string[];
+  }>;
+  timesheets?: Array<{
+    id: number;
+    company_id?: number;
+    employee_id?: number | null;
+    contractor_id?: number | null;
+    job_id?: number | null;
+    cost_center_id?: number | null;
+    date: string;
+    start_time: string;
+    end_time?: string | null;
+    duration_minutes?: number;
+    notes?: string | null;
+  }>;
+  activity_schedules?: Array<{
+    id: number;
+    company_id?: number;
+    technician_id: number;
+    date: string;
+    start_time: string;
+    duration_minutes?: number;
+    activity_type: string;
+    notes?: string | null;
+  }>;
+  recurring_jobs?: Array<{
+    id: number;
+    company_id?: number;
+    name: string;
+    description?: string | null;
+    customer_id: number;
+    site_id?: number | null;
+    stage?: "Active" | "Cancelled" | "Completed";
+    billing_type?: "TimeAndMaterials" | "Fixed" | "FlatRate";
+    frequency?: string;
+    start_date?: string;
+    end_date?: string | null;
+    date_modified?: string;
+  }>;
+  notes?: Array<{
+    id: number;
+    company_id?: number;
+    parent_type: "job" | "quote" | "customer" | "invoice" | "creditNote" | "recurringJob" | "lead";
+    parent_id: number;
+    text: string;
+    date_created?: string;
+    date_modified?: string;
+    author_id?: number | null;
+  }>;
   swagger_records?: SimproSwaggerRecords;
 }
 
 const DEFAULT_COMPANY_ID = 0;
+type SeedCostCenter = NonNullable<
+  NonNullable<NonNullable<NonNullable<SimproSeedConfig["jobs"]>[number]["sections"]>[number]["cost_centers"]>[number]
+>;
+
+function seedCostCenterLineItems(
+  ss: ReturnType<typeof getSimproStore>,
+  companyId: number,
+  costCenterId: number,
+  cc: SeedCostCenter,
+): void {
+  for (const item of cc.catalog_items ?? []) {
+    const row = {
+      company_id: companyId,
+      external_id: item.id,
+      cost_center_id: costCenterId,
+      stock_item_id: item.stock_item_id ?? null,
+      name: item.name,
+      part_no: item.part_no ?? null,
+      quantity: item.quantity ?? 1,
+      base_price: item.base_price ?? 0,
+      markup: item.markup ?? 0,
+      sell_price: item.sell_price ?? 0,
+      ex_tax: item.ex_tax ?? 0,
+    };
+    const existing = ss.catalogItems.findOneBy("external_id", item.id);
+    if (existing) ss.catalogItems.update(existing.id, row);
+    else ss.catalogItems.insert(row);
+  }
+  for (const item of cc.labour_items ?? []) {
+    const row = {
+      company_id: companyId,
+      external_id: item.id,
+      cost_center_id: costCenterId,
+      labour_id: item.labour_id,
+      name: item.name,
+      hours: item.hours ?? 0,
+      labour_rate: item.labour_rate ?? 0,
+      markup: item.markup ?? 0,
+      sell_price: item.sell_price ?? 0,
+      ex_tax: item.ex_tax ?? 0,
+    };
+    const existing = ss.labourItems.findOneBy("external_id", item.id);
+    if (existing) ss.labourItems.update(existing.id, row);
+    else ss.labourItems.insert(row);
+  }
+  for (const item of cc.one_off_items ?? []) {
+    const row = {
+      company_id: companyId,
+      external_id: item.id,
+      cost_center_id: costCenterId,
+      description: item.description,
+      quantity: item.quantity ?? 1,
+      est_cost: item.est_cost ?? 0,
+      act_cost: item.act_cost ?? 0,
+      markup: item.markup ?? 0,
+      sell_price: item.sell_price ?? 0,
+      ex_tax: item.ex_tax ?? 0,
+    };
+    const existing = ss.oneOffItems.findOneBy("external_id", item.id);
+    if (existing) ss.oneOffItems.update(existing.id, row);
+    else ss.oneOffItems.insert(row);
+  }
+  for (const item of cc.prebuild_items ?? []) {
+    const row = {
+      company_id: companyId,
+      external_id: item.id,
+      cost_center_id: costCenterId,
+      prebuild_id: item.prebuild_id,
+      name: item.name,
+      quantity: item.quantity ?? 1,
+      cost_price: item.cost_price ?? 0,
+      markup: item.markup ?? 0,
+      sell_price: item.sell_price ?? 0,
+      ex_tax: item.ex_tax ?? 0,
+    };
+    const existing = ss.prebuildItems.findOneBy("external_id", item.id);
+    if (existing) ss.prebuildItems.update(existing.id, row);
+    else ss.prebuildItems.insert(row);
+  }
+}
 
 export function seedFromConfig(store: Store, _baseUrl: string, config: SimproSeedConfig): void {
   const ss = getSimproStore(store);
@@ -355,14 +670,14 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: SimproSee
       family_name: cust.family_name ?? null,
       title: null,
       email: cust.email ?? null,
-      phone_primary: null,
-      website: null,
-      ein: null,
-      address: null,
-      tax_code_id: null,
-      payment_terms: null,
-      archived: false,
-      tags: [] as string[],
+      phone_primary: cust.phone_primary ?? null,
+      website: cust.website ?? null,
+      ein: cust.ein ?? null,
+      address: cust.address ?? null,
+      tax_code_id: cust.tax_code_id ?? null,
+      payment_terms: cust.payment_terms ?? null,
+      archived: cust.archived ?? false,
+      tags: cust.tags ?? ([] as string[]),
       custom_fields: [],
     };
     const existing = ss.customers.findOneBy("external_id", cust.id);
@@ -375,7 +690,7 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: SimproSee
         external_id: site.id,
         customer_id: cust.id,
         name: site.name,
-        address: null,
+        address: site.address ?? null,
         contact_id: null,
         archived: false,
       };
@@ -460,6 +775,7 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: SimproSee
         const existingCc = ss.costCenters.findOneBy("external_id", cc.id);
         if (existingCc) ss.costCenters.update(existingCc.id, ccRow);
         else ss.costCenters.insert(ccRow);
+        seedCostCenterLineItems(ss, job.company_id ?? DEFAULT_COMPANY_ID, cc.id, cc);
       }
     }
   }
@@ -491,6 +807,51 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: SimproSee
     const existingQuote = ss.quotes.findOneBy("external_id", q.id);
     if (existingQuote) ss.quotes.update(existingQuote.id, quoteRow);
     else ss.quotes.insert(quoteRow);
+
+    let qOrder = 1;
+    for (const section of q.sections ?? []) {
+      const qSectionRow = {
+        company_id: q.company_id ?? DEFAULT_COMPANY_ID,
+        external_id: section.id,
+        quote_id: q.id,
+        name: section.name,
+        description: section.description ?? null,
+        display_order: qOrder,
+        date_modified: now,
+      };
+      const existingQSection = ss.quoteSections.findOneBy("external_id", section.id);
+      if (existingQSection) ss.quoteSections.update(existingQSection.id, qSectionRow);
+      else ss.quoteSections.insert(qSectionRow);
+      qOrder++;
+
+      for (const cc of section.cost_centers ?? []) {
+        const qCcRow = {
+          company_id: q.company_id ?? DEFAULT_COMPANY_ID,
+          external_id: cc.id,
+          quote_id: q.id,
+          section_id: section.id,
+          master_cost_center_id: cc.master_cost_center_id ?? null,
+          tax_code_id: cc.tax_code_id ?? null,
+          name: cc.name ?? `Cost Center ${cc.id}`,
+          description: cc.description ?? null,
+          billing_type: cc.billing_type ?? "TimeAndMaterials",
+          billable: true,
+          stage: cc.stage ?? 2,
+          ex_tax: cc.ex_tax ?? 0,
+          tax: 0,
+          inc_tax: cc.inc_tax ?? 0,
+          invoiced_ex_tax: 0,
+          markup: 0,
+          discount: 0,
+          is_variation: false,
+          date_modified: now,
+        };
+        const existingQCc = ss.quoteCostCenters.findOneBy("external_id", cc.id);
+        if (existingQCc) ss.quoteCostCenters.update(existingQCc.id, qCcRow);
+        else ss.quoteCostCenters.insert(qCcRow);
+        seedCostCenterLineItems(ss, q.company_id ?? DEFAULT_COMPANY_ID, cc.id, cc);
+      }
+    }
   }
 
   for (const a of config.assets ?? []) {
@@ -573,6 +934,22 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: SimproSee
     const existing = ss.contractors.findOneBy("external_id", cr.id);
     if (existing) ss.contractors.update(existing.id, row);
     else ss.contractors.insert(row);
+  }
+
+  for (const e of config.employees ?? []) {
+    const row = {
+      company_id: e.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: e.id,
+      given_name: e.given_name,
+      family_name: e.family_name,
+      email: e.email ?? null,
+      phone: e.phone ?? null,
+      active: e.active ?? true,
+      archived: e.archived ?? false,
+    };
+    const existing = ss.employees.findOneBy("external_id", e.id);
+    if (existing) ss.employees.update(existing.id, row);
+    else ss.employees.insert(row);
   }
 
   for (const sc of config.schedules ?? []) {
@@ -691,6 +1068,198 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: SimproSee
     else ss.customerPayments.insert(row);
   }
 
+  for (const lr of config.labour_rates ?? []) {
+    const row = {
+      company_id: lr.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: lr.id,
+      name: lr.name,
+      rate: lr.rate,
+      cost_rate: lr.cost_rate,
+      archived: lr.archived ?? false,
+    };
+    const existing = ss.labourRates.findOneBy("external_id", lr.id);
+    if (existing) ss.labourRates.update(existing.id, row);
+    else ss.labourRates.insert(row);
+  }
+
+  for (const z of config.zones ?? []) {
+    const row = {
+      company_id: z.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: z.id,
+      name: z.name,
+    };
+    const existing = ss.zones.findOneBy("external_id", z.id);
+    if (existing) ss.zones.update(existing.id, row);
+    else ss.zones.insert(row);
+  }
+
+  for (const cf of config.custom_fields ?? []) {
+    const row = {
+      company_id: cf.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: cf.id,
+      name: cf.name,
+      entity: cf.entity,
+      field_type: cf.field_type ?? "text",
+    };
+    const existing = ss.customFields.findOneBy("external_id", cf.id);
+    if (existing) ss.customFields.update(existing.id, row);
+    else ss.customFields.insert(row);
+  }
+
+  for (const pb of config.prebuilds ?? []) {
+    const row = {
+      company_id: pb.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: pb.id,
+      name: pb.name,
+      description: pb.description ?? null,
+      archived: pb.archived ?? false,
+      date_modified: pb.date_modified ?? now,
+    };
+    const existing = ss.prebuilds.findOneBy("external_id", pb.id);
+    if (existing) ss.prebuilds.update(existing.id, row);
+    else ss.prebuilds.insert(row);
+  }
+
+  for (const pt of config.plant_types ?? []) {
+    const row = {
+      company_id: pt.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: pt.id,
+      name: pt.name,
+      description: pt.description ?? null,
+      archived: pt.archived ?? false,
+    };
+    const existing = ss.plantTypes.findOneBy("external_id", pt.id);
+    if (existing) ss.plantTypes.update(existing.id, row);
+    else ss.plantTypes.insert(row);
+  }
+
+  for (const p of config.plants ?? []) {
+    const row = {
+      company_id: p.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: p.id,
+      plant_type_id: p.plant_type_id,
+      name: p.name,
+      serial_number: p.serial_number ?? null,
+      description: p.description ?? null,
+      archived: p.archived ?? false,
+      date_modified: p.date_modified ?? now,
+    };
+    const existing = ss.plants.findOneBy("external_id", p.id);
+    if (existing) ss.plants.update(existing.id, row);
+    else ss.plants.insert(row);
+  }
+
+  for (const cn of config.credit_notes ?? []) {
+    const row = {
+      company_id: cn.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: cn.id,
+      customer_id: cn.customer_id,
+      invoice_id: cn.invoice_id ?? null,
+      job_id: cn.job_id ?? null,
+      total_ex_tax: cn.total_ex_tax ?? 0,
+      total_inc_tax: cn.total_inc_tax ?? 0,
+      date_issued: cn.date_issued ?? now.slice(0, 10),
+      stage: cn.stage ?? 2,
+      notes: cn.notes ?? null,
+    };
+    const existing = ss.creditNotes.findOneBy("external_id", cn.id);
+    if (existing) ss.creditNotes.update(existing.id, row);
+    else ss.creditNotes.insert(row);
+  }
+
+  for (const lead of config.leads ?? []) {
+    const row = {
+      company_id: lead.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: lead.id,
+      name: lead.name,
+      description: lead.description ?? null,
+      customer_id: lead.customer_id ?? null,
+      site_id: lead.site_id ?? null,
+      status_id: null,
+      stage: lead.stage ?? "New",
+      salesperson_id: lead.salesperson_id ?? null,
+      date_issued: lead.date_issued ?? now.slice(0, 10),
+      date_modified: lead.date_modified ?? now,
+      tags: lead.tags ?? [],
+    };
+    const existing = ss.leads.findOneBy("external_id", lead.id);
+    if (existing) ss.leads.update(existing.id, row);
+    else ss.leads.insert(row);
+  }
+
+  for (const ts of config.timesheets ?? []) {
+    const row = {
+      company_id: ts.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: ts.id,
+      employee_id: ts.employee_id ?? null,
+      contractor_id: ts.contractor_id ?? null,
+      job_id: ts.job_id ?? null,
+      cost_center_id: ts.cost_center_id ?? null,
+      date: ts.date,
+      start_time: ts.start_time,
+      end_time: ts.end_time ?? null,
+      duration_minutes: ts.duration_minutes ?? 0,
+      notes: ts.notes ?? null,
+    };
+    const existing = ss.timesheets.findOneBy("external_id", ts.id);
+    if (existing) ss.timesheets.update(existing.id, row);
+    else ss.timesheets.insert(row);
+  }
+
+  for (const as_ of config.activity_schedules ?? []) {
+    const row = {
+      company_id: as_.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: as_.id,
+      technician_id: as_.technician_id,
+      date: as_.date,
+      start_time: as_.start_time,
+      duration_minutes: as_.duration_minutes ?? 60,
+      activity_type: as_.activity_type,
+      notes: as_.notes ?? null,
+    };
+    const existing = ss.activitySchedules.findOneBy("external_id", as_.id);
+    if (existing) ss.activitySchedules.update(existing.id, row);
+    else ss.activitySchedules.insert(row);
+  }
+
+  for (const rj of config.recurring_jobs ?? []) {
+    const row = {
+      company_id: rj.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: rj.id,
+      name: rj.name,
+      description: rj.description ?? null,
+      customer_id: rj.customer_id,
+      site_id: rj.site_id ?? null,
+      stage: rj.stage ?? "Active",
+      billing_type: rj.billing_type ?? "TimeAndMaterials",
+      frequency: rj.frequency ?? "Monthly",
+      start_date: rj.start_date ?? now.slice(0, 10),
+      end_date: rj.end_date ?? null,
+      date_modified: rj.date_modified ?? now,
+    };
+    const existing = ss.recurringJobs.findOneBy("external_id", rj.id);
+    if (existing) ss.recurringJobs.update(existing.id, row);
+    else ss.recurringJobs.insert(row);
+  }
+
+  for (const n of config.notes ?? []) {
+    const row = {
+      company_id: n.company_id ?? DEFAULT_COMPANY_ID,
+      external_id: n.id,
+      parent_type: n.parent_type,
+      parent_id: n.parent_id,
+      text: n.text,
+      date_created: n.date_created ?? now,
+      date_modified: n.date_modified ?? now,
+      author_id: n.author_id ?? null,
+    };
+    const existing = ss.notes
+      .all()
+      .find((x) => x.parent_type === n.parent_type && x.parent_id === n.parent_id && x.external_id === n.id);
+    if (existing) ss.notes.update(existing.id, row);
+    else ss.notes.insert(row);
+  }
+
   if (config.swagger_records) seedSimproSwaggerRecords(store, config.swagger_records);
 }
 
@@ -760,9 +1329,85 @@ export function storeToSeedConfig(store: Store, _baseUrl: string): SimproSeedCon
         given_name: cu.given_name,
         family_name: cu.family_name,
         email: cu.email,
-        ...(sites.length ? { sites: sites.map((st) => ({ id: st.external_id, name: st.name })) } : {}),
+        phone_primary: cu.phone_primary,
+        website: cu.website,
+        ein: cu.ein,
+        address: cu.address,
+        tax_code_id: cu.tax_code_id,
+        payment_terms: cu.payment_terms,
+        archived: cu.archived,
+        tags: cu.tags,
+        ...(sites.length
+          ? { sites: sites.map((st) => ({ id: st.external_id, name: st.name, address: st.address })) }
+          : {}),
       };
     });
+
+  const lineItemsFor = (costCenterId: number) => {
+    const catalogItems = ss.catalogItems.all().filter((item) => item.cost_center_id === costCenterId);
+    const labourItems = ss.labourItems.all().filter((item) => item.cost_center_id === costCenterId);
+    const oneOffItems = ss.oneOffItems.all().filter((item) => item.cost_center_id === costCenterId);
+    const prebuildItems = ss.prebuildItems.all().filter((item) => item.cost_center_id === costCenterId);
+    return {
+      ...(catalogItems.length
+        ? {
+            catalog_items: catalogItems.map((item) => ({
+              id: item.external_id,
+              stock_item_id: item.stock_item_id,
+              name: item.name,
+              part_no: item.part_no,
+              quantity: item.quantity,
+              base_price: item.base_price,
+              markup: item.markup,
+              sell_price: item.sell_price,
+              ex_tax: item.ex_tax,
+            })),
+          }
+        : {}),
+      ...(labourItems.length
+        ? {
+            labour_items: labourItems.map((item) => ({
+              id: item.external_id,
+              labour_id: item.labour_id,
+              name: item.name,
+              hours: item.hours,
+              labour_rate: item.labour_rate,
+              markup: item.markup,
+              sell_price: item.sell_price,
+              ex_tax: item.ex_tax,
+            })),
+          }
+        : {}),
+      ...(oneOffItems.length
+        ? {
+            one_off_items: oneOffItems.map((item) => ({
+              id: item.external_id,
+              description: item.description,
+              quantity: item.quantity,
+              est_cost: item.est_cost,
+              act_cost: item.act_cost,
+              markup: item.markup,
+              sell_price: item.sell_price,
+              ex_tax: item.ex_tax,
+            })),
+          }
+        : {}),
+      ...(prebuildItems.length
+        ? {
+            prebuild_items: prebuildItems.map((item) => ({
+              id: item.external_id,
+              prebuild_id: item.prebuild_id,
+              name: item.name,
+              quantity: item.quantity,
+              cost_price: item.cost_price,
+              markup: item.markup,
+              sell_price: item.sell_price,
+              ex_tax: item.ex_tax,
+            })),
+          }
+        : {}),
+    };
+  };
 
   const jobs = ss.jobs.all();
   if (jobs.length)
@@ -805,9 +1450,10 @@ export function storeToSeedConfig(store: Store, _baseUrl: string): SimproSeedCon
                           name: c.name,
                           description: c.description,
                           billing_type: c.billing_type,
-                          stage: c.stage,
+                          stage: c.stage as CostCenterStage,
                           ex_tax: c.ex_tax,
                           inc_tax: c.inc_tax,
+                          ...lineItemsFor(c.external_id),
                         })),
                       }
                     : {}),
@@ -820,26 +1466,59 @@ export function storeToSeedConfig(store: Store, _baseUrl: string): SimproSeedCon
 
   const quotes = ss.quotes.all();
   if (quotes.length)
-    out.quotes = quotes.map((q) => ({
-      id: q.external_id,
-      ...co(q.company_id),
-      name: q.name,
-      description: q.description,
-      order_no: q.order_no,
-      customer_id: q.customer_id,
-      site_id: q.site_id,
-      salesperson_id: q.salesperson_id,
-      project_manager_id: q.project_manager_id,
-      status_id: q.status_id,
-      stage: q.stage,
-      total_ex_tax: q.total_ex_tax,
-      total_tax: q.total_tax,
-      total_inc_tax: q.total_inc_tax,
-      date_issued: q.date_issued,
-      due_date: q.due_date,
-      tags: q.tags,
-      converted_job_id: q.converted_job_id,
-    }));
+    out.quotes = quotes.map((q) => {
+      const sections = ss.quoteSections.all().filter((sec) => sec.quote_id === q.external_id);
+      return {
+        id: q.external_id,
+        ...co(q.company_id),
+        name: q.name,
+        description: q.description,
+        order_no: q.order_no,
+        customer_id: q.customer_id,
+        site_id: q.site_id,
+        salesperson_id: q.salesperson_id,
+        project_manager_id: q.project_manager_id,
+        status_id: q.status_id,
+        stage: q.stage,
+        total_ex_tax: q.total_ex_tax,
+        total_tax: q.total_tax,
+        total_inc_tax: q.total_inc_tax,
+        date_issued: q.date_issued,
+        due_date: q.due_date,
+        tags: q.tags,
+        converted_job_id: q.converted_job_id,
+        ...(sections.length
+          ? {
+              sections: sections.map((sec) => {
+                const ccs = ss.quoteCostCenters
+                  .all()
+                  .filter((c) => c.quote_id === q.external_id && c.section_id === sec.external_id);
+                return {
+                  id: sec.external_id,
+                  name: sec.name,
+                  description: sec.description,
+                  ...(ccs.length
+                    ? {
+                        cost_centers: ccs.map((c) => ({
+                          id: c.external_id,
+                          master_cost_center_id: c.master_cost_center_id,
+                          tax_code_id: c.tax_code_id,
+                          name: c.name,
+                          description: c.description,
+                          billing_type: c.billing_type,
+                          stage: c.stage as CostCenterStage,
+                          ex_tax: c.ex_tax,
+                          inc_tax: c.inc_tax,
+                          ...lineItemsFor(c.external_id),
+                        })),
+                      }
+                    : {}),
+                };
+              }),
+            }
+          : {}),
+      };
+    });
 
   const assets = ss.assets.all();
   if (assets.length)
@@ -958,6 +1637,203 @@ export function storeToSeedConfig(store: Store, _baseUrl: string): SimproSeedCon
       supplier_part_no: si.supplier_part_no,
       taxable: si.taxable,
       archived: si.archived,
+    }));
+
+  const vendors = ss.vendors.all();
+  if (vendors.length)
+    out.vendors = vendors.map((v) => ({
+      id: v.external_id,
+      ...co(v.company_id),
+      name: v.name,
+      email: v.email,
+      phone: v.phone,
+      archived: v.archived,
+    }));
+
+  const vendorOrders = ss.vendorOrders.all();
+  if (vendorOrders.length)
+    out.vendor_orders = vendorOrders.map((vo) => ({
+      id: vo.external_id,
+      ...co(vo.company_id),
+      vendor_id: vo.vendor_id,
+      job_id: vo.job_id,
+      stage: vo.stage,
+      description: vo.description,
+      total_ex_tax: vo.total_ex_tax,
+      total_inc_tax: vo.total_inc_tax,
+      date_issued: vo.date_issued,
+    }));
+
+  const customerPayments = ss.customerPayments.all();
+  if (customerPayments.length)
+    out.customer_payments = customerPayments.map((p) => ({
+      id: p.external_id,
+      ...co(p.company_id),
+      customer_id: p.customer_id,
+      invoice_id: p.invoice_id,
+      amount: p.amount,
+      date: p.date,
+      payment_method: p.payment_method,
+      notes: p.notes,
+    }));
+
+  const labourRates = ss.labourRates.all();
+  if (labourRates.length)
+    out.labour_rates = labourRates.map((lr) => ({
+      id: lr.external_id,
+      ...co(lr.company_id),
+      name: lr.name,
+      rate: lr.rate,
+    }));
+
+  const zones = ss.zones.all();
+  if (zones.length) out.zones = zones.map((z) => ({ id: z.external_id, ...co(z.company_id), name: z.name }));
+
+  const customFields = ss.customFields.all();
+  if (customFields.length)
+    out.custom_fields = customFields.map((cf) => ({
+      id: cf.external_id,
+      ...co(cf.company_id),
+      name: cf.name,
+      entity: cf.entity,
+      field_type: cf.field_type,
+    }));
+
+  const prebuilds = ss.prebuilds.all();
+  if (prebuilds.length)
+    out.prebuilds = prebuilds.map((pb) => ({
+      id: pb.external_id,
+      ...co(pb.company_id),
+      name: pb.name,
+      description: pb.description,
+      archived: pb.archived,
+      date_modified: pb.date_modified,
+    }));
+
+  const plantTypes = ss.plantTypes.all();
+  if (plantTypes.length)
+    out.plant_types = plantTypes.map((pt) => ({
+      id: pt.external_id,
+      ...co(pt.company_id),
+      name: pt.name,
+      description: pt.description,
+      archived: pt.archived,
+    }));
+
+  const plants = ss.plants.all();
+  if (plants.length)
+    out.plants = plants.map((p) => ({
+      id: p.external_id,
+      ...co(p.company_id),
+      plant_type_id: p.plant_type_id,
+      name: p.name,
+      serial_number: p.serial_number,
+      description: p.description,
+      archived: p.archived,
+      date_modified: p.date_modified,
+    }));
+
+  const creditNotes = ss.creditNotes.all();
+  if (creditNotes.length)
+    out.credit_notes = creditNotes.map((cn) => ({
+      id: cn.external_id,
+      ...co(cn.company_id),
+      customer_id: cn.customer_id,
+      invoice_id: cn.invoice_id,
+      job_id: cn.job_id,
+      total_ex_tax: cn.total_ex_tax,
+      total_inc_tax: cn.total_inc_tax,
+      date_issued: cn.date_issued,
+      stage: cn.stage,
+      notes: cn.notes,
+    }));
+
+  const leads = ss.leads.all();
+  if (leads.length)
+    out.leads = leads.map((lead) => ({
+      id: lead.external_id,
+      ...co(lead.company_id),
+      name: lead.name,
+      description: lead.description,
+      customer_id: lead.customer_id,
+      site_id: lead.site_id,
+      stage: lead.stage,
+      salesperson_id: lead.salesperson_id,
+      date_issued: lead.date_issued,
+      date_modified: lead.date_modified,
+      tags: lead.tags,
+    }));
+
+  const timesheets = ss.timesheets.all();
+  if (timesheets.length)
+    out.timesheets = timesheets.map((ts) => ({
+      id: ts.external_id,
+      ...co(ts.company_id),
+      employee_id: ts.employee_id,
+      contractor_id: ts.contractor_id,
+      job_id: ts.job_id,
+      cost_center_id: ts.cost_center_id,
+      date: ts.date,
+      start_time: ts.start_time,
+      end_time: ts.end_time,
+      duration_minutes: ts.duration_minutes,
+      notes: ts.notes,
+    }));
+
+  const activitySchedules = ss.activitySchedules.all();
+  if (activitySchedules.length)
+    out.activity_schedules = activitySchedules.map((a) => ({
+      id: a.external_id,
+      ...co(a.company_id),
+      technician_id: a.technician_id,
+      date: a.date,
+      start_time: a.start_time,
+      duration_minutes: a.duration_minutes,
+      activity_type: a.activity_type,
+      notes: a.notes,
+    }));
+
+  const recurringJobs = ss.recurringJobs.all();
+  if (recurringJobs.length)
+    out.recurring_jobs = recurringJobs.map((rj) => ({
+      id: rj.external_id,
+      ...co(rj.company_id),
+      name: rj.name,
+      description: rj.description,
+      customer_id: rj.customer_id,
+      site_id: rj.site_id,
+      stage: rj.stage,
+      billing_type: rj.billing_type,
+      frequency: rj.frequency,
+      start_date: rj.start_date,
+      end_date: rj.end_date,
+      date_modified: rj.date_modified,
+    }));
+
+  const notes = ss.notes.all();
+  if (notes.length)
+    out.notes = notes.map((n) => ({
+      id: n.external_id,
+      ...co(n.company_id),
+      parent_type: n.parent_type,
+      parent_id: n.parent_id,
+      text: n.text,
+      date_created: n.date_created,
+      date_modified: n.date_modified,
+      author_id: n.author_id,
+    }));
+
+  const employees = ss.employees.all();
+  if (employees.length)
+    out.employees = employees.map((e) => ({
+      id: e.external_id,
+      ...co(e.company_id),
+      given_name: e.given_name,
+      family_name: e.family_name,
+      email: e.email,
+      phone: e.phone,
+      active: e.active,
+      archived: e.archived,
     }));
 
   const swaggerRecords = exportSimproSwaggerRecords(store);

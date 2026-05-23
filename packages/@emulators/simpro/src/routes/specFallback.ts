@@ -11,6 +11,14 @@ type SwaggerRecord = Record<string, unknown>;
 
 export type SimproSwaggerRecords = Record<string, SwaggerRecord[]>;
 
+export interface SimproSwaggerSeedOptions {
+  baseDate?: Date | string;
+  pastDays?: number;
+  futureDays?: number;
+  frequencyDays?: number;
+  companyId?: number | string;
+}
+
 interface SwaggerSpec {
   paths: Record<string, Record<string, SwaggerOperation | unknown>>;
   definitions?: Record<string, SwaggerSchema>;
@@ -70,6 +78,52 @@ export function exportSimproSwaggerRecords(store: Store): SimproSwaggerRecords |
   const entries = [...records.entries()].filter(([, rows]) => rows.length > 0);
   if (!entries.length) return undefined;
   return Object.fromEntries(entries.map(([path, rows]) => [path, rows.map((row) => ({ ...row }))]));
+}
+
+export function fillSimproSwaggerRecordsFromSpec(store: Store, options: SimproSwaggerSeedOptions = {}): void {
+  const spec = loadSimproSwaggerSpec();
+  const records = getSwaggerRecords(store);
+  const baseDate = dateOnly(options.baseDate ?? new Date());
+  const pastDays = Math.max(0, Math.floor(options.pastDays ?? 90));
+  const futureDays = Math.max(0, Math.floor(options.futureDays ?? 180));
+  const frequencyDays = Math.max(1, Math.floor(options.frequencyDays ?? 7));
+  const offsets: number[] = [];
+  for (let day = -pastDays; day <= futureDays; day += frequencyDays) offsets.push(day);
+  if (!offsets.includes(0)) offsets.push(0);
+  offsets.sort((a, b) => a - b);
+
+  let routeIndex = 0;
+  for (const route of enumerateRoutes(spec)) {
+    if (route.method !== "get") continue;
+    const success = successResponse(route.operation.responses ?? {});
+    if (!isArraySchema(spec, success?.response.schema, new Set())) continue;
+
+    const collectionKey = concreteCollectionPath(route.specPath, route.params, options.companyId ?? 0);
+    const rows = records.get(collectionKey) ?? [];
+    const existingIds = new Set(rows.map((row) => String(recordId(row))).filter((id) => id !== "undefined"));
+    const itemSchema = collectionItemSchema(spec, success?.response.schema);
+    const collectionSlug = route.specPath.split("/").filter(Boolean).at(-1) ?? "record";
+
+    offsets.forEach((offset, offsetIndex) => {
+      const id = routeIndex * 100_000 + offsetIndex + 1;
+      if (existingIds.has(String(id))) return;
+      const date = addDays(baseDate, offset);
+      const record = enrichSwaggerRecord(specRecordForSchema(spec, itemSchema), {
+            id,
+            date,
+            collectionSlug,
+            path: collectionKey,
+          });
+      if (record && typeof record === "object" && !Array.isArray(record)) {
+        rows.push(ensureRecordId(record as SwaggerRecord, rows));
+      }
+    });
+
+    records.set(collectionKey, rows);
+    routeIndex += 1;
+  }
+
+  store.setData(STORE_KEY, records);
 }
 
 export function simproSpecFallbackRoutes({ app, store }: RouteContext): void {
@@ -290,7 +344,19 @@ function isArraySchema(spec: SwaggerSpec, schema: SwaggerSchema | undefined, see
   return schema.type === "array";
 }
 
+function collectionItemSchema(spec: SwaggerSpec, schema: SwaggerSchema | undefined): SwaggerSchema | undefined {
+  if (!schema) return undefined;
+  const resolved = resolveRef(spec, schema, new Set());
+  if (resolved !== schema) return collectionItemSchema(spec, resolved);
+  return schema.items;
+}
+
 function schemaRecord(spec: SwaggerSpec, schema: SwaggerSchema | undefined): SwaggerRecord {
+  const body = sampleForSchema(spec, schema, new Set());
+  return body && typeof body === "object" && !Array.isArray(body) ? (body as SwaggerRecord) : {};
+}
+
+function specRecordForSchema(spec: SwaggerSpec, schema: SwaggerSchema | undefined): SwaggerRecord {
   const body = sampleForSchema(spec, schema, new Set());
   return body && typeof body === "object" && !Array.isArray(body) ? (body as SwaggerRecord) : {};
 }
@@ -320,6 +386,70 @@ function nextRecordId(rows: SwaggerRecord[]): number {
 function parseMaybeNumber(value: string): string | number {
   const num = Number(value);
   return Number.isFinite(num) && String(num) === value ? num : value;
+}
+
+function concreteCollectionPath(specPath: string, params: SpecRouteParam[], companyId: number | string): string {
+  let path = specPath;
+  for (const param of params) path = path.replace(`{${param.specName}}`, defaultParamValue(param.specName, companyId));
+  return path.endsWith("/") ? path : `${path.replace(/\/[^/]+$/, "")}/`;
+}
+
+function defaultParamValue(name: string, companyId: number | string): string {
+  const lower = name.toLowerCase();
+  if (lower === "companyid" || lower === "company_id") return String(companyId);
+  if (lower.includes("customer")) return "200";
+  if (lower.includes("site")) return "55";
+  if (lower.includes("job")) return "12345";
+  if (lower.includes("section")) return "1";
+  if (lower.includes("costcenter")) return "800";
+  if (lower.includes("quote")) return "9001";
+  if (lower.includes("invoice")) return "7001";
+  if (lower.includes("vendor")) return "1";
+  if (lower.includes("contractor")) return "90";
+  if (lower.includes("staff") || lower.includes("employee")) return "7";
+  if (lower.includes("planttype")) return "1";
+  if (lower.includes("plant")) return "1";
+  if (lower.includes("lead")) return "1";
+  if (lower.includes("recurring")) return "1";
+  return "1";
+}
+
+function dateOnly(value: Date | string): string {
+  return (value instanceof Date ? value : new Date(value)).toISOString().slice(0, 10);
+}
+
+function addDays(date: string, offset: number): string {
+  const next = new Date(`${date}T00:00:00.000Z`);
+  next.setUTCDate(next.getUTCDate() + offset);
+  return next.toISOString().slice(0, 10);
+}
+
+function enrichSwaggerRecord(
+  value: unknown,
+  ctx: { id: number; date: string; collectionSlug: string; path: string },
+  key = "",
+): unknown {
+  if (Array.isArray(value)) return value.length ? value.map((item) => enrichSwaggerRecord(item, ctx, key)) : [];
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [childKey, childValue] of Object.entries(value as Record<string, unknown>)) {
+      out[childKey] = enrichSwaggerRecord(childValue, ctx, childKey);
+    }
+    if (out.ID === undefined && out.id === undefined && out.Id === undefined) out.ID = ctx.id;
+    return out;
+  }
+
+  const lower = key.toLowerCase();
+  if (lower === "id" || lower.endsWith("id")) return ctx.id;
+  if (lower.includes("date") && lower.includes("time")) return `${ctx.date}T09:00:00+00:00`;
+  if (lower.includes("date") || lower === "start" || lower === "end") return ctx.date;
+  if (lower.includes("email")) return `${ctx.collectionSlug}.${ctx.id}@example.test`;
+  if (lower.includes("phone") || lower.includes("fax") || lower.includes("mobile")) return "+61000000000";
+  if (lower.includes("url") || lower.includes("website")) return `https://example.test${ctx.path}`;
+  if (typeof value === "number") return lower.includes("total") || lower.includes("amount") ? 100 : ctx.id;
+  if (typeof value === "boolean") return ctx.id % 2 === 0;
+  if (typeof value === "string") return value || `${ctx.collectionSlug} ${ctx.id}`;
+  return value;
 }
 
 function escapeRegex(value: string): string {

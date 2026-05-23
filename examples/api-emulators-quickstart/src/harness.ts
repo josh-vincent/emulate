@@ -28,6 +28,8 @@ export interface MountOptions {
   tokens?: Record<string, { login: string; id: number; scopes?: string[] }>;
   /** Run the plugin's built-in `seed()` defaults after mounting. */
   seedDefaults?: boolean;
+  /** Override the shared request bucket for high-volume contract simulations. */
+  rateLimit?: { limit?: number; windowSec?: number };
 }
 
 export function mount(plugin: ServicePlugin, baseUrl: string, opts: MountOptions = {}): Emulator {
@@ -35,6 +37,7 @@ export function mount(plugin: ServicePlugin, baseUrl: string, opts: MountOptions
     baseUrl,
     fallbackUser: opts.fallbackUser,
     tokens: opts.tokens,
+    rateLimit: opts.rateLimit,
   });
   if (opts.seedDefaults) plugin.seed?.(srv.store, baseUrl);
   return { app: srv.app, store: srv.store, webhooks: srv.webhooks };

@@ -9,6 +9,12 @@ const copyFonts = async () => {
   const dest = resolve(__dirname, "dist/fonts");
   mkdirSync(dest, { recursive: true });
   cpSync(src, dest, { recursive: true });
+  // The bundled simpro emulator resolves its swagger from dist/simpro-swagger.json.
+  // tsup only bundles JS, so copy the spec into dist for both dev and the tarball.
+  cpSync(
+    resolve(__dirname, "../../documentation/simpro-swagger.json"),
+    resolve(__dirname, "dist/simpro-swagger.json")
+  );
 };
 
 const addShebang = async () => {

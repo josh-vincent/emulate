@@ -10,6 +10,7 @@ import { proxyRoutes } from "./routes/proxy.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { inspectorRoutes } from "./routes/inspector.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { syncRoutes } from "./routes/syncs.js";
 import { getWebhookSettings, setWebhookSettings } from "./webhooks.js";
 import { getNangoStore } from "./store.js";
 import type { NangoConnection, NangoConnectionSeed } from "./types.js";
@@ -19,6 +20,7 @@ export { getNangoStore } from "./store.js";
 export type { NangoConnection, NangoConnectionSeed } from "./types.js";
 export {
   buildSyncWebhook,
+  buildAuthWebhook,
   buildForwardWebhook,
   signBody,
   signBodyBase64,
@@ -68,6 +70,7 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: NangoSeed
       },
       connection_config: seed.connection_config ?? {},
       metadata: seed.metadata ?? {},
+      tags: seed.tags ?? {},
       created_at: now,
       updated_at: now,
       last_fetched_at: now,
@@ -107,6 +110,9 @@ export function storeToSeedConfig(
     if (Object.keys(conn.metadata ?? {}).length > 0) {
       seed.metadata = conn.metadata;
     }
+    if (Object.keys(conn.tags ?? {}).length > 0) {
+      seed.tags = conn.tags;
+    }
     if (opts?.includeCredentials) {
       seed.credentials = {
         access_token: conn.credentials.access_token,
@@ -136,10 +142,11 @@ export const nangoPlugin: ServicePlugin = {
     app.get("/health", (c) => c.json({ ok: true }));
 
     inspectorRoutes({ app, store, webhooks: _webhooks, baseUrl });
-    connectionRoutes(app, ns);
+    connectionRoutes(app, ns, store);
     sessionRoutes(app, baseUrl, ns);
     proxyRoutes(app, ns, baseUrl);
     webhookRoutes(app, ns, store);
+    syncRoutes(app, ns);
     directHubspotRoutes(app, store);
     directHubspotCrmRoutes(app, store);
     directSalesforceRoutes(app, store);

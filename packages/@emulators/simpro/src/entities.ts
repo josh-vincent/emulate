@@ -36,6 +36,8 @@ export interface SimproLabourRate extends Entity {
   external_id: number;
   name: string;
   rate: number;
+  cost_rate?: number;
+  archived?: boolean;
 }
 
 export interface SimproStatus extends Entity {
@@ -69,7 +71,7 @@ export interface SimproAddress {
   Address?: string;
   City?: string;
   State?: string;
-  PostCode?: string;
+  PostalCode?: string;
   Country?: string;
 }
 

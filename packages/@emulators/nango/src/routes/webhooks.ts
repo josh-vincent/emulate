@@ -43,6 +43,7 @@ export function webhookRoutes(app: Hono<AppEnv>, ns: NangoStoreFacade, store: St
       added?: number;
       updated?: number;
       deleted?: number;
+      syncType?: "INITIAL" | "INCREMENTAL" | "WEBHOOK";
     };
     const connectionId = body.connection_id ?? "";
     const conn = ns.getConnection(connectionId);
@@ -66,6 +67,7 @@ export function webhookRoutes(app: Hono<AppEnv>, ns: NangoStoreFacade, store: St
           added: body.added ?? rows?.length ?? 0,
           updated: body.updated,
           deleted: body.deleted,
+          syncType: body.syncType,
         }),
       );
     }
@@ -85,12 +87,9 @@ export function webhookRoutes(app: Hono<AppEnv>, ns: NangoStoreFacade, store: St
     await dispatchNangoWebhook(
       store,
       "forward",
-      buildForwardWebhook({
-        provider: conn?.provider ?? providerConfigKey,
-        connectionId: conn?.id,
-        providerConfigKey,
-        payload: raw,
-      }),
+      conn
+        ? buildForwardWebhook({ provider: conn.provider, connectionId: conn.id, providerConfigKey, payload: raw })
+        : raw,
     );
     return c.json({ status: "ok" }, 200);
   });

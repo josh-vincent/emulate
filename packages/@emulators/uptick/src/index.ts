@@ -7,6 +7,7 @@ import { clientRoutes } from "./routes/clients.js";
 import { defectRoutes } from "./routes/defects.js";
 import { inspectorRoutes } from "./routes/inspector.js";
 import { oauthRoutes } from "./routes/oauth.js";
+import { optionsRoutes } from "./routes/options.js";
 import { propertyRoutes } from "./routes/properties.js";
 import { referenceRoutes } from "./routes/reference.js";
 
@@ -260,6 +261,7 @@ export const uptickPlugin: ServicePlugin = {
     app.get("/health", (c) => c.json({ status: "ok", service: "uptick" }));
     oauthRoutes(ctx);
     inspectorRoutes(ctx);
+    optionsRoutes(ctx);
     // Opt-in: real Uptick rejects API calls without a bearer token. The
     // OAuth token endpoint and inspector are registered above so they stay
     // open; only the `/api/:ver/*` data routes below are gated. Off by

@@ -29,6 +29,7 @@ import { writeFileSync } from "node:fs";
 import {
   simproPlugin,
   seedFromConfig,
+  fillSimproSwaggerRecordsFromSpec,
   getSimproStore,
   storeToSeedConfig,
   type SimproSeedConfig,
@@ -39,9 +40,32 @@ import { SIMPRO_ROUTES, SIMPRO_SWAGGER_OPERATION_COUNT } from "./simpro-routes.g
 const BASE = "http://localhost:4010";
 const CID = "0";
 const DAY = 86_400_000;
-const WEEKS = 13; // ≈ 91 days = one quarter
 const PASSES = 2; // crawl every endpoint this many times
-const START = new Date(Date.now() - WEEKS * 7 * DAY);
+
+const PROFILES = {
+  "90d": { pastDays: 90, futureDays: 183, cycleDays: 7, label: "90 days past + 6 months future" },
+  "180d": { pastDays: 180, futureDays: 183, cycleDays: 7, label: "180 days past + 6 months future" },
+  "1y-plus-6m": { pastDays: 365, futureDays: 183, cycleDays: 7, label: "1 year past + 6 months future" },
+} as const;
+type ProfileName = keyof typeof PROFILES;
+
+function argValue(name: string): string | undefined {
+  const prefix = `${name}=`;
+  const direct = process.argv.find((arg) => arg.startsWith(prefix));
+  if (direct) return direct.slice(prefix.length);
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
+const requestedProfile = (argValue("--profile") ?? process.env.SIMPRO_SIM_PROFILE ?? "90d") as ProfileName;
+if (!PROFILES[requestedProfile]) {
+  console.error(`Unknown SimPro profile "${requestedProfile}". Use one of: ${Object.keys(PROFILES).join(", ")}`);
+  process.exit(1);
+}
+const PROFILE_NAME = requestedProfile;
+const PROFILE = PROFILES[PROFILE_NAME];
+const WEEKS = Math.floor((PROFILE.pastDays + PROFILE.futureDays) / PROFILE.cycleDays) + 1;
+const START = new Date(Date.now() - PROFILE.pastDays * DAY);
 const day = (n: number): string => new Date(START.getTime() + n * DAY).toISOString().slice(0, 10);
 
 // LIVE mode: instead of an isolated in-process store, drive a *running*
@@ -83,7 +107,7 @@ const ctx: Record<string, number> = {};
 // A superset write body. `date` stamps *every* date field any handler reads,
 // so a single body works for jobs, schedules, assets, stock takes, recurring
 // jobs, credit notes, etc. — each handler picks the field(s) it needs.
-function bodyFor(date = day(45)): string {
+function bodyFor(date = day(PROFILE.pastDays)): string {
   return JSON.stringify({
     Name: `Sim ${Date.now()}`,
     GivenName: "Sim",
@@ -230,6 +254,7 @@ const FLAT = [
   "contractors",
   "staff",
   "employees",
+  "timesheets",
   "activitySchedules",
   "contractorInvoices",
   "stockTakes",
@@ -261,7 +286,7 @@ const SETUP = [
 ] as const;
 
 async function main(): Promise<void> {
-  const emu = mount(simproPlugin, BASE);
+  const emu = mount(simproPlugin, BASE, { rateLimit: { limit: 100_000, windowSec: 3600 } });
   app = REMOTE ? remoteApp : LIVE ? liveApp : emu.app;
   if (REMOTE) console.log(`\n  🟢 REMOTE mode — building + crawling the quarter on ${REMOTE} (per-port, persists)\n`);
   else if (LIVE)
@@ -402,7 +427,7 @@ async function main(): Promise<void> {
       );
   };
 
-  heading(`Simpro sim — building a linked operational graph over ${WEEKS} weeks (≈90 days)`);
+  heading(`Simpro sim — profile ${PROFILE_NAME}: ${PROFILE.label}, weekly linked workflow data`);
 
   // ── One-time org configuration (created once, like a real tenant) ────────
   for (const s of SETUP) bump(s, await mk(`${C}/${s}/`, day(0)));
@@ -432,7 +457,7 @@ async function main(): Promise<void> {
   let lastRJob = 0;
   let lastCust = 200;
   for (let w = 0; w < WEEKS; w++) {
-    const d = day(w * 7);
+    const d = day(w * PROFILE.cycleDays);
 
     // Grow the customer base every other week: customer → site → contact.
     let cust = customers[customers.length - 1]!;
@@ -556,7 +581,7 @@ async function main(): Promise<void> {
   } else {
     const ss = getSimproStore(emu.store);
     jobIds.forEach((jid, i) => {
-      const d = day(Math.min(i, WEEKS - 1) * 7);
+      const d = day(Math.min(i, WEEKS - 1) * PROFILE.cycleDays);
       ss.tasks.insert({
         company_id: 0,
         external_id: 90_000 + i,
@@ -607,7 +632,16 @@ async function main(): Promise<void> {
           .join(""),
     );
 
-  // ── Span assertion: prove the data really covers ~3 months ──────────────
+  if (!LIVE && !REMOTE) {
+    fillSimproSwaggerRecordsFromSpec(emu.store, {
+      pastDays: PROFILE.pastDays,
+      futureDays: PROFILE.futureDays,
+      frequencyDays: PROFILE.cycleDays,
+      companyId: CID,
+    });
+  }
+
+  // ── Span assertion: prove the data covers the requested profile window ──
   const jobsList = (await (
     await app.request(`${BASE}/api/v1.0/companies/${CID}/jobs/?columns=ID,DateIssued&pageSize=250`, {
       headers: auth,
@@ -619,10 +653,11 @@ async function main(): Promise<void> {
     .sort();
   const spanDays =
     dates.length >= 2 ? Math.round((Date.parse(dates[dates.length - 1]!) - Date.parse(dates[0]!)) / DAY) : 0;
-  const spanOk = spanDays >= 75;
+  const requiredSpanDays = PROFILE.pastDays + PROFILE.futureDays - PROFILE.cycleDays;
+  const spanOk = spanDays >= requiredSpanDays;
   console.log(
     `\n  job date span: ${dates[0] ?? "—"} → ${dates[dates.length - 1] ?? "—"} ` +
-      `= ${spanDays} days across ${jobsList.length} jobs — ${spanOk ? "✅ ≥75d (real quarter)" : "❌ too narrow"}`,
+      `= ${spanDays} days across ${jobsList.length} jobs — ${spanOk ? `ok, ≥${requiredSpanDays}d` : "too narrow"}`,
   );
 
   // ── Deep-link assertion: nested routes return real *related* data ───────
@@ -833,6 +868,7 @@ async function main(): Promise<void> {
   let anyPassFailed = false;
   for (let pass = 1; pass <= PASSES; pass++) {
     heading(`Simpro sim — crawl pass ${pass}/${PASSES}: exercising all ${SIMPRO_ROUTES.length} endpoints`);
+    await oauth();
     fiveXX = [];
     listFailures = [];
     idCache = new Map();
@@ -840,7 +876,7 @@ async function main(): Promise<void> {
 
     for (const [method, path] of routes) await call(method, path);
     for (const p of ["jobs", "customers", "sections", "cost-centers", "invoices", "webhooks"]) {
-      const r = await app.request(`${BASE}/inspector/${p}`);
+      const r = await app.request(`${BASE}/inspector/${p}`, { headers: auth });
       covered.add(`GET /inspector/${p}`);
       status[r.status] = (status[r.status] ?? 0) + 1;
       if (r.status !== 200) listFailures.push(`GET /inspector/${p} → ${r.status}`);
@@ -902,7 +938,7 @@ async function main(): Promise<void> {
     console.log(`\n  📦 exported linked quarter → ${EXPORT_PATH} (boot: EMULATE_CONFIG_PATH=${EXPORT_PATH})`);
   }
   console.log(
-    `\nSimpro 3-month simulation ${ok ? `complete — ${SIMPRO_SWAGGER_OPERATION_COUNT} Swagger operations, a linked quarter of data, all relationships populated` : "INCOMPLETE"}.\n`,
+    `\nSimpro ${PROFILE_NAME} simulation ${ok ? `complete — ${SIMPRO_SWAGGER_OPERATION_COUNT} Swagger operations, linked workflow data, all relationships populated` : "INCOMPLETE"}.\n`,
   );
   if (!ok) process.exit(1);
 }

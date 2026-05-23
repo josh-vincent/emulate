@@ -153,7 +153,7 @@ body{
 .empty{color:#1a8c00;text-align:center;padding:28px 0;font-size:.875rem;}
 
 .inspector-layout{max-width:960px;margin:0 auto;padding:28px 20px;}
-.inspector-tabs{display:flex;gap:4px;margin-bottom:20px;}
+.inspector-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:20px;}
 .inspector-tabs a{
   padding:7px 16px;border-radius:6px;text-decoration:none;
   font-size:.8125rem;color:#1a8c00;border:1px solid transparent;

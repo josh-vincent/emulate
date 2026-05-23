@@ -135,8 +135,8 @@ contract tests.
 
 | Script                     | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `uptick-sim`               | 12 weekly client onboardings + defect lifecycle across 90 days; **24/24** uptick routes; round-trip verified                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `simpro-sim`               | ~30 dated jobs (+ schedules/invoices/payments) across 90 days; a generic crawler resolves every `:param` transitively and exercises **all 1,435 SimPro Swagger operations** plus local OAuth/inspector routes; spec-only writes persist through generic `swagger_records`; **29/29** shape + relational-integrity checks (every stateful entity's full shape + every FK resolved to a real linked record)                                                                                                                                                                                                                                                                                                               |
+| `uptick-sim`               | 12 weekly client onboardings + defect lifecycle across 90 days; **28/28** uptick routes including official-style `OPTIONS` metadata; round-trip verified                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `simpro-sim`               | Profile-driven SimPro workflow seeding: `90d`, `180d`, or `1y-plus-6m`, each with six months of future scheduled work; jobs, schedules, invoices, payments, quotes, vendor orders, recurring work, line items, assets, staff, contractors, leads and setup collections are linked; a generic crawler resolves every `:param` transitively and exercises **all 1,435 SimPro Swagger operations** plus local OAuth/inspector routes; spec-only writes persist through generic `swagger_records`; **29/29** shape + relational-integrity checks (every stateful entity's full shape + every FK resolved to a real linked record)                                                                                                                                                                                                                      |
 | `nango-providers-sim`      | **10 connections**, 90 days of dated records each. Four (xero, quickbooks, google-drive, onedrive) drive every provider-native `/proxy/*` path; the rest form a **cross-provider graph** — Slack/Gmail/Jira/Salesforce records link into Google Drive by file id + share URL, Jira links into GitHub PRs. **Each connection is independently verified** (resolves through the emulator, records are emulator-served, a live append round-trips back through `GET /records`, ≥75-day span), then a cross-provider integrity phase resolves **all 95** references to real linked records; **18/18** Nango routes                                                                          |
 | `direct-sim`               | **No Nango layer at all** — 5 emulators (GitHub, Slack, Stripe, Resend, Vercel) each spoken to through their _own_ native API. A 90-day DevOps quarter: 12 weekly cycles of incident → deploy notice → invoice payment → customer mail → service ship, then a third of incidents resolved via PATCH. Every created entity is **round-tripped back through that provider's own GET**; **24/24** native route patterns across 5 providers, **11/11** assertion checks, 0 × non-2xx                                                                                                                                                                                                        |
 | `business-streams`         | **Phase 2.1 — scenario-declared provider streams, zero simulator source edits.** Xero invoices, Jira issues, Salesforce opportunities, GitHub PRs and Slack messages streamed into a running Nango emulator purely from [`scenarios/business-streams.yaml`](./scenarios/business-streams.yaml) via the open generator registry; every stream's records asserted queryable through `GET /records` and each sync asserted to have fired a webhook delivery                                                                                                                                                                                                                                |
@@ -147,6 +147,94 @@ Set `SIMPRO_SIM_EXPORT=/path/to/seed.json` when running `simpro-sim` to write a
 bootable seed after the full Swagger crawl. Export mode skips destructive
 DELETE calls so spec-only rows created by the crawler survive into
 `simpro.swagger_records`.
+
+```bash
+pnpm --filter api-emulators-quickstart simpro-sim:90d
+pnpm --filter api-emulators-quickstart simpro-sim:180d
+pnpm --filter api-emulators-quickstart simpro-sim:1y-plus-6m
+
+SIMPRO_SIM_EXPORT=./tmp/simpro-90d.seed.json pnpm --filter api-emulators-quickstart simpro-sim:90d
+```
+
+To run all three SimPro profiles side by side for app testing:
+
+```bash
+pnpm --filter api-emulators-quickstart simpro-profiles
+```
+
+The runner prints:
+
+```bash
+SIMPRO_90D_BASE_URL=http://localhost:4030
+SIMPRO_180D_BASE_URL=http://localhost:4031
+SIMPRO_1Y_PLUS_6M_BASE_URL=http://localhost:4032
+```
+
+It also smoke-tests OAuth and job counts against each endpoint. Use
+`--seconds 30` for a bounded run.
+
+To run the full core provider matrix across the same profile windows:
+
+```bash
+pnpm --filter api-emulators-quickstart core-profiles
+```
+
+The runner starts three Nango endpoints. Every provider gets the same
+per-profile record count: 40 records for `90d`, 52 for `180d`, and 79 for
+`1y-plus-6m`.
+
+```bash
+CORE_90D_NANGO_URL=http://localhost:4040
+CORE_180D_NANGO_URL=http://localhost:4041
+CORE_1Y_PLUS_6M_NANGO_URL=http://localhost:4042
+```
+
+Seeded connections:
+
+```text
+crm        salesforce-acme, hubspot-acme, pipedrive-acme, zoho-crm-acme
+accounting freshbooks-acme, wave-acme
+chat       slack-acme, discord-acme, microsoft-teams-acme
+email      gmail-acme, outlook-mail-acme, mailchimp-acme, sendgrid-acme, klaviyo-acme
+storage    google-drive-acme, onedrive-acme, dropbox-acme, box-acme
+calendar   google-calendar-acme, outlook-calendar-acme
+projects   jira-acme, linear-acme, asana-acme, notion-acme, clickup-acme, monday-acme, trello-acme
+code       github-acme, gitlab-acme
+support    zendesk-acme, intercom-acme
+hr         bamboohr-acme, greenhouse-acme, lever-acme
+commerce   shopify-acme
+analytics  mixpanel-acme
+forms      typeform-acme
+database   airtable-acme
+scheduling calendly-acme
+```
+
+Validate a running endpoint against Nango's record and webhook contracts:
+
+```bash
+pnpm --filter api-emulators-quickstart core-profiles:validate -- --base-url http://localhost:4040
+```
+
+Realtime Nango workflows are webhook-based. The provider sends a webhook to
+Nango, Nango updates its cache or forwards the provider payload, then your app
+reads changed records from `GET /records` using `_nango_metadata.cursor`.
+
+Fetch real Nango data for comparison with:
+
+```bash
+curl -G "https://api.nango.dev/records" \
+  -H "Authorization: Bearer $NANGO_SECRET_KEY" \
+  -H "Connection-Id: $NANGO_CONNECTION_ID" \
+  -H "Provider-Config-Key: $NANGO_PROVIDER_CONFIG_KEY" \
+  --data-urlencode "model=$NANGO_MODEL" \
+  --data-urlencode "limit=100"
+```
+
+The local Nango emulator covers the current sync workflow routes:
+`/connections`, `/connections/metadata`, `/records`, `/records/prune`,
+`/sync/start`, `/sync/pause`, `/sync/trigger`, `/sync/status`, and
+`/sync/{name}/variant/{variant}`. Deprecated `/connection` aliases remain
+available for older clients.
 
 ## Nango provider library
 
@@ -342,7 +430,7 @@ src/
   nango-providers.ts        Nango 34-provider seed-library walkthrough
   crm.ts                    HubSpot CRM + Salesforce REST/SOQL end-to-end
   simpro.ts / uptick.ts     Deep narrated walkthroughs (+ round-trip)
-  uptick-sim.ts             Uptick 3-month sim, 24/24 route coverage
+  uptick-sim.ts             Uptick 3-month sim, 28/28 route coverage
   simpro-sim.ts             Simpro 3-month sim, Swagger route coverage
   simpro-routes.generated.ts  Auto-generated simpro route table (driver input)
   nango-providers-sim.ts    Nango 10-connection cross-provider 3-month sim

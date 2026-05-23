@@ -103,7 +103,13 @@ export function formatTaxCode(tc: SimproTaxCode) {
 }
 
 export function formatLabourRate(lr: SimproLabourRate) {
-  return { ID: lr.external_id, Name: lr.name, Rate: lr.rate };
+  return {
+    ID: lr.external_id,
+    Name: lr.name,
+    Rate: lr.rate,
+    CostRate: lr.cost_rate ?? null,
+    Archived: lr.archived ?? false,
+  };
 }
 
 export function formatStockItem(item: SimproStockItem) {
@@ -136,7 +142,10 @@ export function formatCustomer(c: SimproCustomer) {
     FamilyName: c.family_name,
     Title: c.title,
     Email: c.email,
-    Phone: { Work: c.phone_primary, Mobile: null, Fax: null },
+    Phone: c.phone_primary ?? null,
+    AltPhone: null,
+    DoNotCall: false,
+    CustomerType: "Customer",
     Website: c.website,
     EIN: c.ein,
     Address: c.address ?? {},
@@ -583,7 +592,12 @@ export function formatSchedule(s: SimproSchedule) {
   return {
     ID: s.external_id,
     Type: "job",
-    Reference: String(s.job_id),
+    // Job-type schedules encode the parent as "{jobId}-{costCenterId}" per the
+    // SimPro swagger; cost_center_id is optional in seed data.
+    Reference:
+      s.cost_center_id != null
+        ? `${s.job_id}-${s.cost_center_id}`
+        : String(s.job_id),
     TotalHours: durationHours,
     Notes: null,
     Staff: { ID: s.technician_id, Name: null, Type: "employee", TypeId: s.technician_id },

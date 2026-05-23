@@ -33,6 +33,77 @@ describe("Nango /records sync API", () => {
     expect(typeof body.records[0]._nango_metadata.first_seen_at).toBe("string");
   });
 
+  it("supports Nango cursor pagination, ids, and filter queries", async () => {
+    const { app } = createTestApp({
+      seed: {
+        connections: [
+          {
+            id: "gmail-acme",
+            provider: "gmail",
+            provider_config_key: "gmail",
+            records: {
+              Message: [
+                { id: "m1", subject: "First" },
+                { id: "m2", subject: "Second" },
+                { id: "m3", subject: "Third" },
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    const first = await app.request(`${BASE}/records?model=Message&limit=2`, {
+      headers: { "Connection-Id": "gmail-acme", "Provider-Config-Key": "gmail" },
+    });
+    const firstBody = (await first.json()) as { records: NangoRecord[]; next_cursor: string };
+    expect(firstBody.records.map((row) => row.id)).toEqual(["m1", "m2"]);
+    expect(firstBody.next_cursor).toBe("emu_cursor_1");
+
+    const second = await app.request(`${BASE}/records?model=Message&cursor=${firstBody.next_cursor}`, {
+      headers: { "Connection-Id": "gmail-acme", "Provider-Config-Key": "gmail" },
+    });
+    const secondBody = (await second.json()) as { records: NangoRecord[]; next_cursor: null };
+    expect(secondBody.records.map((row) => row.id)).toEqual(["m3"]);
+    expect(secondBody.next_cursor).toBeNull();
+
+    const ids = await app.request(`${BASE}/records?model=Message&ids=m2,m3&filter=added`, {
+      headers: { "Connection-Id": "gmail-acme", "Provider-Config-Key": "gmail" },
+    });
+    const idsBody = (await ids.json()) as { records: NangoRecord[] };
+    expect(idsBody.records.map((row) => row.id)).toEqual(["m2", "m3"]);
+  });
+
+  it("supports records pruning while preserving metadata", async () => {
+    const { app } = createTestApp({
+      seed: {
+        connections: [
+          {
+            id: "gmail-acme",
+            provider: "gmail",
+            provider_config_key: "gmail",
+            records: { Message: [{ id: "m1", subject: "First" }, { id: "m2", subject: "Second" }] },
+          },
+        ],
+      },
+    });
+
+    const pruned = await app.request(`${BASE}/records/prune`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "Connection-Id": "gmail-acme", "Provider-Config-Key": "gmail" },
+      body: JSON.stringify({ model: "Message", until_cursor: "emu_cursor_0" }),
+    });
+    expect(await pruned.json()).toEqual({ count: 1, has_more: false });
+
+    const res = await app.request(`${BASE}/records?model=Message&limit=1`, {
+      headers: { "Connection-Id": "gmail-acme", "Provider-Config-Key": "gmail" },
+    });
+    const body = (await res.json()) as { records: NangoRecord[] };
+    expect(body.records[0].subject).toBeUndefined();
+    expect(body.records[0]._nango_metadata.cursor).toBe("emu_cursor_0");
+    expect(body.records[0]._nango_metadata).toHaveProperty("pruned_at");
+  });
+
   it("trailing-slash /records/ behaves identically", async () => {
     const { app } = createTestApp({ seed: ORG_SEED });
     const res = await app.request(`${BASE}/records/?model=Customer`, {

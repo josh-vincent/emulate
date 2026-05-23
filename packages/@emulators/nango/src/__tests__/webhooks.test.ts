@@ -7,6 +7,7 @@ import { BASE, createTestApp, json } from "./helpers.js";
 import type { NangoSeedConfig } from "../index.js";
 import { storeToSeedConfig } from "../index.js";
 import {
+  buildAuthWebhook,
   buildSyncWebhook,
   buildForwardWebhook,
   signBody,
@@ -20,6 +21,7 @@ import {
 //
 // Real Nango emits two webhook types relevant to syncs/comms integrations:
 //   - "sync"    : fired after a sync run; carries responseResults counts.
+//   - "auth"    : fired after a connection lifecycle event.
 //                 (calendars, teams, messages — anything Nango syncs)
 //   - "forward" : a provider's own webhook (WhatsApp inbound message, Graph
 //                 change notification, …) wrapped + relayed to the consumer.
@@ -145,6 +147,29 @@ describe("Nango webhooks — pure builders (unit)", () => {
       payload: raw,
     });
   });
+
+  it("buildAuthWebhook matches the connection lifecycle envelope", () => {
+    const wh = buildAuthWebhook({
+      operation: "creation",
+      connectionId: "conn-1",
+      authMode: "OAuth2",
+      providerConfigKey: "hubspot",
+      provider: "hubspot",
+      success: true,
+      endUser: { endUserId: "user-1", tags: { organizationId: "org-1" } },
+    });
+    expect(wh).toEqual({
+      type: "auth",
+      operation: "creation",
+      connectionId: "conn-1",
+      authMode: "OAuth2",
+      providerConfigKey: "hubspot",
+      provider: "hubspot",
+      environment: "DEV",
+      success: true,
+      endUser: { endUserId: "user-1", tags: { organizationId: "org-1" } },
+    });
+  });
 });
 
 describe("Nango webhooks — settings registration", () => {
@@ -195,6 +220,23 @@ describe("Nango webhooks — sync (POST /sync/trigger)", () => {
     });
     // Signature contract: HMAC-SHA256 of the exact body with the secret.
     expect(hit.headers["x-nango-signature"]).toBe(signBody("whsec_test", hit.body));
+    expect(hit.headers["x-nango-hmac-sha256"]).toBe(signBody("whsec_test", hit.body));
+  });
+
+  it("supports WEBHOOK syncType for realtime sync completion payloads", async () => {
+    const rcv = receiver();
+    open = rcv;
+    const { app } = createTestApp({ seed: SEED });
+    await app.request(`${BASE}/webhook-settings`, json({ url: rcv.url, secret: "whsec_test" }));
+
+    await app.request(
+      `${BASE}/sync/trigger`,
+      json({ provider_config_key: "google-calendar", connection_id: "cal-acme", model: "events", syncType: "WEBHOOK" }),
+    );
+
+    const hit = await rcv.next();
+    const payload = JSON.parse(hit.body) as Record<string, unknown>;
+    expect(payload).toMatchObject({ type: "sync", syncType: "WEBHOOK", model: "events" });
   });
 
   it("trigger with no webhook url configured still 200s and delivers nothing", async () => {
@@ -239,6 +281,7 @@ describe("Nango webhooks — forward (inbound provider webhook)", () => {
       payload: waBody,
     });
     expect(hit.headers["x-nango-signature"]).toBe(signBody("whsec_test", hit.body));
+    expect(hit.headers["x-nango-hmac-sha256"]).toBe(signBody("whsec_test", hit.body));
   });
 
   it("records every delivery for inspection", async () => {
@@ -254,6 +297,20 @@ describe("Nango webhooks — forward (inbound provider webhook)", () => {
     };
     expect(list.deliveries).toHaveLength(1);
     expect(list.deliveries[0]).toMatchObject({ event: "forward", url: rcv.url, success: true });
+  });
+
+  it("forwards raw provider payloads when no connection can be attributed", async () => {
+    const rcv = receiver();
+    open = rcv;
+    const { app } = createTestApp({ seed: SEED });
+    await app.request(`${BASE}/webhook-settings`, json({ url: rcv.url, secret: "whsec_test" }));
+
+    const raw = { event: "unmapped" };
+    await app.request(`${BASE}/webhook/env-1/unknown-provider`, json(raw));
+
+    const hit = await rcv.next();
+    expect(JSON.parse(hit.body)).toEqual(raw);
+    expect(hit.headers["x-nango-hmac-sha256"]).toBe(signBody("whsec_test", hit.body));
   });
 });
 

@@ -264,6 +264,130 @@ surface. Use the concrete API collection path as the key. Mutating spec-only
 routes persist to this store and `storeToSeedConfig` exports them in the same
 shape.
 
+For realistic SimPro workflow mock testing, use the profile-driven quickstart
+simulator:
+
+```bash
+pnpm --filter api-emulators-quickstart simpro-sim:90d
+pnpm --filter api-emulators-quickstart simpro-sim:180d
+pnpm --filter api-emulators-quickstart simpro-sim:1y-plus-6m
+```
+
+Each profile includes six months of future scheduled work and crawls all 1,435
+vendored Swagger operations plus local OAuth and inspector routes. To write a
+bootable seed file, set `SIMPRO_SIM_EXPORT`:
+
+```bash
+SIMPRO_SIM_EXPORT=./tmp/simpro-90d.seed.json pnpm --filter api-emulators-quickstart simpro-sim:90d
+```
+
+Exported seeds include linked workflow records and schema-complete
+`simpro.swagger_records` generated from the vendored Swagger spec for
+spec-only endpoints.
+
+For app testing against all SimPro windows at the same time:
+
+```bash
+pnpm --filter api-emulators-quickstart simpro-profiles
+```
+
+This generates the `90d`, `180d`, and `1y-plus-6m` seeds, starts local SimPro
+endpoints on ports 4030, 4031, and 4032, prints the `SIMPRO_*_BASE_URL`
+environment variables, and smoke-tests OAuth plus job counts. Use `--seconds
+30` for bounded runs.
+
+Open `/inspector` on any SimPro endpoint to view the overview and left-sidebar
+links for schedules, quotes, invoices, payments, vendor orders, assets,
+inventory, recurring work, setup records and webhook activity.
+
+For app testing across core integration categories:
+
+```bash
+pnpm --filter api-emulators-quickstart core-profiles
+```
+
+This starts three Nango endpoints on ports 4040, 4041, and 4042 for `90d`,
+`180d`, and `1y-plus-6m`. Each endpoint includes the full core provider matrix,
+and every provider gets the same per-profile record count: 40 records for
+`90d`, 52 for `180d`, and 79 for `1y-plus-6m`.
+
+```text
+crm        salesforce-acme, hubspot-acme, pipedrive-acme, zoho-crm-acme
+accounting freshbooks-acme, wave-acme
+chat       slack-acme, discord-acme, microsoft-teams-acme
+email      gmail-acme, outlook-mail-acme, mailchimp-acme, sendgrid-acme, klaviyo-acme
+storage    google-drive-acme, onedrive-acme, dropbox-acme, box-acme
+calendar   google-calendar-acme, outlook-calendar-acme
+projects   jira-acme, linear-acme, asana-acme, notion-acme, clickup-acme, monday-acme, trello-acme
+code       github-acme, gitlab-acme
+support    zendesk-acme, intercom-acme
+hr         bamboohr-acme, greenhouse-acme, lever-acme
+commerce   shopify-acme
+analytics  mixpanel-acme
+forms      typeform-acme
+database   airtable-acme
+scheduling calendly-acme
+```
+
+Use Nango's regular `Connection-Id` and `Provider-Config-Key` headers to read
+records from the endpoint for the target profile.
+
+Validate a running profile endpoint against the Nango record and webhook
+contracts:
+
+```bash
+pnpm --filter api-emulators-quickstart core-profiles:validate -- --base-url http://localhost:4040
+```
+
+Nango realtime workflows are webhook-based, not WebSocket-based. The provider
+sends a webhook to Nango, Nango updates its records cache or forwards the
+provider event, and the app reads changed records through `GET /records` using
+`_nango_metadata.cursor`.
+
+To fetch real Nango data for comparison:
+
+```bash
+curl -G "https://api.nango.dev/records" \
+  -H "Authorization: Bearer $NANGO_SECRET_KEY" \
+  -H "Connection-Id: $NANGO_CONNECTION_ID" \
+  -H "Provider-Config-Key: $NANGO_PROVIDER_CONFIG_KEY" \
+  --data-urlencode "model=$NANGO_MODEL" \
+  --data-urlencode "limit=100"
+```
+
+The local Nango emulator covers the current sync workflow routes:
+`/connections`, `/connections/metadata`, `/records`, `/records/prune`,
+`/sync/start`, `/sync/pause`, `/sync/trigger`, `/sync/status`, and
+`/sync/{name}/variant/{variant}`. Deprecated `/connection` aliases remain
+available for older clients.
+
+### Source parity audits
+
+Use `pnpm audit:sources` from the repo root to inspect
+`documentation/emulator-source-map.json`. It reports whether each emulator is
+backed by a vendored spec, official machine-readable docs, official human docs,
+or seed-derived native paths. Uptick's public source of truth is its live
+JSON:API endpoint index plus `OPTIONS` metadata, so the emulator exposes
+`OPTIONS` for supported Uptick resources.
+
+For an authorized Uptick tenant, run:
+
+```bash
+pnpm discover:uptick -- --base-url https://tenant.onuptick.com --token "$UPTICK_ACCESS_TOKEN" --out documentation/uptick-discovery.json
+```
+
+The script can also use `UPTICK_USERNAME`, `UPTICK_PASSWORD`,
+`UPTICK_CLIENT_ID`, and `UPTICK_CLIENT_SECRET` to request a token.
+
+For public GitHub hints, run:
+
+```bash
+GITHUB_TOKEN=ghp_... pnpm search:uptick-public-code -- --out documentation/uptick-public-code-search.json
+```
+
+Treat public-code results as hints only; tenant discovery is the authoritative
+path when credentials are available.
+
 ### Auth
 
 Tokens map to users. Pass them as `Authorization: Bearer <token>` or `Authorization: token <token>`. When no tokens are configured, a default `test_token_admin` is created for the `admin` user.

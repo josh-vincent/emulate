@@ -25,6 +25,21 @@ describe("Nango connections — org-wide management", () => {
     expect(filtered.connections[0].id).toBe("xero-acme");
   });
 
+  it("supports current /connections list filters without leaking credentials", async () => {
+    const { app } = createTestApp({ seed: ORG_SEED });
+    await app.request(`${BASE}/connections/slack-acme?provider_config_key=slack`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags: { Organization_ID: "org_acme", end_user_id: "u_1" } }),
+    });
+
+    const list = await app.request(`${BASE}/connections?tags[organization_id]=org_acme&search=u_1`);
+    const body = (await list.json()) as { connections: Array<NangoConnection & { credentials?: unknown }> };
+    expect(body.connections).toHaveLength(1);
+    expect(body.connections[0]).toMatchObject({ id: "slack-acme", tags: { organization_id: "org_acme" } });
+    expect(body.connections[0].credentials).toBeUndefined();
+  });
+
   it("fetches one connection with OAuth2 credentials + provider config", async () => {
     const { app } = createTestApp({ seed: ORG_SEED });
 
@@ -79,6 +94,51 @@ describe("Nango connections — org-wide management", () => {
     // Now discoverable via the list endpoint.
     const list = await app.request(`${BASE}/connection?provider_config_key=notion`);
     expect(((await list.json()) as { connections: unknown[] }).connections).toHaveLength(1);
+  });
+
+  it("POST /connections upserts a connection and DELETE removes it", async () => {
+    const { app } = createTestApp();
+
+    const created = await app.request(
+      `${BASE}/connections`,
+      json({
+        connection_id: "linear-acme",
+        provider_config_key: "linear",
+        credentials: { type: "OAuth2", access_token: "lin-token" },
+        tags: { Organization_ID: "org_acme" },
+      }),
+    );
+    expect(created.status).toBe(200);
+    expect((await created.json()) as NangoConnection).toMatchObject({
+      id: "linear-acme",
+      provider_config_key: "linear",
+      tags: { organization_id: "org_acme" },
+      credentials: { access_token: "lin-token" },
+    });
+
+    const removed = await app.request(`${BASE}/connections/linear-acme?provider_config_key=linear`, { method: "DELETE" });
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ success: true });
+    expect((await app.request(`${BASE}/connections/linear-acme?provider_config_key=linear`)).status).toBe(404);
+  });
+
+  it("supports current bulk metadata set and patch routes", async () => {
+    const { app } = createTestApp({ seed: ORG_SEED });
+
+    const set = await app.request(
+      `${BASE}/connections/metadata`,
+      json({ connection_id: "hubspot-acme", provider_config_key: "hubspot", metadata: { folder: "base" } }),
+    );
+    expect(set.status).toBe(201);
+    expect((await app.request(`${BASE}/connections/hubspot-acme?provider_config_key=hubspot`)).status).toBe(200);
+
+    const patch = await app.request(
+      `${BASE}/connections/metadata`,
+      { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ connection_id: "hubspot-acme", provider_config_key: "hubspot", metadata: { cursor: "c1" } }) },
+    );
+    expect(patch.status).toBe(200);
+    const conn = (await (await app.request(`${BASE}/connections/hubspot-acme?provider_config_key=hubspot`)).json()) as NangoConnection;
+    expect(conn.metadata).toEqual({ folder: "base", cursor: "c1" });
   });
 
   it("PATCH and PUT metadata merge into the existing record; unknown → 404", async () => {

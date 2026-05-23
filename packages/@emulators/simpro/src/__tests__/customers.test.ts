@@ -20,7 +20,9 @@ describe("Simpro customers", () => {
       Email: "ops@acme.example",
       Archived: false,
     });
-    expect(body[0].Phone).toEqual({ Work: null, Mobile: null, Fax: null });
+    expect(body[0].Phone).toBeNull();
+    expect(body[0].AltPhone).toBeNull();
+    expect(body[0].CustomerType).toBe("Customer");
   });
 
   it("/companies/ returns companies, /individuals/ excludes them", async () => {

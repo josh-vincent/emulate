@@ -7,6 +7,7 @@ import { deliverWithRetry, type DeliverDeps, type Store } from "@emulators/core"
 // Real Nango POSTs your configured webhook URL with two payload types relevant
 // to sync/comms integrations:
 //
+//   auth     — fired after a connection is created or re-authorized.
 //   sync     — fired after a sync run; carries responseResults counts. This is
 //              how a consumer learns "new calendar events / Teams messages /
 //              emails landed" without polling.
@@ -15,8 +16,9 @@ import { deliverWithRetry, type DeliverDeps, type Store } from "@emulators/core"
 //              verbatim so the consumer's existing provider-webhook handler
 //              works unchanged.
 //
-// Every delivery is signed: header `X-Nango-Signature` = HMAC-SHA256 hex of
-// the exact request body using the environment secret key.
+// Every delivery is signed: header `X-Nango-Hmac-Sha256` = HMAC-SHA256 hex of
+// the exact request body using the environment secret key. `X-Nango-Signature`
+// is also sent for compatibility with older consumers.
 // ---------------------------------------------------------------------------
 
 const SETTINGS_KEY = "nango.webhook_settings";
@@ -89,7 +91,7 @@ interface SyncArgs {
   added: number;
   updated?: number;
   deleted?: number;
-  syncType?: "INITIAL" | "INCREMENTAL";
+  syncType?: "INITIAL" | "INCREMENTAL" | "WEBHOOK";
 }
 
 /** The real Nango `type: "sync"` envelope. */
@@ -114,6 +116,33 @@ interface ForwardArgs {
   connectionId?: string;
   providerConfigKey: string;
   payload: unknown;
+}
+
+interface AuthArgs {
+  operation: "creation" | "override" | "refresh";
+  connectionId: string;
+  authMode: string;
+  providerConfigKey: string;
+  provider: string;
+  success: boolean;
+  endUser?: { endUserId?: string; tags?: Record<string, unknown> };
+  error?: { type: string; description: string };
+}
+
+/** The real Nango `type: "auth"` connection lifecycle webhook envelope. */
+export function buildAuthWebhook(a: AuthArgs): Record<string, unknown> {
+  return {
+    type: "auth",
+    operation: a.operation,
+    connectionId: a.connectionId,
+    authMode: a.authMode,
+    providerConfigKey: a.providerConfigKey,
+    provider: a.provider,
+    environment: "DEV",
+    success: a.success,
+    endUser: a.endUser ?? { endUserId: undefined, tags: {} },
+    ...(a.error ? { error: a.error } : {}),
+  };
 }
 
 /** The real Nango `type: "forward"` envelope wrapping a provider's webhook. */
@@ -162,7 +191,7 @@ export async function dispatchNangoWebhook(
       headers: {
         "Content-Type": "application/json",
         "X-Nango-Webhook-Type": event,
-        ...(signature ? { "X-Nango-Signature": signature } : {}),
+        ...(signature ? { "X-Nango-Hmac-Sha256": signature, "X-Nango-Signature": signature } : {}),
       },
       body,
     },

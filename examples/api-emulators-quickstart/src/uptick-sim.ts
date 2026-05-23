@@ -29,7 +29,11 @@ const ROUTES = [
   "GET /",
   "GET /api/version/",
   "POST /api/oauth2/token/",
+  "OPTIONS /api/version/",
   "GET /api/:ver/",
+  "OPTIONS /api/:ver/",
+  "OPTIONS /api/:ver/clients/",
+  "OPTIONS /api/:ver/clients/:id",
   "GET /api/:ver/clients/",
   "POST /api/:ver/clients/",
   "GET /api/:ver/clients/:id",
@@ -113,7 +117,10 @@ async function main(): Promise<void> {
 
   await req("GET /", `${BASE}/?tab=clients`);
   await req("GET /api/version/", `${BASE}/api/version/`, { headers: H });
+  await req("OPTIONS /api/version/", `${BASE}/api/version/`, { headers: H });
   await req("GET /api/:ver/", `${BASE}/api/${VER}/`, { headers: H });
+  await req("OPTIONS /api/:ver/", `${BASE}/api/${VER}/`, { headers: H });
+  await req("OPTIONS /api/:ver/clients/", `${BASE}/api/${VER}/clients/`, { headers: H });
 
   const atList = (await (
     await req("GET /api/:ver/assettypes/", `${BASE}/api/${VER}/assettypes/`, { headers: H })
@@ -230,6 +237,7 @@ async function main(): Promise<void> {
 
   // By-id GET + PATCH on each top-level resource.
   await req("GET /api/:ver/clients/:id", `${BASE}/api/${VER}/clients/${clientIds[0]}`, { headers: H });
+  await req("OPTIONS /api/:ver/clients/:id", `${BASE}/api/${VER}/clients/${clientIds[0]}`, { headers: H });
   await req("PATCH /api/:ver/clients/:id", `${BASE}/api/${VER}/clients/${clientIds[0]}`, {
     method: "PATCH",
     headers: H,

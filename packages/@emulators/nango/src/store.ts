@@ -32,6 +32,13 @@ export function getNangoStore(store: Store) {
     upsertConnection(conn: NangoConnection): void {
       connections.set(conn.id, conn);
     },
+    deleteConnection(id: string, providerConfigKey?: string): boolean {
+      const conn = connections.get(id);
+      if (!conn || (providerConfigKey && conn.provider_config_key !== providerConfigKey)) return false;
+      connections.delete(id);
+      records.delete(id);
+      return true;
+    },
     refreshCredentials(id: string): NangoConnection | undefined {
       const conn = connections.get(id);
       if (!conn) return undefined;
@@ -56,6 +63,20 @@ export function getNangoStore(store: Store) {
       const conn = connections.get(id);
       if (!conn) return false;
       conn.metadata = { ...conn.metadata, ...metadata };
+      conn.updated_at = new Date().toISOString();
+      return true;
+    },
+    replaceMetadata(id: string, metadata: Record<string, unknown>): boolean {
+      const conn = connections.get(id);
+      if (!conn) return false;
+      conn.metadata = metadata;
+      conn.updated_at = new Date().toISOString();
+      return true;
+    },
+    updateTags(id: string, tags: Record<string, string>): boolean {
+      const conn = connections.get(id);
+      if (!conn) return false;
+      conn.tags = Object.fromEntries(Object.entries(tags).map(([key, value]) => [key.toLowerCase(), String(value)]));
       conn.updated_at = new Date().toISOString();
       return true;
     },
@@ -86,6 +107,29 @@ export function getNangoStore(store: Store) {
     setRecords(connectionId: string, model: string, data: Record<string, unknown>[]): void {
       const existing = records.get(connectionId) ?? {};
       records.set(connectionId, { ...existing, [model]: data });
+    },
+    pruneRecords(connectionId: string, model: string, untilCursor: string, limit: number): { count: number; has_more: boolean } {
+      const existing = records.get(connectionId) ?? {};
+      const arr = existing[model] ?? [];
+      const cursorIndex = untilCursor.startsWith("emu_cursor_") ? Number(untilCursor.slice("emu_cursor_".length)) : -1;
+      if (!Number.isFinite(cursorIndex) || cursorIndex < 0) return { count: 0, has_more: false };
+      const now = new Date().toISOString();
+      let count = 0;
+      const next = arr.map((row, index) => {
+        if (index > cursorIndex || count >= limit) return row;
+        const metadata = (row._nango_metadata as Record<string, unknown> | undefined) ?? {};
+        count += 1;
+        return {
+          _nango_metadata: {
+            ...metadata,
+            deleted_at: metadata.deleted_at ?? null,
+            last_action: metadata.last_action ?? "ADDED",
+            pruned_at: now,
+          },
+        };
+      });
+      records.set(connectionId, { ...existing, [model]: next });
+      return { count, has_more: count === limit && cursorIndex + 1 > limit };
     },
     /**
      * Append rows onto a model's live array (creating the model if absent),

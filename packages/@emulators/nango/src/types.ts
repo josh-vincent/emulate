@@ -13,6 +13,7 @@ export interface NangoConnection {
   };
   connection_config: Record<string, unknown>;
   metadata: Record<string, unknown>;
+  tags?: Record<string, string>;
   created_at: string;
   updated_at: string;
   last_fetched_at?: string;
@@ -32,5 +33,6 @@ export interface NangoConnectionSeed {
   };
   connection_config?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  tags?: Record<string, string>;
   records?: NangoRecordsMap;
 }
