@@ -4,15 +4,21 @@ import { createSlackTestApp } from "./helpers.js";
 
 interface RegisteredRoute {
   method: string;
-  compiled: {
-    pattern: string;
-  };
+  path: string;
 }
 
 function registeredSlackRoutes(): string[] {
   const { app } = createSlackTestApp();
   const routes = (app as unknown as { routes: RegisteredRoute[] }).routes;
-  return routes.map((route) => `${route.method} ${route.compiled.pattern}`).sort();
+  // hono registers middleware (app.use) as method "ALL"; the coverage matrix
+  // only tracks concrete GET/POST API endpoints, so filter those in.
+  return [
+    ...new Set(
+      routes
+        .filter((route) => route.method === "GET" || route.method === "POST")
+        .map((route) => `${route.method} ${route.path}`),
+    ),
+  ].sort();
 }
 
 function entryRoutes(entry: { route: string | string[] }): string[] {
