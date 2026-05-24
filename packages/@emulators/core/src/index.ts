@@ -14,6 +14,10 @@ export {
 } from "./store.js";
 export { TenantStore, withTenant, currentTenant, DEFAULT_TENANT } from "./tenant-store.js";
 export { createServer, type ServerOptions } from "./server.js";
+// Re-export the HTTP layer so leaf emulator packages and their tests can import
+// it from a single place (mirrors upstream's core surface).
+export { Hono, type Context, type HonoRequest } from "hono";
+export { serve } from "@hono/node-server";
 export { type ServicePlugin, type RouteContext } from "./plugin.js";
 export { WebhookDispatcher, type WebhookSubscription, type WebhookDelivery } from "./webhooks.js";
 export { deliverWithRetry, webhookRetryConfig, type DeliverDeps, type RetryResult } from "./webhook-retry.js";

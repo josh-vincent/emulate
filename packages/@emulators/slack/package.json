@@ -39,6 +39,7 @@
     "hono": "^4"
   },
   "devDependencies": {
+    "@slack/web-api": "^7.16.0",
     "tsup": "^8",
     "typescript": "^5.7",
     "vitest": "^4.1.0"
